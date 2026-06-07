@@ -1,0 +1,49 @@
+{
+  "description": "Required schema for the Shibam Inventory Google Sheet",
+  "tabs": {
+    "Inventory": {
+      "description": "Physical inventory counts — updated after each count",
+      "columns": [
+        { "header": "Item Name",     "type": "text",    "example": "Ethiopia Yirgacheffe Beans",   "required": true },
+        { "header": "Category",      "type": "dropdown","example": "Beans",                        "required": true,
+          "options": ["Beans", "Dairy", "Syrups", "Dry Goods", "Packaging", "Cleaning", "Other"] },
+        { "header": "Unit",          "type": "text",    "example": "lbs",                          "required": true },
+        { "header": "Par Level",     "type": "number",  "example": 10,                             "required": true },
+        { "header": "Current Count", "type": "number",  "example": 7.5,                            "required": true },
+        { "header": "Unit Cost ($)", "type": "currency","example": 12.50,                          "required": true },
+        { "header": "Supplier",      "type": "text",    "example": "Barista Underground",          "required": true },
+        { "header": "Last Updated",  "type": "date",    "example": "06/01/2025",                   "required": true },
+        { "header": "Notes",         "type": "text",    "example": "seasonal — order extra in Q4", "required": false }
+      ]
+    },
+    "Recipes": {
+      "description": "Ingredient-per-serving mapping for inventory vs sales calculation",
+      "columns": [
+        { "header": "Menu Item",       "type": "text",   "example": "Pistachio Latte",     "required": true,
+          "note": "Must match the item name in Toast exactly" },
+        { "header": "Ingredient",      "type": "text",   "example": "Pistachio Syrup",     "required": true,
+          "note": "Must match Item Name in the Inventory tab exactly" },
+        { "header": "Qty Per Serving", "type": "number", "example": 1.5,                   "required": true },
+        { "header": "Unit",            "type": "text",   "example": "oz",                  "required": true,
+          "note": "Must match the Unit in the Inventory tab" },
+        { "header": "Notes",           "type": "text",   "example": "16oz drink only",     "required": false }
+      ]
+    },
+    "Ledger": {
+      "description": "Invoice ledger — auto-populated by invoice_ledger_sync tool",
+      "note": "Created automatically by the MCP server. Do not rename columns.",
+      "columns": [
+        { "header": "Date",          "type": "date",     "example": "2025-05-15" },
+        { "header": "Order #",       "type": "text",     "example": "RD-20250515-001" },
+        { "header": "Vendor",        "type": "text",     "example": "Restaurant Depot" },
+        { "header": "Item",          "type": "text",     "example": "Oat Milk 32oz Case" },
+        { "header": "Qty",           "type": "number",   "example": 6 },
+        { "header": "Unit",          "type": "text",     "example": "cases" },
+        { "header": "Unit Cost",     "type": "currency", "example": 18.99 },
+        { "header": "Line Total",    "type": "currency", "example": 113.94 },
+        { "header": "Invoice Total", "type": "currency", "example": 487.32 },
+        { "header": "Parsed On",     "type": "date",     "example": "2025-06-07" }
+      ]
+    }
+  }
+}
