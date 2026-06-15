@@ -18,6 +18,18 @@ from clients.sheets_client import (
     sheet_to_dicts,
 )
 from config import config
+
+
+def _check_gmail() -> str | None:
+    if not config.gmail_ready:
+        return "Gmail not configured. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN to your Railway environment variables."
+    return None
+
+
+def _check_anthropic() -> str | None:
+    if not config.anthropic_ready:
+        return "Anthropic API not configured. Add ANTHROPIC_API_KEY to your Railway environment variables."
+    return None
 from utils.pdf_utils import attachment_to_content
 from utils.formatting import fmt_currency, fmt_number, fmt_table
 from utils.retry import api_retry
@@ -121,6 +133,8 @@ async def parse_vendor_invoices(
         end_date:   YYYY-MM-DD
         vendor:     optional — filter to one vendor (partial name match, e.g., "Restaurant Depot")
     """
+    err = _check_gmail() or _check_anthropic()
+    if err: return err
     try:
         if not config.vendor_domains:
             return (
@@ -189,6 +203,8 @@ async def vendor_spend_summary(start_date: str, end_date: str) -> str:
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_gmail() or _check_anthropic()
+    if err: return err
     try:
         invoices = _parse_email_invoices(start_date, end_date)
         success = [i for i in invoices if not i.get("parse_error") and i.get("vendor_name")]
@@ -240,6 +256,8 @@ async def invoice_reconciliation_check(start_date: str, end_date: str) -> str:
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_gmail() or _check_anthropic()
+    if err: return err
     try:
         # Get parsed email invoices
         email_invoices = _parse_email_invoices(start_date, end_date)
@@ -316,6 +334,8 @@ async def invoice_ledger_sync(start_date: str, end_date: str) -> str:
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_gmail() or _check_anthropic()
+    if err: return err
     try:
         ledger_id = config.sheets_ledger_id
         if not ledger_id:

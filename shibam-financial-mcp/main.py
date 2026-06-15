@@ -116,13 +116,18 @@ mcp.tool()(monthly_financial_close_checklist)
 async def health_check(request):
     """Health check endpoint used by Railway.app."""
     from starlette.responses import JSONResponse
-    vendor_count = len(config.vendor_domains)
+    missing = config.missing_vars
     return JSONResponse({
         "status": "ok",
         "server": config.server_name,
         "tools": 29,
         "toast_pending": config.toast_api_pending,
-        "vendor_domains_configured": vendor_count,
+        "vendor_domains_configured": len(config.vendor_domains),
+        "qb_ready": config.qb_ready,
+        "google_ready": config.google_ready,
+        "anthropic_ready": config.anthropic_ready,
+        "wheniwork_ready": config.wheniwork_ready,
+        "missing_vars": missing,
     })
 
 
