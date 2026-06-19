@@ -2,7 +2,7 @@
 import logging
 from typing import Optional
 from google.ads.googleads.client import GoogleAdsClient
-from config import config
+from config import config, NotConfiguredError
 
 logger = logging.getLogger(__name__)
 _client: Optional[GoogleAdsClient] = None
@@ -11,6 +11,11 @@ _client: Optional[GoogleAdsClient] = None
 def get_client() -> GoogleAdsClient:
     """Return a cached Google Ads client, initializing on first call."""
     global _client
+    if not config.google_ads_ready:
+        raise NotConfiguredError(
+            "Google Ads not configured. Add GOOGLE_ADS_REFRESH_TOKEN to your .env, "
+            "then run: python scripts/get_refresh_token.py"
+        )
     if _client is None:
         credentials = {
             "developer_token": config.google_ads_developer_token,

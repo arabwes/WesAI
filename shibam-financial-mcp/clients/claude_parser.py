@@ -1,13 +1,13 @@
-"""Claude API client for structured invoice extraction from PDFs and images."""
+"""OpenAI client for structured invoice extraction from PDFs and images."""
 import json
 import logging
 from typing import Optional
-from anthropic import Anthropic
-from config import config
+from openai import OpenAI
+from config import config, NotConfiguredError
 
 logger = logging.getLogger(__name__)
 
-_client: Optional[Anthropic] = None
+_client: Optional[OpenAI] = None
 
 _EXTRACTION_PROMPT = """Extract the following fields from this invoice or order confirmation document.
 Return ONLY a valid JSON object with no extra text before or after it.
@@ -37,37 +37,56 @@ If a field is not present in the document, use null for numbers and empty string
 Do not invent or guess values — only extract what is clearly stated in the document."""
 
 
-def get_client() -> Anthropic:
+def get_client() -> OpenAI:
     global _client
+    if not config.openai_ready:
+        raise NotConfiguredError(
+            "OpenAI not configured. Set OPENAI_API_KEY in your .env. "
+            "Get a key at: platform.openai.com → API keys → Create new secret key."
+        )
     if _client is None:
-        _client = Anthropic(api_key=config.anthropic_api_key)
+        _client = OpenAI(api_key=config.openai_api_key)
     return _client
 
 
+def _to_openai_content(content_block: dict) -> list:
+    """Convert a pdf_utils content block to OpenAI message content format."""
+    if content_block["type"] == "text":
+        return [{"type": "text", "text": content_block["text"]}]
+
+    source = content_block.get("source", {})
+    media_type = source.get("media_type", "")
+    data = source.get("data", "")
+
+    if media_type == "application/pdf":
+        # Scanned PDF — OpenAI vision doesn't accept raw PDF bytes.
+        # Return a note so the caller knows to flag this for manual entry.
+        return [{"type": "text", "text": "(scanned PDF — text could not be extracted automatically)"}]
+
+    # JPEG or PNG image
+    return [{
+        "type": "image_url",
+        "image_url": {"url": f"data:{media_type};base64,{data}", "detail": "high"},
+    }]
+
+
 def parse_invoice(content_block: dict, filename: str = "") -> dict:
-    """Send a PDF/image content block to Claude and return structured invoice data.
+    """Send a PDF/image content block to GPT-4o-mini and return structured invoice data.
 
     content_block: dict from pdf_utils.attachment_to_content()
     Returns: parsed invoice dict, or dict with parse_error key on failure
     """
     client = get_client()
+    openai_content = _to_openai_content(content_block)
+    openai_content.append({"type": "text", "text": _EXTRACTION_PROMPT})
 
     try:
-        response = client.messages.create(
-            model="claude-opus-4-8",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             max_tokens=2048,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        content_block,
-                        {"type": "text", "text": _EXTRACTION_PROMPT},
-                    ],
-                }
-            ],
+            messages=[{"role": "user", "content": openai_content}],
         )
-
-        raw = response.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
 
         # Strip markdown code fences if present
         if raw.startswith("```"):
@@ -81,26 +100,19 @@ def parse_invoice(content_block: dict, filename: str = "") -> dict:
         return parsed
 
     except json.JSONDecodeError as e:
-        logger.error("Claude returned invalid JSON for %s: %s", filename, e)
+        logger.error("OpenAI returned invalid JSON for %s: %s", filename, e)
         # Retry once with a stricter prompt
         try:
-            response = client.messages.create(
-                model="claude-opus-4-8",
+            strict_content = _to_openai_content(content_block) + [{
+                "type": "text",
+                "text": _EXTRACTION_PROMPT + "\n\nIMPORTANT: Your response must start with { and end with }. No other text.",
+            }]
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
                 max_tokens=2048,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            content_block,
-                            {
-                                "type": "text",
-                                "text": _EXTRACTION_PROMPT + "\n\nIMPORTANT: Your response must start with { and end with }. No other text.",
-                            },
-                        ],
-                    }
-                ],
+                messages=[{"role": "user", "content": strict_content}],
             )
-            raw = response.content[0].text.strip()
+            raw = response.choices[0].message.content.strip()
             parsed = json.loads(raw)
             parsed["_filename"] = filename
             return parsed
@@ -117,7 +129,7 @@ def parse_invoice(content_block: dict, filename: str = "") -> dict:
             }
 
     except Exception as e:
-        logger.error("Claude API call failed for %s: %s", filename, e)
+        logger.error("OpenAI API call failed for %s: %s", filename, e)
         return {
             "parse_error": True,
             "error_detail": str(e),

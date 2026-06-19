@@ -3,7 +3,7 @@ import logging
 import time
 import httpx
 from typing import Optional
-from config import config
+from config import config, NotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,11 @@ _token_expiry: float = 0
 
 def _refresh_access_token() -> str:
     """Use the refresh token to get a new short-lived access token."""
+    if not config.qb_ready:
+        raise NotConfiguredError(
+            "QuickBooks not configured. Run: python scripts/get_qb_token.py — "
+            "it will output QB_REFRESH_TOKEN and QB_REALM_ID for your .env."
+        )
     r = httpx.post(
         _TOKEN_URL,
         data={

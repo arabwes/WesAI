@@ -1,7 +1,7 @@
 """WhenIWork API v2 client."""
 import logging
 import httpx
-from config import config
+from config import config, NotConfiguredError
 
 logger = logging.getLogger(__name__)
 _BASE = "https://api.wheniwork.com/2"
@@ -16,6 +16,11 @@ def _headers() -> dict:
 
 def get(path: str, params: dict = None) -> dict:
     """Authenticated GET request to WhenIWork API."""
+    if not config.wheniwork_ready:
+        raise NotConfiguredError(
+            "WhenIWork not configured. Set WHENIWORK_API_KEY and WHENIWORK_ACCOUNT_ID. "
+            "Find your API key at: WhenIWork web app → Account Settings → API."
+        )
     r = httpx.get(f"{_BASE}{path}", headers=_headers(), params=params or {}, timeout=20)
     r.raise_for_status()
     return r.json()

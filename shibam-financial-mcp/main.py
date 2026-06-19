@@ -22,20 +22,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Import all tools ──────────────────────────────────────────────────────────
-from tools.quickbooks import (
-    qb_transaction_detail,
-    qb_receipt_attachments,
-    qb_pl_summary,
-    qb_vendor_spend,
-    qb_unreconciled_check,
-    qb_cashflow_summary,
-)
 from tools.toast_financial import (
     toast_modifier_revenue,
     toast_labor_summary,
     toast_labor_vs_revenue,
     toast_void_refund_summary,
     toast_tips_summary,
+    toast_tip_calculator,
+    toast_break_compliance,
+    toast_item_sales_detail,
+    toast_waste_by_category,
+    toast_guest_report,
+    toast_payout_reconciliation,
+    toast_payment_channel_breakdown,
+    toast_payment_type_breakdown,
 )
 from tools.email_invoices import (
     parse_vendor_invoices,
@@ -43,16 +43,11 @@ from tools.email_invoices import (
     invoice_reconciliation_check,
     invoice_ledger_sync,
 )
-from tools.payroll import (
-    payroll_summary,
-    payroll_by_role,
-    payroll_labor_percentage,
-    payroll_schedule_overview,
-)
 from tools.wheniwork import (
     whenIwork_schedule,
     whenIwork_labor_forecast,
     whenIwork_schedule_cost,
+    whenIwork_punctuality_check,
 )
 from tools.inventory import (
     inventory_current,
@@ -68,20 +63,20 @@ from tools.financial_digest import (
 
 mcp = FastMCP(config.server_name)
 
-# ── QuickBooks (6 tools) ──────────────────────────────────────────────────────
-mcp.tool()(qb_transaction_detail)
-mcp.tool()(qb_receipt_attachments)
-mcp.tool()(qb_pl_summary)
-mcp.tool()(qb_vendor_spend)
-mcp.tool()(qb_unreconciled_check)
-mcp.tool()(qb_cashflow_summary)
-
-# ── Toast Financial Extensions (5 tools) ─────────────────────────────────────
+# ── Toast Financial Extensions (13 tools) ────────────────────────────────────
 mcp.tool()(toast_modifier_revenue)
 mcp.tool()(toast_labor_summary)
 mcp.tool()(toast_labor_vs_revenue)
 mcp.tool()(toast_void_refund_summary)
 mcp.tool()(toast_tips_summary)
+mcp.tool()(toast_tip_calculator)
+mcp.tool()(toast_break_compliance)
+mcp.tool()(toast_item_sales_detail)
+mcp.tool()(toast_waste_by_category)
+mcp.tool()(toast_guest_report)
+mcp.tool()(toast_payout_reconciliation)
+mcp.tool()(toast_payment_channel_breakdown)
+mcp.tool()(toast_payment_type_breakdown)
 
 # ── Email Invoice Parser (4 tools) ───────────────────────────────────────────
 mcp.tool()(parse_vendor_invoices)
@@ -89,16 +84,11 @@ mcp.tool()(vendor_spend_summary)
 mcp.tool()(invoice_reconciliation_check)
 mcp.tool()(invoice_ledger_sync)
 
-# ── Payroll (4 tools) ────────────────────────────────────────────────────────
-mcp.tool()(payroll_summary)
-mcp.tool()(payroll_by_role)
-mcp.tool()(payroll_labor_percentage)
-mcp.tool()(payroll_schedule_overview)
-
-# ── WhenIWork (3 tools) ──────────────────────────────────────────────────────
+# ── WhenIWork (4 tools) ──────────────────────────────────────────────────────
 mcp.tool()(whenIwork_schedule)
 mcp.tool()(whenIwork_labor_forecast)
 mcp.tool()(whenIwork_schedule_cost)
+mcp.tool()(whenIwork_punctuality_check)
 
 # ── Inventory (5 tools) ──────────────────────────────────────────────────────
 mcp.tool()(inventory_current)
@@ -120,7 +110,7 @@ async def health_check(request):
     return JSONResponse({
         "status": "ok",
         "server": config.server_name,
-        "tools": 29,
+        "tools": 28,
         "toast_pending": config.toast_api_pending,
         "vendor_domains_configured": vendor_count,
     })

@@ -22,9 +22,7 @@ async def weekly_financial_digest(week: str = "last_7_days") -> str:
               Defaults to last_7_days.
     """
     from utils.date_helpers import to_start_end
-    from tools.quickbooks import qb_pl_summary, qb_unreconciled_check
     from tools.toast_financial import toast_labor_vs_revenue
-    from tools.payroll import payroll_labor_percentage
     from tools.email_invoices import vendor_spend_summary
     from tools.inventory import inventory_low_stock
 
@@ -40,36 +38,22 @@ async def weekly_financial_digest(week: str = "last_7_days") -> str:
         f"{'='*60}"
     )
 
-    # ── P&L ──────────────────────────────────────────────────────────────
-    sections.append("\n📊  PROFIT & LOSS\n" + "-" * 40)
-    try:
-        month = today.strftime("%Y-%m")
-        pl = await qb_pl_summary(start_month=month, end_month=month)
-        sections.append(pl)
-        if "🔴" in pl:
-            issues.append("Gross margin is below target — review COGS and pricing.")
-    except Exception as e:
-        sections.append(f"⚠️  P&L data unavailable: {e}")
+    # ── P&L + Payroll (QuickBooks connector) ─────────────────────────────
+    sections.append("\n📊  PROFIT & LOSS / PAYROLL\n" + "-" * 40)
+    sections.append(
+        "  Use the QuickBooks connector to pull P&L, payroll, and reconciliation data.\n"
+        "  Ask: 'Show me the P&L for this month' or 'Check unreconciled transactions'."
+    )
 
-    # ── Labor % ──────────────────────────────────────────────────────────
-    sections.append("\n👥  LABOR\n" + "-" * 40)
+    # ── Toast Labor ───────────────────────────────────────────────────────
+    sections.append("\n👥  LABOR (Toast)\n" + "-" * 40)
     try:
-        labor = await payroll_labor_percentage(str(start), str(end))
+        labor = await toast_labor_vs_revenue(str(start), str(end))
         sections.append(labor)
-        if "🔴" in labor or "ALERT" in labor:
-            issues.append("Labor % of revenue is above 35% — review staffing schedule.")
+        if "Overstaffed" in labor:
+            issues.append("Overstaffed hours detected in Toast — review schedule.")
     except Exception as e:
-        sections.append(f"⚠️  Labor data unavailable: {e}")
-
-    # ── Unreconciled ─────────────────────────────────────────────────────
-    sections.append("\n📋  QUICKBOOKS HYGIENE\n" + "-" * 40)
-    try:
-        unrec = await qb_unreconciled_check()
-        sections.append(unrec)
-        if "⚠️" in unrec:
-            issues.append("Uncategorized QuickBooks transactions found — review before month-end.")
-    except Exception as e:
-        sections.append(f"⚠️  QuickBooks check unavailable: {e}")
+        sections.append(f"⚠️  Toast labor data unavailable: {e}")
 
     # ── Vendor Spend ─────────────────────────────────────────────────────
     sections.append("\n🧾  VENDOR SPEND (Top 3)\n" + "-" * 40)
@@ -116,8 +100,6 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
         month: YYYY-MM (e.g., 2025-05) — defaults to the prior calendar month
     """
     from utils.date_helpers import month_range
-    from tools.quickbooks import qb_pl_summary, qb_unreconciled_check
-    from tools.payroll import payroll_labor_percentage
     from tools.email_invoices import invoice_reconciliation_check, parse_vendor_invoices
     from tools.inventory import inventory_current
 
@@ -163,26 +145,19 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
     except Exception as e:
         check("All vendor invoices parsed and in ledger sheet", False, str(e))
 
-    # 2. QB categorized
-    try:
-        unrec = await qb_unreconciled_check(as_of_date=end_str)
-        is_clean = "no uncategorized" in unrec.lower() or "✅" in unrec
-        count_str = ""
-        if not is_clean:
-            import re
-            m = re.search(r"(\d+) transactions need attention", unrec)
-            count_str = f"{m.group(1)} transactions need review" if m else "some transactions flagged"
-        check("All QuickBooks transactions categorized", is_clean, count_str)
-    except Exception as e:
-        check("All QuickBooks transactions categorized", False, str(e))
+    # 2. QB categorized (use QB connector)
+    check(
+        "All QuickBooks transactions categorized",
+        False,
+        "Use the QuickBooks connector — ask 'Check unreconciled transactions for {month}'",
+    )
 
-    # 3. Payroll reconciled
-    try:
-        labor = await payroll_labor_percentage(start_str, end_str)
-        has_data = "$" in labor
-        check("Payroll reconciled against QuickBooks", has_data, "Labor % calculated." if has_data else "No payroll data found.")
-    except Exception as e:
-        check("Payroll reconciled against QuickBooks", False, str(e))
+    # 3. Payroll reconciled (use QB connector)
+    check(
+        "Payroll reconciled against QuickBooks",
+        False,
+        "Use the QuickBooks connector — ask 'Show payroll summary for {month}'",
+    )
 
     # 4. Inventory counted
     try:
@@ -192,14 +167,12 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
     except Exception as e:
         check("Inventory count completed and sheet updated", False, str(e))
 
-    # 5. P&L reviewed
-    try:
-        pl = await qb_pl_summary(start_month=month, end_month=month)
-        has_pl = "Revenue" in pl
-        margin_line = next((l for l in pl.split("\n") if "Gross Margin" in l), "")
-        check("P&L reviewed — gross and net margin noted", has_pl, margin_line.strip() if margin_line else "")
-    except Exception as e:
-        check("P&L reviewed — gross and net margin noted", False, str(e))
+    # 5. P&L reviewed (use QB connector)
+    check(
+        "P&L reviewed — gross and net margin noted",
+        False,
+        f"Use the QuickBooks connector — ask 'Show P&L for {month}'",
+    )
 
     # 6. Invoice reconciliation
     try:
@@ -215,13 +188,11 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
         check("Invoice reconciliation check run — no missing entries", False, str(e))
 
     # 7. Labor %
-    try:
-        labor = await payroll_labor_percentage(start_str, end_str)
-        within_target = "🔴" not in labor
-        labor_line = next((l for l in labor.split("\n") if "Labor %" in l), "")
-        check("Labor % reviewed vs 35% benchmark", within_target, labor_line.strip() if labor_line else "")
-    except Exception as e:
-        check("Labor % reviewed vs 35% benchmark", False, str(e))
+    check(
+        "Labor % reviewed vs 35% benchmark",
+        False,
+        f"Use the QuickBooks connector — ask 'Show labor % for {month}'",
+    )
 
     passed = sum(1 for c in checklist if c.startswith("✅"))
     total = len(checklist)

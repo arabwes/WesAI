@@ -1,10 +1,18 @@
-"""Loads and validates all environment variables at startup."""
+"""Loads all environment variables at startup. Missing credentials are logged as warnings;
+the server starts and tools for unconfigured services return setup instructions."""
+import logging
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+class NotConfiguredError(RuntimeError):
+    """Raised when a tool is called but its service credentials are not set.
+    _no_retry=True prevents the api_retry decorator from retrying these."""
+    _no_retry = True
 
 
 @dataclass
@@ -34,9 +42,6 @@ class Config:
     sheets_inventory_id: str
     sheets_ledger_id: str
 
-    # Claude API
-    anthropic_api_key: str
-
     # WhenIWork
     wheniwork_api_key: str
     wheniwork_account_id: str
@@ -44,16 +49,39 @@ class Config:
     # Vendor domains (dynamic — loaded separately)
     vendor_domains: dict
 
+    # Computed availability flags (set in __post_init__)
+    qb_ready: bool = field(init=False)
+    google_ready: bool = field(init=False)
+    wheniwork_ready: bool = field(init=False)
+    toast_ready: bool = field(init=False)
+
+    def __post_init__(self):
+        self.qb_ready = all([
+            self.qb_client_id,
+            self.qb_client_secret,
+            self.qb_refresh_token,
+            self.qb_realm_id,
+        ])
+        self.google_ready = all([
+            self.google_client_id,
+            self.google_client_secret,
+            self.google_refresh_token,
+            self.sheets_inventory_id,
+        ])
+        self.wheniwork_ready = all([
+            self.wheniwork_api_key,
+            self.wheniwork_account_id,
+        ])
+        self.toast_ready = (
+            not self.toast_api_pending
+            and bool(self.toast_client_id)
+            and bool(self.toast_client_secret)
+            and bool(self.toast_restaurant_guid)
+        )
+
 
 def _get(key: str, default: str = "") -> str:
     return os.getenv(key, default).strip()
-
-
-def _require(key: str, errors: list) -> str:
-    val = _get(key)
-    if not val:
-        errors.append(key)
-    return val
 
 
 def _load_vendor_domains() -> dict:
@@ -67,38 +95,42 @@ def _load_vendor_domains() -> dict:
 
 
 def load_config() -> Config:
-    errors: list = []
     toast_pending = _get("TOAST_API_PENDING", "true").lower() == "true"
 
     cfg = Config(
         port=int(_get("PORT", "8001")),
         server_name=_get("MCP_SERVER_NAME", "shibam-financial-mcp"),
-        qb_client_id=_require("QB_CLIENT_ID", errors),
-        qb_client_secret=_require("QB_CLIENT_SECRET", errors),
-        qb_refresh_token=_require("QB_REFRESH_TOKEN", errors),
-        qb_realm_id=_require("QB_REALM_ID", errors),
+        qb_client_id=_get("QB_CLIENT_ID"),
+        qb_client_secret=_get("QB_CLIENT_SECRET"),
+        qb_refresh_token=_get("QB_REFRESH_TOKEN"),
+        qb_realm_id=_get("QB_REALM_ID"),
         qb_environment=_get("QB_ENVIRONMENT", "production"),
         toast_api_pending=toast_pending,
         toast_client_id=_get("TOAST_CLIENT_ID"),
         toast_client_secret=_get("TOAST_CLIENT_SECRET"),
         toast_restaurant_guid=_get("TOAST_RESTAURANT_GUID"),
         toast_environment=_get("TOAST_ENVIRONMENT", "production"),
-        google_client_id=_require("GOOGLE_CLIENT_ID", errors),
-        google_client_secret=_require("GOOGLE_CLIENT_SECRET", errors),
-        google_refresh_token=_require("GOOGLE_REFRESH_TOKEN", errors),
-        sheets_inventory_id=_require("GOOGLE_SHEETS_INVENTORY_ID", errors),
-        sheets_ledger_id=_get("GOOGLE_SHEETS_LEDGER_ID"),  # Optional — auto-created if missing
-        anthropic_api_key=_require("ANTHROPIC_API_KEY", errors),
-        wheniwork_api_key=_require("WHENIWORK_API_KEY", errors),
-        wheniwork_account_id=_require("WHENIWORK_ACCOUNT_ID", errors),
+        google_client_id=_get("GOOGLE_CLIENT_ID"),
+        google_client_secret=_get("GOOGLE_CLIENT_SECRET"),
+        google_refresh_token=_get("GOOGLE_REFRESH_TOKEN"),
+        sheets_inventory_id=_get("GOOGLE_SHEETS_INVENTORY_ID"),
+        sheets_ledger_id=_get("GOOGLE_SHEETS_LEDGER_ID"),
+        wheniwork_api_key=_get("WHENIWORK_API_KEY"),
+        wheniwork_account_id=_get("WHENIWORK_ACCOUNT_ID"),
         vendor_domains=_load_vendor_domains(),
     )
 
-    if errors:
-        missing = "\n".join(f"  • {e}" for e in errors)
-        raise EnvironmentError(
-            f"Cannot start shibam-financial-mcp — missing required environment variables:\n{missing}\n"
-            "Copy .env.example to .env and fill in all values."
+    groups = {
+        "Gmail/Sheets": cfg.google_ready,
+        "Toast":        cfg.toast_ready,
+    }
+    for name, ready in groups.items():
+        logger.info("  %-15s %s", name, "READY" if ready else "not configured")
+    not_ready = [g for g, r in groups.items() if not r]
+    if not_ready:
+        logger.warning(
+            "Unconfigured service groups: %s — tools will return setup instructions when called.",
+            not_ready,
         )
 
     return cfg
