@@ -4,8 +4,8 @@ Shibam Coffee — Marketing MCP Server
 Connects Claude.ai to live marketing data from Google Ads, Meta Ads,
 Toast POS, Google Business Profile, and Instagram.
 
-Transport: HTTP/SSE (required for Claude.ai web)
-Add to Claude.ai: Settings → Integrations → paste your Railway URL + /sse
+Transport: Streamable HTTP (required for Claude.ai remote integrations)
+Add to Claude.ai: Settings → Integrations → paste your Railway URL + /mcp
 """
 import os
 import logging
@@ -104,4 +104,4 @@ if __name__ == "__main__":
     logger.info("Toast API pending: %s", config.toast_api_pending)
     if config.toast_api_pending:
         logger.info("Toast tools will return a setup message until TOAST_API_PENDING=false")
-    mcp.run(transport="sse", host="0.0.0.0", port=config.port)
+    mcp.run(transport="http", host="0.0.0.0", port=config.port)

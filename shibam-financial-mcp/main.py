@@ -4,11 +4,11 @@ Shibam Coffee — Financial MCP Server
 Connects Claude.ai to live financial data from QuickBooks, Toast (financial extensions),
 Gmail invoice parsing, payroll (QuickBooks + WhenIWork), and Google Sheets inventory.
 
-Transport: HTTP/SSE (required for Claude.ai web)
-Add to Claude.ai: Settings → Integrations → paste your Railway URL + /sse
+Transport: Streamable HTTP (required for Claude.ai remote integrations)
+Add to Claude.ai: Settings → Integrations → paste your Railway URL + /mcp
 
 Note: This is a SEPARATE server from shibam-marketing-mcp.
-      Add both SSE URLs to Claude.ai Integrations for full coverage.
+      Add both /mcp URLs to Claude.ai Integrations for full coverage.
 """
 import os
 import logging
@@ -122,4 +122,4 @@ if __name__ == "__main__":
     logger.info("Vendor domains configured: %d", len(config.vendor_domains))
     for name, domain in config.vendor_domains.items():
         logger.info("  Vendor: %s → %s", name, domain)
-    mcp.run(transport="sse", host="0.0.0.0", port=config.port)
+    mcp.run(transport="http", host="0.0.0.0", port=config.port)
