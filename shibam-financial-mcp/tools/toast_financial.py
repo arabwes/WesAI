@@ -3,6 +3,7 @@ These complement the sales tools in shibam-marketing-mcp without duplicating the
 All tools respect the TOAST_API_PENDING flag.
 """
 import logging
+import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -49,6 +50,7 @@ _PENDING_MSG = (
 # re-use the result instead of re-fetching hundreds of hourly API windows.
 _orders_cache: dict = {}
 _CACHE_TTL = 300
+_orders_fetch_lock = threading.Lock()
 
 # Employee GUID → full name map, fetched once per process lifetime.
 _employee_map: dict = {}
@@ -160,17 +162,22 @@ def _fetch_orders(start_date: str, end_date: str) -> list:
       1. Loop through hourly windows to collect all GUIDs
       2. Fetch full order details in parallel via ThreadPoolExecutor
     """
+    # Serialized by a process-wide lock so two overlapping calls for the same (or
+    # different) range never run duplicate concurrent fetches against Toast — a
+    # second caller waits and gets the first caller's now-cached result instead
+    # of independently re-querying.
     cache_key = (start_date, end_date)
-    now = time.time()
-    if cache_key in _orders_cache:
-        cached, ts = _orders_cache[cache_key]
-        if now - ts < _CACHE_TTL:
-            logger.debug("_fetch_orders cache hit: %s to %s", start_date, end_date)
-            return cached
+    with _orders_fetch_lock:
+        now = time.time()
+        if cache_key in _orders_cache:
+            cached, ts = _orders_cache[cache_key]
+            if now - ts < _CACHE_TTL:
+                logger.debug("_fetch_orders cache hit: %s to %s", start_date, end_date)
+                return cached
 
-    result = _do_fetch_orders(start_date, end_date)
-    _orders_cache[cache_key] = (result, now)
-    return result
+        result = _do_fetch_orders(start_date, end_date)
+        _orders_cache[cache_key] = (result, time.time())
+        return result
 
 
 def _do_fetch_orders(start_date: str, end_date: str) -> list:
@@ -186,26 +193,58 @@ def _do_fetch_orders(start_date: str, end_date: str) -> list:
     range_end = datetime(end.year, end.month, end.day, 23, 59, 59, tzinfo=_RESTAURANT_TZ).astimezone(timezone.utc)
 
     all_guids: list = []
+    hours_scanned = 0
+    zero_guid_hours = 0
+    retried_hours = 0
+    recovered_on_retry = 0
+    fetch_t0 = time.time()
     current = window_start
     while current <= range_end:
         window_end = current + timedelta(hours=1) - timedelta(seconds=1)
-        page = 1
-        while True:
-            guids = toast_client.get("/orders/v2/orders", params={
-                "startDate": current.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
-                "endDate":   window_end.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
-                "pageSize": 500,
-                "page": page,
-            })
-            if not isinstance(guids, list) or not guids:
+        hour_guids: list = []
+        # Up to 2 attempts per hour: Toast's /orders/v2/orders has occasionally
+        # returned an empty (but 200 OK, non-error) list for an hour that, on a
+        # later cross-check, genuinely had orders — i.e. a transient empty
+        # response rather than a true "no orders this hour". A short retry on
+        # zero-result hours catches that without raising request volume for
+        # hours that legitimately have orders.
+        for attempt in range(2):
+            page = 1
+            attempt_guids: list = []
+            while True:
+                guids = toast_client.get("/orders/v2/orders", params={
+                    "startDate": current.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
+                    "endDate":   window_end.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
+                    "pageSize": 500,
+                    "page": page,
+                })
+                if not isinstance(guids, list) or not guids:
+                    break
+                attempt_guids.extend(guids)
+                if len(guids) < 500:
+                    break
+                page += 1
+            hour_guids = attempt_guids
+            if hour_guids or attempt == 1:
+                if attempt == 1:
+                    retried_hours += 1
+                    if hour_guids:
+                        recovered_on_retry += 1
                 break
-            all_guids.extend(guids)
-            if len(guids) < 500:
-                break
-            page += 1
+            time.sleep(0.4)
+        if not hour_guids:
+            zero_guid_hours += 1
+        all_guids.extend(hour_guids)
+        hours_scanned += 1
         current += timedelta(hours=1)
 
     all_guids = list(dict.fromkeys(all_guids))
+    logger.info(
+        "_do_fetch_orders %s..%s: %d hours scanned in %.1fs, %d unique GUIDs, "
+        "%d zero-GUID hours (%d retried, %d recovered on retry)",
+        start_date, end_date, hours_scanned, time.time() - fetch_t0,
+        len(all_guids), zero_guid_hours, retried_hours, recovered_on_retry,
+    )
     if not all_guids:
         return []
 
