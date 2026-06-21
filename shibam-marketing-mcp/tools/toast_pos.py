@@ -145,12 +145,28 @@ def _do_fetch_orders(start_date: str, end_date: str) -> list:
             page = 1
             attempt_guids: list = []
             while True:
-                guids = toast_client.get("/orders/v2/orders", params={
-                    "startDate": current.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
-                    "endDate":   window_end.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
-                    "pageSize": 500,
-                    "page": page,
-                })
+                # Retry-with-backoff on 429/5xx so a single rate-limited page
+                # doesn't abort the whole multi-day fetch.
+                guids = None
+                for sub_attempt in range(4):
+                    try:
+                        guids = toast_client.get("/orders/v2/orders", params={
+                            "startDate": current.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
+                            "endDate":   window_end.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
+                            "pageSize": 500,
+                            "page": page,
+                        })
+                        break
+                    except Exception as e:
+                        status = getattr(getattr(e, "response", None), "status_code", None)
+                        if sub_attempt < 3 and (status == 429 or status is None or status >= 500):
+                            resp = getattr(e, "response", None)
+                            retry_after = resp.headers.get("Retry-After") if resp is not None else None
+                            time.sleep(float(retry_after) if retry_after else (1.5 * (2 ** sub_attempt)))
+                            continue
+                        logger.error("GUID listing failed for window %s (page %d): %s", current, page, e)
+                        guids = []
+                        break
                 if not isinstance(guids, list) or not guids:
                     break
                 attempt_guids.extend(guids)
@@ -182,14 +198,39 @@ def _do_fetch_orders(start_date: str, end_date: str) -> list:
         return []
 
     def fetch_one(guid):
-        try:
-            return toast_client.get(f"/orders/v2/orders/{guid}")
-        except Exception as e:
-            logger.warning("Failed to fetch order %s: %s", guid, e)
-            return None
+        # Toast's order-detail endpoint rate-limits (429) under concurrent load.
+        # A dropped order here previously vanished silently from every revenue
+        # total with no error surfaced — retry with backoff before giving up,
+        # and log loudly (ERROR, not WARNING) if it still fails after retries.
+        last_exc = None
+        for attempt in range(4):
+            try:
+                return toast_client.get(f"/orders/v2/orders/{guid}")
+            except Exception as e:
+                last_exc = e
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                if attempt < 3 and (status == 429 or status is None or status >= 500):
+                    retry_after = None
+                    resp = getattr(e, "response", None)
+                    if resp is not None:
+                        retry_after = resp.headers.get("Retry-After")
+                    delay = float(retry_after) if retry_after else (1.5 * (2 ** attempt))
+                    time.sleep(delay)
+                    continue
+                break
+        logger.error("Giving up fetching order %s after retries: %s", guid, last_exc)
+        return None
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        return [r for r in executor.map(fetch_one, all_guids) if r]
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(fetch_one, all_guids))
+    failed = sum(1 for r in results if r is None)
+    if failed:
+        logger.error(
+            "_do_fetch_orders %s..%s: %d of %d orders could not be fetched even "
+            "after retries — totals are UNDERCOUNTED by this many orders.",
+            start_date, end_date, failed, len(all_guids),
+        )
+    return [r for r in results if r]
 
 
 def _order_total(order: dict) -> float:
