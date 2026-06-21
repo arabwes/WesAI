@@ -5,7 +5,11 @@ from datetime import date
 logger = logging.getLogger(__name__)
 
 
-async def weekly_financial_digest(week: str = "last_7_days") -> str:
+async def weekly_financial_digest(
+    week: str = "last_7_days",
+    start_date: str = "",
+    end_date: str = "",
+) -> str:
     """
     Generate a complete weekly financial snapshot for Shibam Coffee.
 
@@ -18,8 +22,10 @@ async def weekly_financial_digest(week: str = "last_7_days") -> str:
     - Invoice reconciliation flags
 
     Args:
-        week: last_7_days | last_30_days | this_month | last_month | custom
-              Defaults to last_7_days.
+        week:       last_7_days | last_30_days | this_month | last_month | custom
+                    Defaults to last_7_days.
+        start_date: YYYY-MM-DD — required only when week=custom
+        end_date:   YYYY-MM-DD — required only when week=custom
     """
     from utils.date_helpers import to_start_end
     from tools.toast_financial import toast_labor_vs_revenue
@@ -27,14 +33,19 @@ async def weekly_financial_digest(week: str = "last_7_days") -> str:
     from tools.inventory import inventory_low_stock
 
     today = date.today()
-    start, end = to_start_end(week)
     sections = []
     issues = []
 
+    try:
+        start, end = to_start_end(week, start_date, end_date)
+    except ValueError as e:
+        return f"Error: {e}"
+
+    period_label = f"{start} to {end}" if week == "custom" else week
     sections.append(
         f"{'='*60}\n"
         f"  SHIBAM COFFEE — WEEKLY FINANCIAL DIGEST\n"
-        f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {week}\n"
+        f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {period_label}\n"
         f"{'='*60}"
     )
 
@@ -48,7 +59,7 @@ async def weekly_financial_digest(week: str = "last_7_days") -> str:
     # ── Toast Labor ───────────────────────────────────────────────────────
     sections.append("\n👥  LABOR (Toast)\n" + "-" * 40)
     try:
-        labor = await toast_labor_vs_revenue(str(start), str(end))
+        labor = await toast_labor_vs_revenue(date_range="custom", start_date=str(start), end_date=str(end))
         sections.append(labor)
         if "Overstaffed" in labor:
             issues.append("Overstaffed hours detected in Toast — review schedule.")

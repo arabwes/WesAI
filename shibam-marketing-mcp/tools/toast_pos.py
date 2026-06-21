@@ -109,8 +109,12 @@ def _do_fetch_orders(start_date: str, end_date: str) -> list:
     from concurrent.futures import ThreadPoolExecutor
 
     start, end = to_start_end("custom", start_date, end_date)
-    window_start = datetime(start.year, start.month, start.day, 0, 0, 0, tzinfo=timezone.utc)
-    range_end = datetime(end.year, end.month, end.day, 23, 59, 59, tzinfo=timezone.utc)
+    # Build the fetch window from LOCAL midnight/end-of-day, then convert to UTC.
+    # (Using UTC midnight directly from the same calendar numbers shifts the query
+    # window ~4 hours off true local business-day boundaries — EDT is UTC-4 — which
+    # silently drops the last few hours of the local end date from every range.)
+    window_start = datetime(start.year, start.month, start.day, 0, 0, 0, tzinfo=_RESTAURANT_TZ).astimezone(timezone.utc)
+    range_end = datetime(end.year, end.month, end.day, 23, 59, 59, tzinfo=_RESTAURANT_TZ).astimezone(timezone.utc)
 
     all_guids: list = []
     current = window_start
