@@ -46,10 +46,12 @@ _PENDING_MSG = (
     "Apply at: developers.toasttab.com"
 )
 
-# Cache order fetches for 5 minutes — multiple tools called with the same date range
-# re-use the result instead of re-fetching hundreds of hourly API windows.
+# Cache order fetches — multiple tools called with the same date range re-use the
+# result. Live ranges (including today) use a short TTL since orders are still
+# accumulating; fully-closed past ranges never change, so they cache far longer.
 _orders_cache: dict = {}
-_CACHE_TTL = 300
+_CACHE_TTL = 300            # ranges that include today
+_CLOSED_RANGE_TTL = 86400  # ranges entirely in the past (orders are final)
 _orders_fetch_lock = threading.Lock()
 
 # Employee GUID → full name map, fetched once per process lifetime.
@@ -157,21 +159,26 @@ def _void_reason_name(vr_ref: dict) -> str:
 
 
 def _fetch_orders(start_date: str, end_date: str) -> list:
-    """Fetch full order objects for a date range, with 5-minute in-process cache.
-    Toast's /orders/v2/orders returns GUIDs only (max 1-hour window), so we:
-      1. Loop through hourly windows to collect all GUIDs
-      2. Fetch full order details in parallel via ThreadPoolExecutor
+    """Fetch full order objects for a date range, cached in-process.
+
+    Serialized by a process-wide lock so two overlapping calls never run duplicate
+    concurrent fetches — a second caller waits and reuses the first's cached result.
+    Closed (past) ranges cache for 24h since their orders are final; ranges that
+    include today use a short TTL since orders are still accumulating.
     """
-    # Serialized by a process-wide lock so two overlapping calls for the same (or
-    # different) range never run duplicate concurrent fetches against Toast — a
-    # second caller waits and gets the first caller's now-cached result instead
-    # of independently re-querying.
     cache_key = (start_date, end_date)
     with _orders_fetch_lock:
         now = time.time()
+        today_local = datetime.now(_RESTAURANT_TZ).date()
+        try:
+            range_closed = to_start_end("custom", start_date, end_date)[1] < today_local
+        except Exception:
+            range_closed = False
+        ttl = _CLOSED_RANGE_TTL if range_closed else _CACHE_TTL
+
         if cache_key in _orders_cache:
             cached, ts = _orders_cache[cache_key]
-            if now - ts < _CACHE_TTL:
+            if now - ts < ttl:
                 logger.debug("_fetch_orders cache hit: %s to %s", start_date, end_date)
                 return cached
 
@@ -181,123 +188,62 @@ def _fetch_orders(start_date: str, end_date: str) -> list:
 
 
 def _do_fetch_orders(start_date: str, end_date: str) -> list:
-    from datetime import datetime, timedelta, timezone
-    from concurrent.futures import ThreadPoolExecutor
+    """Fetch full orders via /orders/v2/ordersBulk, one paginated query per local
+    business day. This returns complete order objects directly (checks, selections,
+    payments) — no separate GUID-listing pass and no per-order detail calls — cutting
+    a week-long fetch from ~1,300 requests to ~20 and removing the rate-limit pressure
+    that previously caused silent undercounts.
 
+    We scan businessDates [start-1, end+1] (a ±1-day buffer, since an order opened just
+    after midnight can be assigned to the adjacent businessDate) and then keep only
+    orders whose LOCAL openedDate falls in [start, end]. That preserves the exact
+    calendar-day semantics the tools already rely on — including the tip calculator,
+    which is validated against the PaymentDetails CSV's openedDate-based "Order Date".
+    """
     start, end = to_start_end("custom", start_date, end_date)
-    # Build the fetch window from LOCAL midnight/end-of-day, then convert to UTC.
-    # (Using UTC midnight directly from the same calendar numbers shifts the query
-    # window ~4 hours off true local business-day boundaries — EDT is UTC-4 — which
-    # silently drops the last few hours of the local end date from every range.)
-    window_start = datetime(start.year, start.month, start.day, 0, 0, 0, tzinfo=_RESTAURANT_TZ).astimezone(timezone.utc)
-    range_end = datetime(end.year, end.month, end.day, 23, 59, 59, tzinfo=_RESTAURANT_TZ).astimezone(timezone.utc)
-
-    all_guids: list = []
-    hours_scanned = 0
-    zero_guid_hours = 0
-    retried_hours = 0
-    recovered_on_retry = 0
     fetch_t0 = time.time()
-    current = window_start
-    while current <= range_end:
-        window_end = current + timedelta(hours=1) - timedelta(seconds=1)
-        hour_guids: list = []
-        # Up to 2 attempts per hour: Toast's /orders/v2/orders has occasionally
-        # returned an empty (but 200 OK, non-error) list for an hour that, on a
-        # later cross-check, genuinely had orders — i.e. a transient empty
-        # response rather than a true "no orders this hour". A short retry on
-        # zero-result hours catches that without raising request volume for
-        # hours that legitimately have orders.
-        for attempt in range(2):
-            page = 1
-            attempt_guids: list = []
-            while True:
-                # Retry-with-backoff on 429/5xx so a single rate-limited page
-                # doesn't abort the whole multi-day fetch.
-                guids = None
-                for sub_attempt in range(4):
-                    try:
-                        guids = toast_client.get("/orders/v2/orders", params={
-                            "startDate": current.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
-                            "endDate":   window_end.strftime("%Y-%m-%dT%H:%M:%S.000+0000"),
-                            "pageSize": 500,
-                            "page": page,
-                        })
-                        break
-                    except Exception as e:
-                        status = getattr(getattr(e, "response", None), "status_code", None)
-                        if sub_attempt < 3 and (status == 429 or status is None or status >= 500):
-                            resp = getattr(e, "response", None)
-                            retry_after = resp.headers.get("Retry-After") if resp is not None else None
-                            time.sleep(float(retry_after) if retry_after else (1.5 * (2 ** sub_attempt)))
-                            continue
-                        logger.error("GUID listing failed for window %s (page %d): %s", current, page, e)
-                        guids = []
-                        break
-                if not isinstance(guids, list) or not guids:
-                    break
-                attempt_guids.extend(guids)
-                if len(guids) < 500:
-                    break
-                page += 1
-            hour_guids = attempt_guids
-            if hour_guids or attempt == 1:
-                if attempt == 1:
-                    retried_hours += 1
-                    if hour_guids:
-                        recovered_on_retry += 1
+    by_guid: dict = {}
+    pages = 0
+    day = start - timedelta(days=1)
+    last_day = end + timedelta(days=1)
+    while day <= last_day:
+        bd = day.strftime("%Y%m%d")
+        page = 1
+        while True:
+            chunk = toast_client.get("/orders/v2/ordersBulk", params={
+                "businessDate": bd, "pageSize": 100, "page": page,
+            })
+            if not isinstance(chunk, list) or not chunk:
                 break
-            time.sleep(0.4)
-        if not hour_guids:
-            zero_guid_hours += 1
-        all_guids.extend(hour_guids)
-        hours_scanned += 1
-        current += timedelta(hours=1)
+            for o in chunk:
+                guid = o.get("guid")
+                if guid:
+                    by_guid[guid] = o
+            pages += 1
+            if len(chunk) < 100:
+                break
+            page += 1
+        day += timedelta(days=1)
 
-    all_guids = list(dict.fromkeys(all_guids))
+    # Keep only orders whose local openedDate is within the requested calendar range.
+    result = []
+    for o in by_guid.values():
+        opened = o.get("openedDate")
+        if not opened:
+            continue
+        try:
+            d = _to_local_dt(opened).date()
+        except Exception:
+            continue
+        if start <= d <= end:
+            result.append(o)
+
     logger.info(
-        "_do_fetch_orders %s..%s: %d hours scanned in %.1fs, %d unique GUIDs, "
-        "%d zero-GUID hours (%d retried, %d recovered on retry)",
-        start_date, end_date, hours_scanned, time.time() - fetch_t0,
-        len(all_guids), zero_guid_hours, retried_hours, recovered_on_retry,
+        "_do_fetch_orders %s..%s: %d bulk pages across business days, "
+        "%d orders fetched, %d in window (%.1fs)",
+        start_date, end_date, pages, len(by_guid), len(result), time.time() - fetch_t0,
     )
-    if not all_guids:
-        return []
-
-    def fetch_one(guid):
-        # Toast's order-detail endpoint rate-limits (429) under concurrent load.
-        # A dropped order here previously vanished silently from every revenue
-        # total with no error surfaced — retry with backoff before giving up,
-        # and log loudly (ERROR, not WARNING) if it still fails after retries.
-        last_exc = None
-        for attempt in range(4):
-            try:
-                return toast_client.get(f"/orders/v2/orders/{guid}")
-            except Exception as e:
-                last_exc = e
-                status = getattr(getattr(e, "response", None), "status_code", None)
-                if attempt < 3 and (status == 429 or status is None or status >= 500):
-                    retry_after = None
-                    resp = getattr(e, "response", None)
-                    if resp is not None:
-                        retry_after = resp.headers.get("Retry-After")
-                    delay = float(retry_after) if retry_after else (1.5 * (2 ** attempt))
-                    time.sleep(delay)
-                    continue
-                break
-        logger.error("Giving up fetching order %s after retries: %s", guid, last_exc)
-        return None
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = list(executor.map(fetch_one, all_guids))
-    failed = sum(1 for r in results if r is None)
-    if failed:
-        logger.error(
-            "_do_fetch_orders %s..%s: %d of %d orders could not be fetched even "
-            "after retries — totals are UNDERCOUNTED by this many orders.",
-            start_date, end_date, failed, len(all_guids),
-        )
-    return [r for r in results if r]
+    return result
 
 
 def _order_total(order: dict) -> float:
