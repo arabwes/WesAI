@@ -185,8 +185,15 @@ def _do_fetch_orders(start_date: str, end_date: str) -> list:
 
 
 def _order_total(order: dict) -> float:
-    """Sum totalAmount across all checks — order-level totalAmount is always None."""
+    """DEPRECATED for revenue: check.totalAmount = sales + tax + tips (total collected).
+    Use _order_sales for the 'sales' figure that matches the Toast dashboard."""
     return sum(float(c.get("totalAmount", 0) or 0) for c in order.get("checks", []))
+
+
+def _order_sales(order: dict) -> float:
+    """Gross Sales after discounts (the 'sales only' figure; excludes tax & tips).
+    check.amount = Toast 'Net sales' — verified against the Sales Summary export."""
+    return sum(float(c.get("amount", 0) or 0) for c in order.get("checks", []))
 
 
 @api_retry()
@@ -214,7 +221,7 @@ async def toast_sales_summary(start_date: str, end_date: str) -> str:
         dow_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
         for order in orders:
-            amount = _order_total(order)
+            amount = _order_sales(order)
             total_revenue += amount
             opened = order.get("openedDate", "")
             if opened:
@@ -227,11 +234,11 @@ async def toast_sales_summary(start_date: str, end_date: str) -> str:
         lines = [
             f"Toast Sales Summary — {start_date} to {end_date}",
             f"",
-            f"Total Revenue:      {fmt_currency(total_revenue)}",
-            f"Total Transactions: {fmt_number(transactions)}",
-            f"Average Ticket:     {fmt_currency(avg_ticket)}",
+            f"Net Sales (excl. tax & tips): {fmt_currency(total_revenue)}",
+            f"Total Transactions:           {fmt_number(transactions)}",
+            f"Average Ticket:               {fmt_currency(avg_ticket)}",
             f"",
-            f"Revenue by Day of Week:",
+            f"Net Sales by Day of Week (matches Toast dashboard; for tax/tips/fees use toast_sales_breakdown):",
         ]
         for dow_idx in range(7):
             rev = by_dow.get(dow_idx, 0)
@@ -344,7 +351,7 @@ async def toast_weekend_evening_share(
         weekend_evening = 0.0
 
         for order in orders:
-            amount = _order_total(order)
+            amount = _order_sales(order)
             total += amount
             opened = order.get("openedDate", "")
             if opened:
@@ -400,7 +407,7 @@ async def toast_hourly_heatmap(
         dow_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
         for order in orders:
-            amount = _order_total(order)
+            amount = _order_sales(order)
             opened = order.get("openedDate", "")
             if opened and amount > 0:
                 dt = _to_local_dt(opened)

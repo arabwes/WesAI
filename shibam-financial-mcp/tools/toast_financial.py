@@ -54,6 +54,11 @@ _CACHE_TTL = 300            # ranges that include today
 _CLOSED_RANGE_TTL = 86400  # ranges entirely in the past (orders are final)
 _orders_fetch_lock = threading.Lock()
 
+# Payment statuses that represent money actually collected. Toast's own Payments
+# summary counts CAPTURED + AUTHORIZED (auth'd cards settle later but are real
+# revenue); DENIED and VOIDED are excluded. (None = legacy/unset, kept defensively.)
+_COLLECTED_PAYMENT_STATUSES = (None, "CAPTURED", "AUTHORIZED")
+
 # Employee GUID → full name map, fetched once per process lifetime.
 _employee_map: dict = {}
 _employee_map_loaded: bool = False
@@ -247,8 +252,51 @@ def _do_fetch_orders(start_date: str, end_date: str) -> list:
 
 
 def _order_total(order: dict) -> float:
-    """Sum totalAmount across all checks — order-level totalAmount is always None."""
+    """DEPRECATED for revenue: check.totalAmount = sales + tax + tips (total collected),
+    NOT 'sales'. Kept only where the gross collected figure is genuinely wanted.
+    For sales/labor%/tip-rate/channel revenue use _order_sales (net of tax & tips)."""
     return sum(float(c.get("totalAmount", 0) or 0) for c in order.get("checks", []))
+
+
+# ── Revenue components (verified against Toast Sales Summary, week of 2026-06-15) ──
+# check.amount = sales after discounts, excl. tax & tips  → Toast "Net sales"
+# check.taxAmount = tax ; payment.tipAmount = tips ; payment.originalProcessingFee = card fee
+def _order_sales(order: dict) -> float:
+    """Gross Sales after discounts (the 'sales only' figure; excludes tax & tips)."""
+    return sum(float(c.get("amount", 0) or 0) for c in order.get("checks", []))
+
+
+def _order_tax(order: dict) -> float:
+    return sum(float(c.get("taxAmount", 0) or 0) for c in order.get("checks", []))
+
+
+def _order_tips(order: dict) -> float:
+    return sum(
+        float(p.get("tipAmount", 0) or 0)
+        for c in order.get("checks", [])
+        for p in (c.get("payments") or [])
+    )
+
+
+def _order_processing_fees(order: dict) -> float:
+    return sum(
+        float(p.get("originalProcessingFee", 0) or 0)
+        for c in order.get("checks", [])
+        for p in (c.get("payments") or [])
+    )
+
+
+def _order_discounts(order: dict) -> float:
+    """Approximate total applied discount across checks (check-level appliedDiscounts).
+    NOTE: Toast's discount accounting is layered (check- vs selection-level can overlap);
+    this under/over-counts the exact figure, so the breakdown labels the discount and
+    gross-before-discount lines as approximate. The authoritative 'sales' number is
+    check.amount (_order_sales), which is already net of discounts and is exact."""
+    total = 0.0
+    for c in order.get("checks", []):
+        for d in (c.get("appliedDiscounts") or []):
+            total += float(d.get("discountAmount", d.get("amount", 0)) or 0)
+    return total
 
 
 @api_retry()
@@ -333,9 +381,10 @@ async def toast_labor_summary(start_date: str, end_date: str) -> str:
         if isinstance(time_entries, dict):
             time_entries = time_entries.get("timeEntries", [])
 
-        # Get revenue for the same period to calculate labor %
+        # Get revenue for the same period to calculate labor %. Use net Sales
+        # (check.amount), not totalAmount, so labor % matches Toast's dashboard.
         orders = _fetch_orders(start_date, end_date)
-        total_revenue = sum(_order_total(o) for o in orders)
+        total_revenue = sum(_order_sales(o) for o in orders)
 
         total_hours = 0.0
         total_cost = 0.0
@@ -424,7 +473,7 @@ async def toast_labor_vs_revenue(
         order_days: dict = defaultdict(int)
 
         for order in orders:
-            amount = _order_total(order)
+            amount = _order_sales(order)  # net Sales basis (matches dashboard)
             opened = order.get("openedDate", "")
             if opened:
                 dt = _to_local_dt(opened)
@@ -569,7 +618,7 @@ async def toast_tips_summary(start_date: str, end_date: str) -> str:
         for order in orders:
             for check in order.get("checks", []):
                 tip = sum(float(p.get("tipAmount", 0) or 0) for p in check.get("payments", []) or [])
-                sub = float(check.get("totalAmount", 0) or 0)
+                sub = float(check.get("amount", 0) or 0)  # net Sales basis → tip rate matches dashboard
                 total_tips += tip
                 total_revenue += sub
             opened = order.get("openedDate", "")
@@ -1149,7 +1198,7 @@ async def toast_payout_reconciliation(start_date: str, end_date: str) -> str:
                 for p in check.get("payments", []) or []:
                     if str(p.get("type")) not in ("CREDIT", "GIFTCARD", "OTHER"):
                         continue
-                    if p.get("paymentStatus") != "CAPTURED":
+                    if p.get("paymentStatus") not in _COLLECTED_PAYMENT_STATUSES:
                         continue
                     bd = p.get("paidBusinessDate")
                     if not bd:
@@ -1247,7 +1296,7 @@ async def toast_payment_channel_breakdown(start_date: str, end_date: str) -> str
             label = channel
             if source and source != "In Store" and channel in ("Unknown", "Delivery", "Takeout"):
                 label = f"{channel} ({source})"
-            rev = _order_total(order)
+            rev = _order_sales(order)  # net Sales basis (matches dashboard dining-option net sales)
             chan[label]["orders"] += 1
             chan[label]["revenue"] += rev
 
@@ -1301,7 +1350,7 @@ async def toast_payment_type_breakdown(start_date: str, end_date: str) -> str:
         for order in orders:
             for check in order.get("checks", []):
                 for p in check.get("payments", []) or []:
-                    if p.get("paymentStatus") not in ("CAPTURED", None):
+                    if p.get("paymentStatus") not in _COLLECTED_PAYMENT_STATUSES:
                         continue
                     ptype = str(p.get("type") or "UNKNOWN").title()
                     amt = float(p.get("amount", 0) or 0) + float(p.get("tipAmount", 0) or 0)
@@ -1347,3 +1396,71 @@ async def toast_payment_type_breakdown(start_date: str, end_date: str) -> str:
     except Exception as e:
         logger.error("toast_payment_type_breakdown failed: %s", e)
         return f"Error fetching payment type breakdown: {e}"
+
+
+@api_retry()
+async def toast_sales_breakdown(start_date: str, end_date: str) -> str:
+    """
+    Full revenue breakdown for a date range — every component from gross item sales
+    down to net-of-fees, so you can read whichever figure you need and see exactly
+    how they relate (and reconcile against Toast's Sales Summary).
+
+    Ladder:
+        Gross Sales (before discounts)
+          − Discounts
+        = Gross Sales (after discounts)   ← the "sales only" figure; = Toast "Net sales"
+          + Tax
+          + Tips
+        = Gross Revenue (total collected)
+          − Card processing fees
+        = Net Sales (after processing fees)
+
+    Args:
+        start_date: YYYY-MM-DD
+        end_date:   YYYY-MM-DD
+    """
+    pending = _check_pending()
+    if pending:
+        return pending
+    try:
+        orders = _fetch_orders(start_date, end_date)
+        sales = tax = tips = fees = discounts = 0.0
+        orders_counted = 0
+        for o in orders:
+            if o.get("voided"):
+                continue
+            sales += _order_sales(o)
+            tax += _order_tax(o)
+            tips += _order_tips(o)
+            fees += _order_processing_fees(o)
+            discounts += _order_discounts(o)
+            orders_counted += 1
+
+        gross_pre_discount = sales + discounts
+        gross_revenue = sales + tax + tips
+        net_after_fees = gross_revenue - fees
+
+        return "\n".join([
+            f"Toast Sales Breakdown — {start_date} to {end_date}",
+            f"",
+            f"  Gross Sales (before discounts):    {fmt_currency(gross_pre_discount)}  (approx)",
+            f"  Less discounts:                    {fmt_currency(-discounts)}  (approx)",
+            f"  ────────────────────────────────",
+            f"  GROSS SALES (after discounts):     {fmt_currency(sales)}   ← 'sales only' (exact)",
+            f"  Plus tax:                          {fmt_currency(tax)}",
+            f"  Plus tips:                         {fmt_currency(tips)}",
+            f"  ────────────────────────────────",
+            f"  GROSS REVENUE (total collected):   {fmt_currency(gross_revenue)}   ← sales + tax + tip",
+            f"  Less card processing fees:         {fmt_currency(-fees)}",
+            f"  ────────────────────────────────",
+            f"  NET SALES (after processing fees): {fmt_currency(net_after_fees)}",
+            f"",
+            f"  Orders: {fmt_number(orders_counted)}",
+            f"",
+            f"  Individual components — Discounts {fmt_currency(discounts)} · Tax {fmt_currency(tax)} · "
+            f"Tips {fmt_currency(tips)} · Processing fees {fmt_currency(fees)}",
+        ])
+
+    except Exception as e:
+        logger.error("toast_sales_breakdown failed: %s", e)
+        return f"Error building sales breakdown: {e}"

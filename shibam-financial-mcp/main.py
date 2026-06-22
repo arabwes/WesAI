@@ -36,6 +36,7 @@ from tools.toast_financial import (
     toast_payout_reconciliation,
     toast_payment_channel_breakdown,
     toast_payment_type_breakdown,
+    toast_sales_breakdown,
 )
 from tools.email_invoices import (
     parse_vendor_invoices,
@@ -63,7 +64,7 @@ from tools.financial_digest import (
 
 mcp = FastMCP(config.server_name)
 
-# ── Toast Financial Extensions (13 tools) ────────────────────────────────────
+# ── Toast Financial Extensions (14 tools) ────────────────────────────────────
 mcp.tool()(toast_modifier_revenue)
 mcp.tool()(toast_labor_summary)
 mcp.tool()(toast_labor_vs_revenue)
@@ -77,6 +78,7 @@ mcp.tool()(toast_guest_report)
 mcp.tool()(toast_payout_reconciliation)
 mcp.tool()(toast_payment_channel_breakdown)
 mcp.tool()(toast_payment_type_breakdown)
+mcp.tool()(toast_sales_breakdown)
 
 # ── Email Invoice Parser (4 tools) ───────────────────────────────────────────
 mcp.tool()(parse_vendor_invoices)
@@ -110,7 +112,7 @@ async def health_check(request):
     return JSONResponse({
         "status": "ok",
         "server": config.server_name,
-        "tools": 28,
+        "tools": 29,
         "toast_pending": config.toast_api_pending,
         "vendor_domains_configured": vendor_count,
     })
