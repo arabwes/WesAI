@@ -41,16 +41,29 @@ def get_token() -> str:
     return _token
 
 
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {get_token()}",
+        "Toast-Restaurant-External-ID": config.toast_restaurant_guid,
+    }
+
+
 def get(path: str, params: Optional[dict] = None) -> dict:
     base = _TOAST_BASE_URLS[config.toast_environment]
-    r = httpx.get(
-        f"{base}{path}",
-        headers={
-            "Authorization": f"Bearer {get_token()}",
-            "Toast-Restaurant-External-ID": config.toast_restaurant_guid,
-        },
-        params=params or {},
-        timeout=30,
-    )
+    r = httpx.get(f"{base}{path}", headers=_headers(), params=params or {}, timeout=30)
     r.raise_for_status()
     return r.json()
+
+
+def post(path: str, json: Optional[dict] = None) -> dict:
+    base = _TOAST_BASE_URLS[config.toast_environment]
+    r = httpx.post(f"{base}{path}", headers=_headers(), json=json or {}, timeout=30)
+    r.raise_for_status()
+    return r.json() if r.content else {}
+
+
+def patch(path: str, json: Optional[dict] = None) -> dict:
+    base = _TOAST_BASE_URLS[config.toast_environment]
+    r = httpx.patch(f"{base}{path}", headers=_headers(), json=json or {}, timeout=30)
+    r.raise_for_status()
+    return r.json() if r.content else {}

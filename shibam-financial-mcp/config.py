@@ -33,6 +33,7 @@ class Config:
     google_refresh_token: str
     sheets_inventory_id: str
     sheets_ledger_id: str
+    financial_dashboard_sheet_id: str
 
     # Claude API
     anthropic_api_key: str
@@ -127,6 +128,7 @@ def load_config() -> Config:
         google_refresh_token=_get("GOOGLE_REFRESH_TOKEN"),
         sheets_inventory_id=_get("GOOGLE_SHEETS_INVENTORY_ID"),
         sheets_ledger_id=_get("GOOGLE_SHEETS_LEDGER_ID"),
+        financial_dashboard_sheet_id=_get("FINANCIAL_DASHBOARD_SHEET_ID"),
         anthropic_api_key=_get("ANTHROPIC_API_KEY"),
         wheniwork_api_key=_get("WHENIWORK_API_KEY"),
         wheniwork_account_id=_get("WHENIWORK_ACCOUNT_ID"),

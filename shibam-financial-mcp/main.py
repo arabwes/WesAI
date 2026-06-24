@@ -65,6 +65,19 @@ from tools.financial_digest import (
     weekly_financial_digest,
     monthly_financial_close_checklist,
 )
+from tools.toast_labor_analytics import (
+    toast_sales_by_hour,
+    toast_labor_hourly_headcount,
+    toast_labor_detail_by_day,
+    toast_labor_cost_by_hour,
+)
+from tools.toast_employees import (
+    toast_get_employees,
+    toast_create_employee,
+    toast_update_employee,
+    toast_unarchive_employee,
+)
+from tools.sheets_writeback import sheets_write_labor_report
 
 mcp = FastMCP(config.server_name)
 
@@ -111,6 +124,21 @@ mcp.tool()(inventory_reorder_list)
 mcp.tool()(weekly_financial_digest)
 mcp.tool()(monthly_financial_close_checklist)
 
+# ── Toast Labor Analytics (4 tools) ──────────────────────────────────────────
+mcp.tool()(toast_sales_by_hour)
+mcp.tool()(toast_labor_hourly_headcount)
+mcp.tool()(toast_labor_detail_by_day)
+mcp.tool()(toast_labor_cost_by_hour)
+
+# ── Toast Employee Management (4 tools — stubbed pending API approval) ──────
+mcp.tool()(toast_get_employees)
+mcp.tool()(toast_create_employee)
+mcp.tool()(toast_update_employee)
+mcp.tool()(toast_unarchive_employee)
+
+# ── Google Sheets Write-Back (1 tool) ────────────────────────────────────────
+mcp.tool()(sheets_write_labor_report)
+
 
 @mcp.custom_route("/", methods=["GET"])
 async def health_check(request):
@@ -120,7 +148,7 @@ async def health_check(request):
     return JSONResponse({
         "status": "ok",
         "server": config.server_name,
-        "tools": 29,
+        "tools": 38,
         "toast_pending": config.toast_api_pending,
         "vendor_domains_configured": len(config.vendor_domains),
         "qb_ready": config.qb_ready,
