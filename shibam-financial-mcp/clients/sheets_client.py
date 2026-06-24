@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from config import config
+from config import config, NotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,11 @@ def _get_credentials() -> Credentials:
 
 def get_service():
     global _service
+    if not config.google_ready:
+        raise NotConfiguredError(
+            "Google Sheets not configured. Run: python scripts/get_google_token.py — "
+            "sign in as yemenicoffeeco@gmail.com. Then set GOOGLE_SHEETS_INVENTORY_ID."
+        )
     if _service is None:
         _service = build("sheets", "v4", credentials=_get_credentials(), cache_discovery=False)
     return _service
@@ -105,11 +110,6 @@ def sheet_to_dicts(sheet_id: str, tab_name: str, required_columns: list) -> tupl
     ]
 
 
-def ensure_ledger_tab(sheet_id: str):
-    """Create the Ledger tab with correct headers if it doesn't already exist."""
-    ensure_tab(sheet_id, "Ledger", LEDGER_REQUIRED_COLUMNS)
-
-
 def ensure_tab(sheet_id: str, tab_name: str, required_columns: list):
     """Create a tab with the given headers if it doesn't already exist."""
     error = validate_schema(sheet_id, tab_name, required_columns)
@@ -129,3 +129,8 @@ def ensure_tab(sheet_id: str, tab_name: str, required_columns: list):
         logger.info("Created %s tab in sheet %s", tab_name, sheet_id)
     except Exception as e:
         logger.warning("Could not create %s tab: %s", tab_name, e)
+
+
+def ensure_ledger_tab(sheet_id: str):
+    """Create the Ledger tab with correct headers if it doesn't already exist."""
+    ensure_tab(sheet_id, "Ledger", LEDGER_REQUIRED_COLUMNS)

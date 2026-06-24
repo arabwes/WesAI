@@ -13,7 +13,11 @@ def _is_error(text: str) -> bool:
     return lowered.startswith("error") or "error checking" in lowered or "error fetching" in lowered or "invalid_grant" in lowered or "not configured" in lowered
 
 
-async def weekly_marketing_digest(week: str = "last_7_days") -> str:
+async def weekly_marketing_digest(
+    week: str = "last_7_days",
+    start_date: str = "",
+    end_date: str = "",
+) -> str:
     """
     Generate a complete weekly marketing digest for Shibam Coffee.
 
@@ -21,25 +25,35 @@ async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     with all metrics, 🟢🟡🔴 ratings, and plain-English action items.
 
     Args:
-        week: date range for the digest — last_7_days | last_30_days | this_month | last_month | custom
-              Defaults to last_7_days.
+        week:       date range for the digest — last_7_days | last_30_days | this_month | last_month | custom
+                    Defaults to last_7_days.
+        start_date: YYYY-MM-DD — required only when week=custom
+        end_date:   YYYY-MM-DD — required only when week=custom
     """
     from datetime import date
+    from utils.date_helpers import to_start_end
+
     today = date.today()
     sections = []
     issues = []
 
+    try:
+        start, end = to_start_end(week, start_date, end_date)
+    except ValueError as e:
+        return f"Error: {e}"
+
+    period_label = f"{start} to {end}" if week == "custom" else week
     sections.append(
         f"{'='*60}\n"
         f"  SHIBAM COFFEE — WEEKLY MARKETING DIGEST\n"
-        f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {week}\n"
+        f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {period_label}\n"
         f"{'='*60}"
     )
 
     # ── Google Ads ──────────────────────────────────────────────────────
     sections.append("\n📊  GOOGLE ADS\n" + "-" * 40)
     try:
-        google_result = await google_ads_kpi_check(date_range=week)
+        google_result = await google_ads_kpi_check(date_range="custom", start_date=str(start), end_date=str(end))
         sections.append(google_result)
         if _is_error(google_result):
             issues.append("Google Ads data could not be retrieved — check Google Ads connection.")
@@ -55,7 +69,7 @@ async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     # ── Meta Ads ─────────────────────────────────────────────────────────
     sections.append("\n📘  META ADS\n" + "-" * 40)
     try:
-        meta_result = await meta_ads_kpi_check(date_range=week)
+        meta_result = await meta_ads_kpi_check(date_range="custom", start_date=str(start), end_date=str(end))
         sections.append(meta_result)
         if _is_error(meta_result):
             issues.append("Meta Ads data could not be retrieved — check Meta Ads configuration.")
@@ -71,8 +85,6 @@ async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     # ── Toast Sales ──────────────────────────────────────────────────────
     sections.append("\n☕  TOAST SALES\n" + "-" * 40)
     try:
-        from utils.date_helpers import to_start_end
-        start, end = to_start_end(week)
         toast_result = await toast_sales_summary(str(start), str(end))
         sections.append(toast_result)
     except Exception as e:
@@ -81,8 +93,6 @@ async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     # ── Weekend Evening Share ─────────────────────────────────────────────
     sections.append("\n🌙  WEEKEND EVENING SHARE\n" + "-" * 40)
     try:
-        from utils.date_helpers import to_start_end
-        start, end = to_start_end(week)
         weekend_result = await toast_weekend_evening_share(str(start), str(end))
         sections.append(weekend_result)
     except Exception as e:

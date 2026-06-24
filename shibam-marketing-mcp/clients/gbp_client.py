@@ -3,7 +3,7 @@ import logging
 import httpx
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from config import config
+from config import config, NotConfiguredError
 
 logger = logging.getLogger(__name__)
 PLACES_BASE = "https://maps.googleapis.com/maps/api/place"
@@ -12,6 +12,11 @@ PLACES_BASE = "https://maps.googleapis.com/maps/api/place"
 def _gbp_credentials() -> Credentials:
     """Build OAuth credentials from the Google Ads refresh token.
     The same OAuth client covers GBP if the business.manage scope was requested."""
+    if not config.gbp_ready:
+        raise NotConfiguredError(
+            "Google Business Profile not configured. After running scripts/get_refresh_token.py, "
+            "also set GBP_ACCOUNT_ID, GBP_LOCATION_ID, and GOOGLE_PLACES_API_KEY."
+        )
     return Credentials(
         token=None,
         refresh_token=config.google_ads_refresh_token,
@@ -38,6 +43,10 @@ def get_info_service():
 
 def places_find(query: str) -> dict:
     """Find a place by text query."""
+    if not config.gbp_ready:
+        raise NotConfiguredError(
+            "Google Places not configured. Set GOOGLE_PLACES_API_KEY."
+        )
     r = httpx.get(
         f"{PLACES_BASE}/findplacefromtext/json",
         params={

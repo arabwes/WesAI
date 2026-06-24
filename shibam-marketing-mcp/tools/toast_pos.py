@@ -4,8 +4,11 @@ All tools check TOAST_API_PENDING before making any API calls.
 Set TOAST_API_PENDING=false in your .env once Toast API access is approved.
 """
 import logging
+import threading
+import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 from clients import toast_client
 from config import config
@@ -14,6 +17,63 @@ from utils.formatting import fmt_currency, fmt_pct, fmt_number, fmt_table
 from utils.retry import api_retry
 
 logger = logging.getLogger(__name__)
+
+# Toast timestamps are UTC; convert to local time before binning by hour/day so
+# heatmaps, day-of-week splits, and the evening-peak window reflect store-local time.
+_RESTAURANT_TZ = ZoneInfo("America/New_York")
+
+
+def _to_local_dt(value) -> datetime:
+    """Parse a Toast timestamp (ISO UTC string or epoch ms) to a naive local datetime."""
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value / 1000, tz=timezone.utc).astimezone(_RESTAURANT_TZ).replace(tzinfo=None)
+    iso = str(value).replace("+0000", "+00:00").replace("Z", "+00:00")
+    return datetime.fromisoformat(iso).astimezone(_RESTAURANT_TZ).replace(tzinfo=None)
+
+# Cache order fetches — multiple tools with the same date range share one fetch.
+# Live ranges (including today) use a short TTL since orders are still accumulating;
+# fully-closed past ranges never change, so they cache far longer.
+_orders_cache: dict = {}
+_CACHE_TTL = 300            # ranges that include today
+_CLOSED_RANGE_TTL = 86400  # ranges entirely in the past (orders are final)
+
+# Config GUID → name maps. Order payloads carry salesCategory/diningOption as
+# GUID-only references (the name field is null), so resolve names from /config/v2
+# once and cache for the process lifetime.
+_config_maps: dict = {}
+
+
+def _config_map(path: str) -> dict:
+    """Return {guid: name} for a /config/v2 collection, cached for the process lifetime.
+    Falls back to an empty map (callers degrade to GUIDs/'Uncategorized') on error."""
+    if path in _config_maps:
+        return _config_maps[path]
+    mapping: dict = {}
+    try:
+        items = toast_client.get(path)
+        if isinstance(items, list):
+            for it in items:
+                guid = it.get("guid", "")
+                name = it.get("name") or ""
+                if guid and name:
+                    mapping[guid] = name
+        logger.info("Loaded %d entries from %s", len(mapping), path)
+    except Exception as e:
+        logger.warning("Could not load config map %s: %s", path, e)
+    _config_maps[path] = mapping
+    return mapping
+
+
+def _category_name(selection: dict) -> str:
+    """Resolve a selection's sales-category name (order payloads carry only the GUID)."""
+    sc = selection.get("salesCategory") or {}
+    if not isinstance(sc, dict):
+        return "Uncategorized"
+    name = sc.get("name")
+    if name:
+        return name
+    guid = sc.get("guid", "")
+    return _config_map("/config/v2/salesCategories").get(guid, "Uncategorized")
 
 _PENDING_MSG = (
     "Toast API access is pending approval.\n"
@@ -34,28 +94,106 @@ def _check_pending() -> Optional[str]:
     return None
 
 
+_orders_fetch_lock = threading.Lock()
+
+
 def _fetch_orders(start_date: str, end_date: str) -> list:
-    """Fetch all orders in a date range from the Toast Orders API."""
-    from datetime import date
+    """Fetch full order objects for a date range, cached in-process.
+
+    Serialized by a process-wide lock so two overlapping calls never run duplicate
+    concurrent fetches — a second caller waits and reuses the first's cached result.
+    Closed (past) ranges cache for 24h since their orders are final; ranges that
+    include today use a short TTL since orders are still accumulating.
+    """
+    cache_key = (start_date, end_date)
+    with _orders_fetch_lock:
+        now = time.time()
+        today_local = datetime.now(_RESTAURANT_TZ).date()
+        try:
+            range_closed = to_start_end("custom", start_date, end_date)[1] < today_local
+        except Exception:
+            range_closed = False
+        ttl = _CLOSED_RANGE_TTL if range_closed else _CACHE_TTL
+
+        if cache_key in _orders_cache:
+            cached, ts = _orders_cache[cache_key]
+            if now - ts < ttl:
+                logger.debug("_fetch_orders cache hit: %s to %s", start_date, end_date)
+                return cached
+
+        result = _do_fetch_orders(start_date, end_date)
+        _orders_cache[cache_key] = (result, time.time())
+        return result
+
+
+def _do_fetch_orders(start_date: str, end_date: str) -> list:
+    """Fetch full orders via /orders/v2/ordersBulk, one paginated query per local
+    business day. This returns complete order objects directly (checks, selections,
+    payments) — no separate GUID-listing pass and no per-order detail calls — cutting
+    a week-long fetch from ~1,300 requests to ~20 and removing the rate-limit pressure
+    that previously caused silent undercounts.
+
+    We scan businessDates [start-1, end+1] (a ±1-day buffer, since an order opened just
+    after midnight can be assigned to the adjacent businessDate) and then keep only
+    orders whose LOCAL openedDate falls in [start, end]. That preserves the exact
+    calendar-day semantics the tools already rely on.
+    """
     start, end = to_start_end("custom", start_date, end_date)
-    params = {
-        "startDate": to_toast_datetime(start),
-        "endDate": to_toast_datetime(end, end_of_day=True),
-        "pageSize": 500,
-    }
-    all_orders = []
-    page = 1
-    while True:
-        params["page"] = page
-        data = toast_client.get("/orders/v2/orders", params=params)
-        orders = data if isinstance(data, list) else data.get("orders", [])
-        if not orders:
-            break
-        all_orders.extend(orders)
-        if len(orders) < 500:
-            break
-        page += 1
-    return all_orders
+    fetch_t0 = time.time()
+    by_guid: dict = {}
+    pages = 0
+    day = start - timedelta(days=1)
+    last_day = end + timedelta(days=1)
+    while day <= last_day:
+        bd = day.strftime("%Y%m%d")
+        page = 1
+        while True:
+            chunk = toast_client.get("/orders/v2/ordersBulk", params={
+                "businessDate": bd, "pageSize": 100, "page": page,
+            })
+            if not isinstance(chunk, list) or not chunk:
+                break
+            for o in chunk:
+                guid = o.get("guid")
+                if guid:
+                    by_guid[guid] = o
+            pages += 1
+            if len(chunk) < 100:
+                break
+            page += 1
+        day += timedelta(days=1)
+
+    # Keep only orders whose local openedDate is within the requested calendar range.
+    result = []
+    for o in by_guid.values():
+        opened = o.get("openedDate")
+        if not opened:
+            continue
+        try:
+            d = _to_local_dt(opened).date()
+        except Exception:
+            continue
+        if start <= d <= end:
+            result.append(o)
+
+    logger.info(
+        "_do_fetch_orders %s..%s: %d bulk pages across business days, "
+        "%d orders fetched, %d in window (%.1fs)",
+        start_date, end_date, pages, len(by_guid), len(result), time.time() - fetch_t0,
+    )
+    return result
+
+
+def _order_total(order: dict) -> float:
+    """DEPRECATED for revenue: check.totalAmount = sales + tax + tips (total collected).
+    Use _order_sales for the 'sales' figure that matches the Toast dashboard."""
+    return sum(float(c.get("totalAmount", 0) or 0) for c in order.get("checks", []))
+
+
+def _order_sales(order: dict) -> float:
+    """Gross Sales after discounts (the 'sales only' figure; excludes tax & tips).
+    check.amount = Toast 'Net sales' — verified against the Sales Summary export."""
+    return sum(float(c.get("amount", 0) or 0) for c in order.get("checks", []))
 
 
 @api_retry()
@@ -83,11 +221,11 @@ async def toast_sales_summary(start_date: str, end_date: str) -> str:
         dow_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
         for order in orders:
-            amount = float(order.get("totalAmount", 0) or 0)
+            amount = _order_sales(order)
             total_revenue += amount
             opened = order.get("openedDate", "")
             if opened:
-                dt = datetime.fromisoformat(opened.replace("Z", "+00:00"))
+                dt = _to_local_dt(opened)
                 by_dow[dt.weekday()] += amount
 
         transactions = len(orders)
@@ -96,11 +234,11 @@ async def toast_sales_summary(start_date: str, end_date: str) -> str:
         lines = [
             f"Toast Sales Summary — {start_date} to {end_date}",
             f"",
-            f"Total Revenue:      {fmt_currency(total_revenue)}",
-            f"Total Transactions: {fmt_number(transactions)}",
-            f"Average Ticket:     {fmt_currency(avg_ticket)}",
+            f"Net Sales (excl. tax & tips): {fmt_currency(total_revenue)}",
+            f"Total Transactions:           {fmt_number(transactions)}",
+            f"Average Ticket:               {fmt_currency(avg_ticket)}",
             f"",
-            f"Revenue by Day of Week:",
+            f"Net Sales by Day of Week (matches Toast dashboard; for tax/tips/fees use toast_sales_breakdown):",
         ]
         for dow_idx in range(7):
             rev = by_dow.get(dow_idx, 0)
@@ -213,12 +351,12 @@ async def toast_weekend_evening_share(
         weekend_evening = 0.0
 
         for order in orders:
-            amount = float(order.get("totalAmount", 0) or 0)
+            amount = _order_sales(order)
             total += amount
             opened = order.get("openedDate", "")
             if opened:
-                dt = datetime.fromisoformat(opened.replace("Z", "+00:00"))
-                # Friday=4, Saturday=5 in Python weekday(); hour 18-23
+                dt = _to_local_dt(opened)
+                # Friday=4, Saturday=5 in Python weekday(); hour 18-23 (local)
                 if dt.weekday() in (4, 5) and 18 <= dt.hour <= 23:
                     weekend_evening += amount
 
@@ -269,10 +407,10 @@ async def toast_hourly_heatmap(
         dow_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
         for order in orders:
-            amount = float(order.get("totalAmount", 0) or 0)
+            amount = _order_sales(order)
             opened = order.get("openedDate", "")
             if opened and amount > 0:
-                dt = datetime.fromisoformat(opened.replace("Z", "+00:00"))
+                dt = _to_local_dt(opened)
                 key = (dt.weekday(), dt.hour)
                 revenue_grid[key] += amount
                 count_grid[key] += 1
@@ -358,10 +496,8 @@ async def toast_category_breakdown(
         for order in orders:
             for check in order.get("checks", []):
                 for selection in check.get("selections", []):
-                    # Toast selections include a salesCategory field
-                    category = (
-                        selection.get("salesCategory", {}) or {}
-                    ).get("name", "Uncategorized")
+                    # salesCategory is a GUID-only ref in order payloads — resolve the name.
+                    category = _category_name(selection)
                     qty = int(selection.get("quantity", 1) or 1)
                     price = float(selection.get("preDiscountPrice", 0) or 0) * qty
                     cat_revenue[category] += price

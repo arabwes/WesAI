@@ -16,8 +16,16 @@ from clients.sheets_client import (
     LEDGER_REQUIRED_COLUMNS,
     ensure_ledger_tab,
     sheet_to_dicts,
+    append_rows,
 )
 from config import config
+from utils.pdf_utils import attachment_to_content
+from utils.formatting import fmt_currency, fmt_number, fmt_table
+from utils.retry import api_retry
+
+logger = logging.getLogger(__name__)
+
+_MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
 def _check_gmail() -> str | None:
@@ -30,13 +38,6 @@ def _check_anthropic() -> str | None:
     if not config.anthropic_ready:
         return "Anthropic API not configured. Add ANTHROPIC_API_KEY to your Railway environment variables."
     return None
-from utils.pdf_utils import attachment_to_content
-from utils.formatting import fmt_currency, fmt_number, fmt_table
-from utils.retry import api_retry
-
-logger = logging.getLogger(__name__)
-
-_MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
 
 
 def _build_gmail_query(start_date: str, end_date: str, vendor_domain: str = "") -> str:
@@ -400,20 +401,12 @@ async def invoice_ledger_sync(start_date: str, end_date: str) -> str:
                 existing_order_numbers.add(order_num)
 
         if new_rows:
-            from clients.sheets_client import append_rows
             append_rows(ledger_id, "Ledger", new_rows)
 
         parse_errors = len([i for i in invoices if i.get("parse_error")])
-        return (
-            f"Invoice Ledger Sync — {start_date} to {end_date}\n"
+        return "\n".join([
+            f"Invoice Ledger Sync — {start_date} to {end_date}",
             f"",
-            f"Invoices parsed:     {len(success)}",
-            f"New rows added:      {len(new_rows)}",
-            f"Duplicates skipped:  {skipped}",
-            f"Parse errors:        {parse_errors}",
-            f"",
-            f"Ledger sheet ID: {ledger_id}",
-        )[0] + "\n\n" + "\n".join([
             f"Invoices parsed:     {len(success)}",
             f"New rows added:      {len(new_rows)}",
             f"Duplicates skipped:  {skipped}",

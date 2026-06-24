@@ -1,10 +1,19 @@
-"""Loads and validates all environment variables at startup."""
+"""Loads all environment variables at startup. Missing credentials are logged as warnings;
+the server starts and tools for unconfigured services return setup instructions."""
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+class NotConfiguredError(RuntimeError):
+    """Raised when a tool is called but its service credentials are not set.
+    _no_retry=True prevents the api_retry decorator from retrying these."""
+    _no_retry = True
 
 
 @dataclass
@@ -38,6 +47,9 @@ class Config:
     # Claude API
     anthropic_api_key: str
 
+    # OpenAI API (used by clients/claude_parser.py for structured invoice extraction)
+    openai_api_key: str
+
     # WhenIWork
     wheniwork_api_key: str
     wheniwork_account_id: str
@@ -66,8 +78,21 @@ class Config:
         return bool(self.anthropic_api_key)
 
     @property
+    def openai_ready(self) -> bool:
+        return bool(self.openai_api_key)
+
+    @property
     def wheniwork_ready(self) -> bool:
         return bool(self.wheniwork_api_key and self.wheniwork_account_id)
+
+    @property
+    def toast_ready(self) -> bool:
+        return (
+            not self.toast_api_pending
+            and bool(self.toast_client_id)
+            and bool(self.toast_client_secret)
+            and bool(self.toast_restaurant_guid)
+        )
 
     @property
     def missing_vars(self) -> list:
@@ -90,13 +115,6 @@ def _get(key: str, default: str = "") -> str:
     return os.getenv(key, default).strip()
 
 
-def _require(key: str, errors: list) -> str:
-    val = _get(key)
-    if not val:
-        errors.append(key)
-    return val
-
-
 def _load_vendor_domains() -> dict:
     """Load all VENDOR_* env vars dynamically — no code change needed for new vendors."""
     vendors = {}
@@ -110,7 +128,7 @@ def _load_vendor_domains() -> dict:
 def load_config() -> Config:
     toast_pending = _get("TOAST_API_PENDING", "true").lower() == "true"
 
-    return Config(
+    cfg = Config(
         port=int(_get("PORT", "8001")),
         server_name=_get("MCP_SERVER_NAME", "shibam-financial-mcp"),
         qb_client_id=_get("QB_CLIENT_ID"),
@@ -130,10 +148,29 @@ def load_config() -> Config:
         sheets_ledger_id=_get("GOOGLE_SHEETS_LEDGER_ID"),
         financial_dashboard_sheet_id=_get("FINANCIAL_DASHBOARD_SHEET_ID"),
         anthropic_api_key=_get("ANTHROPIC_API_KEY"),
+        openai_api_key=_get("OPENAI_API_KEY"),
         wheniwork_api_key=_get("WHENIWORK_API_KEY"),
         wheniwork_account_id=_get("WHENIWORK_ACCOUNT_ID"),
         vendor_domains=_load_vendor_domains(),
     )
+
+    groups = {
+        "QuickBooks":   cfg.qb_ready,
+        "Gmail/Sheets": cfg.google_ready,
+        "Claude API":   cfg.anthropic_ready,
+        "WhenIWork":    cfg.wheniwork_ready,
+        "Toast":        cfg.toast_ready,
+    }
+    for name, ready in groups.items():
+        logger.info("  %-15s %s", name, "READY" if ready else "not configured")
+    not_ready = [g for g, r in groups.items() if not r]
+    if not_ready:
+        logger.warning(
+            "Unconfigured service groups: %s — tools will return setup instructions when called.",
+            not_ready,
+        )
+
+    return cfg
 
 
 config = load_config()

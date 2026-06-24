@@ -4,8 +4,8 @@ Shibam Coffee — Marketing MCP Server
 Connects Claude.ai to live marketing data from Google Ads, Meta Ads,
 Toast POS, Google Business Profile, and Instagram.
 
-Transport: HTTP/SSE (required for Claude.ai web)
-Add to Claude.ai: Settings → Integrations → paste your Railway URL + /sse
+Transport: Streamable HTTP (required for Claude.ai remote integrations)
+Add to Claude.ai: Settings → Integrations → paste your Railway URL + /mcp
 """
 import os
 import logging
@@ -49,8 +49,8 @@ from tools.instagram import (
     instagram_post_performance,
     instagram_engagement_rate,
 )
-from tools.weekly_digest import weekly_marketing_digest
 from tools.toast_sales_analytics import toast_sales_by_daypart, toast_hourly_revenue
+from tools.weekly_digest import weekly_marketing_digest
 
 mcp = FastMCP(config.server_name)
 
@@ -84,12 +84,12 @@ mcp.tool()(instagram_account_summary)
 mcp.tool()(instagram_post_performance)
 mcp.tool()(instagram_engagement_rate)
 
-# ── Weekly Digest (1 composite tool) ─────────────────────────────────────────
-mcp.tool()(weekly_marketing_digest)
-
 # ── Toast Sales Analytics (2 tools) ──────────────────────────────────────────
 mcp.tool()(toast_sales_by_daypart)
 mcp.tool()(toast_hourly_revenue)
+
+# ── Weekly Digest (1 composite tool) ─────────────────────────────────────────
+mcp.tool()(weekly_marketing_digest)
 
 
 @mcp.custom_route("/", methods=["GET"])
@@ -109,4 +109,4 @@ if __name__ == "__main__":
     logger.info("Toast API pending: %s", config.toast_api_pending)
     if config.toast_api_pending:
         logger.info("Toast tools will return a setup message until TOAST_API_PENDING=false")
-    mcp.run(transport="sse", host="0.0.0.0", port=config.port)
+    mcp.run(transport="http", host="0.0.0.0", port=config.port)

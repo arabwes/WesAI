@@ -4,11 +4,11 @@ Shibam Coffee — Financial MCP Server
 Connects Claude.ai to live financial data from QuickBooks, Toast (financial extensions),
 Gmail invoice parsing, payroll (QuickBooks + WhenIWork), and Google Sheets inventory.
 
-Transport: HTTP/SSE (required for Claude.ai web)
-Add to Claude.ai: Settings → Integrations → paste your Railway URL + /sse
+Transport: Streamable HTTP (required for Claude.ai remote integrations)
+Add to Claude.ai: Settings → Integrations → paste your Railway URL + /mcp
 
 Note: This is a SEPARATE server from shibam-marketing-mcp.
-      Add both SSE URLs to Claude.ai Integrations for full coverage.
+      Add both /mcp URLs to Claude.ai Integrations for full coverage.
 """
 import os
 import logging
@@ -36,6 +36,15 @@ from tools.toast_financial import (
     toast_labor_vs_revenue,
     toast_void_refund_summary,
     toast_tips_summary,
+    toast_tip_calculator,
+    toast_break_compliance,
+    toast_item_sales_detail,
+    toast_waste_by_category,
+    toast_guest_report,
+    toast_payout_reconciliation,
+    toast_payment_channel_breakdown,
+    toast_payment_type_breakdown,
+    toast_sales_breakdown,
 )
 from tools.email_invoices import (
     parse_vendor_invoices,
@@ -53,6 +62,7 @@ from tools.wheniwork import (
     whenIwork_schedule,
     whenIwork_labor_forecast,
     whenIwork_schedule_cost,
+    whenIwork_punctuality_check,
 )
 from tools.inventory import (
     inventory_current,
@@ -89,12 +99,21 @@ mcp.tool()(qb_vendor_spend)
 mcp.tool()(qb_unreconciled_check)
 mcp.tool()(qb_cashflow_summary)
 
-# ── Toast Financial Extensions (5 tools) ─────────────────────────────────────
+# ── Toast Financial Extensions (14 tools) ────────────────────────────────────
 mcp.tool()(toast_modifier_revenue)
 mcp.tool()(toast_labor_summary)
 mcp.tool()(toast_labor_vs_revenue)
 mcp.tool()(toast_void_refund_summary)
 mcp.tool()(toast_tips_summary)
+mcp.tool()(toast_tip_calculator)
+mcp.tool()(toast_break_compliance)
+mcp.tool()(toast_item_sales_detail)
+mcp.tool()(toast_waste_by_category)
+mcp.tool()(toast_guest_report)
+mcp.tool()(toast_payout_reconciliation)
+mcp.tool()(toast_payment_channel_breakdown)
+mcp.tool()(toast_payment_type_breakdown)
+mcp.tool()(toast_sales_breakdown)
 
 # ── Email Invoice Parser (4 tools) ───────────────────────────────────────────
 mcp.tool()(parse_vendor_invoices)
@@ -108,10 +127,11 @@ mcp.tool()(payroll_by_role)
 mcp.tool()(payroll_labor_percentage)
 mcp.tool()(payroll_schedule_overview)
 
-# ── WhenIWork (3 tools) ──────────────────────────────────────────────────────
+# ── WhenIWork (4 tools) ──────────────────────────────────────────────────────
 mcp.tool()(whenIwork_schedule)
 mcp.tool()(whenIwork_labor_forecast)
 mcp.tool()(whenIwork_schedule_cost)
+mcp.tool()(whenIwork_punctuality_check)
 
 # ── Inventory (5 tools) ──────────────────────────────────────────────────────
 mcp.tool()(inventory_current)
@@ -144,18 +164,13 @@ mcp.tool()(sheets_write_labor_report)
 async def health_check(request):
     """Health check endpoint used by Railway.app."""
     from starlette.responses import JSONResponse
-    missing = config.missing_vars
+    vendor_count = len(config.vendor_domains)
     return JSONResponse({
         "status": "ok",
         "server": config.server_name,
-        "tools": 38,
+        "tools": 48,
         "toast_pending": config.toast_api_pending,
-        "vendor_domains_configured": len(config.vendor_domains),
-        "qb_ready": config.qb_ready,
-        "google_ready": config.google_ready,
-        "anthropic_ready": config.anthropic_ready,
-        "wheniwork_ready": config.wheniwork_ready,
-        "missing_vars": missing,
+        "vendor_domains_configured": vendor_count,
     })
 
 
@@ -165,4 +180,4 @@ if __name__ == "__main__":
     logger.info("Vendor domains configured: %d", len(config.vendor_domains))
     for name, domain in config.vendor_domains.items():
         logger.info("  Vendor: %s → %s", name, domain)
-    mcp.run(transport="sse", host="0.0.0.0", port=config.port)
+    mcp.run(transport="http", host="0.0.0.0", port=config.port)

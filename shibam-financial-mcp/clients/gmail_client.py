@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
-from config import config
+from config import config, NotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,11 @@ def _get_credentials() -> Credentials:
 
 def get_service():
     global _service
+    if not config.google_ready:
+        raise NotConfiguredError(
+            "Gmail/Sheets not configured. Run: python scripts/get_google_token.py — "
+            "sign in as yemenicoffeeco@gmail.com. Then set GOOGLE_SHEETS_INVENTORY_ID."
+        )
     if _service is None:
         _service = build("gmail", "v1", credentials=_get_credentials(), cache_discovery=False)
         logger.info("Gmail API service initialized for yemenicoffeeco@gmail.com")

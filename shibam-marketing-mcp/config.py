@@ -1,10 +1,19 @@
-"""Loads and validates all environment variables at startup."""
+"""Loads all environment variables at startup. Missing credentials are logged as warnings;
+the server starts and tools for unconfigured services return setup instructions."""
+import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+class NotConfiguredError(RuntimeError):
+    """Raised when a tool is called but its service credentials are not set.
+    _no_retry=True prevents the api_retry decorator from retrying these."""
+    _no_retry = True
 
 
 @dataclass
@@ -43,52 +52,89 @@ class Config:
     instagram_access_token: str
     instagram_business_account_id: str
 
+    # Computed availability flags (set in __post_init__)
+    google_ads_ready: bool = field(init=False)
+    meta_ready: bool = field(init=False)
+    gbp_ready: bool = field(init=False)
+    instagram_ready: bool = field(init=False)
+    toast_ready: bool = field(init=False)
+
+    def __post_init__(self):
+        self.google_ads_ready = all([
+            self.google_ads_developer_token,
+            self.google_ads_client_id,
+            self.google_ads_client_secret,
+            self.google_ads_refresh_token,
+        ])
+        self.meta_ready = all([
+            self.meta_access_token,
+            self.meta_app_id,
+            self.meta_app_secret,
+        ])
+        self.gbp_ready = all([
+            self.google_ads_refresh_token,
+            self.gbp_account_id,
+            self.gbp_location_id,
+            self.google_places_api_key,
+        ])
+        self.instagram_ready = all([
+            self.instagram_access_token,
+            self.instagram_business_account_id,
+        ])
+        self.toast_ready = (
+            not self.toast_api_pending
+            and bool(self.toast_client_id)
+            and bool(self.toast_client_secret)
+            and bool(self.toast_restaurant_guid)
+        )
+
 
 def _get(key: str, default: str = "") -> str:
     return os.getenv(key, default).strip()
 
 
-def _require(key: str, errors: list) -> str:
-    val = _get(key)
-    if not val:
-        errors.append(key)
-    return val
-
-
 def load_config() -> Config:
-    errors: list = []
     toast_pending = _get("TOAST_API_PENDING", "true").lower() == "true"
 
     cfg = Config(
         port=int(_get("PORT", "8000")),
         server_name=_get("MCP_SERVER_NAME", "shibam-marketing-mcp"),
-        google_ads_developer_token=_require("GOOGLE_ADS_DEVELOPER_TOKEN", errors),
-        google_ads_client_id=_require("GOOGLE_ADS_CLIENT_ID", errors),
-        google_ads_client_secret=_require("GOOGLE_ADS_CLIENT_SECRET", errors),
-        google_ads_refresh_token=_require("GOOGLE_ADS_REFRESH_TOKEN", errors),
+        google_ads_developer_token=_get("GOOGLE_ADS_DEVELOPER_TOKEN"),
+        google_ads_client_id=_get("GOOGLE_ADS_CLIENT_ID"),
+        google_ads_client_secret=_get("GOOGLE_ADS_CLIENT_SECRET"),
+        google_ads_refresh_token=_get("GOOGLE_ADS_REFRESH_TOKEN"),
         google_ads_customer_id=_get("GOOGLE_ADS_CUSTOMER_ID", "3307041753"),
         google_ads_login_customer_id=_get("GOOGLE_ADS_LOGIN_CUSTOMER_ID") or None,
-        meta_access_token=_require("META_ACCESS_TOKEN", errors),
+        meta_access_token=_get("META_ACCESS_TOKEN"),
         meta_ad_account_id=_get("META_AD_ACCOUNT_ID", "act_817875271884127"),
-        meta_app_id=_require("META_APP_ID", errors),
-        meta_app_secret=_require("META_APP_SECRET", errors),
+        meta_app_id=_get("META_APP_ID"),
+        meta_app_secret=_get("META_APP_SECRET"),
         toast_api_pending=toast_pending,
         toast_client_id=_get("TOAST_CLIENT_ID"),
         toast_client_secret=_get("TOAST_CLIENT_SECRET"),
         toast_restaurant_guid=_get("TOAST_RESTAURANT_GUID"),
         toast_environment=_get("TOAST_ENVIRONMENT", "production"),
-        gbp_account_id=_require("GBP_ACCOUNT_ID", errors),
-        gbp_location_id=_require("GBP_LOCATION_ID", errors),
-        google_places_api_key=_require("GOOGLE_PLACES_API_KEY", errors),
-        instagram_access_token=_require("INSTAGRAM_ACCESS_TOKEN", errors),
-        instagram_business_account_id=_require("INSTAGRAM_BUSINESS_ACCOUNT_ID", errors),
+        gbp_account_id=_get("GBP_ACCOUNT_ID"),
+        gbp_location_id=_get("GBP_LOCATION_ID"),
+        google_places_api_key=_get("GOOGLE_PLACES_API_KEY"),
+        instagram_access_token=_get("INSTAGRAM_ACCESS_TOKEN"),
+        instagram_business_account_id=_get("INSTAGRAM_BUSINESS_ACCOUNT_ID"),
     )
 
-    if errors:
-        missing = "\n".join(f"  • {e}" for e in errors)
-        raise EnvironmentError(
-            f"Cannot start shibam-marketing-mcp — missing required environment variables:\n{missing}\n"
-            "Copy .env.example to .env and fill in all values."
+    groups = {
+        "Google Ads": cfg.google_ads_ready,
+        "Meta Ads":   cfg.meta_ready,
+        "GBP":        cfg.gbp_ready,
+        "Instagram":  cfg.instagram_ready,
+        "Toast":      cfg.toast_ready,
+    }
+    for name, ready in groups.items():
+        logger.info("  %-15s %s", name, "READY" if ready else "not configured")
+    not_ready = [g for g, r in groups.items() if not r]
+    if not_ready:
+        logger.warning(
+            "Unconfigured service groups: %s — tools will return setup instructions when called.",
+            not_ready,
         )
 
     return cfg

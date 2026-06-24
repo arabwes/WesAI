@@ -10,7 +10,11 @@ def _is_error(text: str) -> bool:
     return lowered.startswith("error") or "error fetching" in lowered or "invalid_grant" in lowered or "not configured" in lowered
 
 
-async def weekly_financial_digest(week: str = "last_7_days") -> str:
+async def weekly_financial_digest(
+    week: str = "last_7_days",
+    start_date: str = "",
+    end_date: str = "",
+) -> str:
     """
     Generate a complete weekly financial snapshot for Shibam Coffee.
 
@@ -23,25 +27,31 @@ async def weekly_financial_digest(week: str = "last_7_days") -> str:
     - Invoice reconciliation flags
 
     Args:
-        week: last_7_days | last_30_days | this_month | last_month | custom
-              Defaults to last_7_days.
+        week:       last_7_days | last_30_days | this_month | last_month | custom
+                    Defaults to last_7_days.
+        start_date: YYYY-MM-DD — required only when week=custom
+        end_date:   YYYY-MM-DD — required only when week=custom
     """
     from utils.date_helpers import to_start_end
     from tools.quickbooks import qb_pl_summary, qb_unreconciled_check
-    from tools.toast_financial import toast_labor_vs_revenue
     from tools.payroll import payroll_labor_percentage
     from tools.email_invoices import vendor_spend_summary
     from tools.inventory import inventory_low_stock
 
     today = date.today()
-    start, end = to_start_end(week)
     sections = []
     issues = []
 
+    try:
+        start, end = to_start_end(week, start_date, end_date)
+    except ValueError as e:
+        return f"Error: {e}"
+
+    period_label = f"{start} to {end}" if week == "custom" else week
     sections.append(
         f"{'='*60}\n"
         f"  SHIBAM COFFEE — WEEKLY FINANCIAL DIGEST\n"
-        f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {week}\n"
+        f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {period_label}\n"
         f"{'='*60}"
     )
 
