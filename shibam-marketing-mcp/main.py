@@ -49,6 +49,7 @@ from tools.instagram import (
     instagram_post_performance,
     instagram_engagement_rate,
 )
+from tools.toast_sales_analytics import toast_sales_by_daypart, toast_hourly_revenue
 from tools.weekly_digest import weekly_marketing_digest
 
 mcp = FastMCP(config.server_name)
@@ -83,6 +84,10 @@ mcp.tool()(instagram_account_summary)
 mcp.tool()(instagram_post_performance)
 mcp.tool()(instagram_engagement_rate)
 
+# ── Toast Sales Analytics (2 tools) ──────────────────────────────────────────
+mcp.tool()(toast_sales_by_daypart)
+mcp.tool()(toast_hourly_revenue)
+
 # ── Weekly Digest (1 composite tool) ─────────────────────────────────────────
 mcp.tool()(weekly_marketing_digest)
 
@@ -94,7 +99,7 @@ async def health_check(request):
     return JSONResponse({
         "status": "ok",
         "server": config.server_name,
-        "tools": 21,
+        "tools": 23,
         "toast_pending": config.toast_api_pending,
     })
 

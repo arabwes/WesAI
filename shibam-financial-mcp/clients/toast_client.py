@@ -168,3 +168,26 @@ def get(path: str, params: Optional[dict] = None) -> dict:
     if last_exc:
         raise last_exc
     raise RuntimeError(f"Toast GET {path} failed after {_MAX_ATTEMPTS} attempts")
+
+
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {get_token()}",
+        "Toast-Restaurant-External-ID": config.toast_restaurant_guid,
+    }
+
+
+def post(path: str, json: Optional[dict] = None) -> dict:
+    base = _TOAST_BASE_URLS[config.toast_environment]
+    _throttle()
+    r = httpx.post(f"{base}{path}", headers=_headers(), json=json or {}, timeout=30)
+    r.raise_for_status()
+    return r.json() if r.content else {}
+
+
+def patch(path: str, json: Optional[dict] = None) -> dict:
+    base = _TOAST_BASE_URLS[config.toast_environment]
+    _throttle()
+    r = httpx.patch(f"{base}{path}", headers=_headers(), json=json or {}, timeout=30)
+    r.raise_for_status()
+    return r.json() if r.content else {}

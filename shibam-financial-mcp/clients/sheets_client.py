@@ -19,6 +19,9 @@ LEDGER_REQUIRED_COLUMNS = [
     "Date", "Order #", "Vendor", "Item", "Qty", "Unit",
     "Unit Cost", "Line Total", "Invoice Total", "Parsed On",
 ]
+LABOR_LOG_REQUIRED_COLUMNS = [
+    "Week Ending", "Revenue", "Labor Cost", "Labor %", "Labor Hours", "Notes",
+]
 
 _service = None
 
@@ -107,26 +110,27 @@ def sheet_to_dicts(sheet_id: str, tab_name: str, required_columns: list) -> tupl
     ]
 
 
-def ensure_ledger_tab(sheet_id: str):
-    """Create the Ledger tab with correct headers if it doesn't already exist."""
-    try:
-        validate_schema(sheet_id, "Ledger", LEDGER_REQUIRED_COLUMNS)
+def ensure_tab(sheet_id: str, tab_name: str, required_columns: list):
+    """Create a tab with the given headers if it doesn't already exist."""
+    error = validate_schema(sheet_id, tab_name, required_columns)
+    if error is None:
         return  # Tab exists with correct headers
-    except Exception:
-        pass  # Tab may not exist — create it
     try:
-        # Add the sheet tab
         get_service().spreadsheets().batchUpdate(
             spreadsheetId=sheet_id,
-            body={"requests": [{"addSheet": {"properties": {"title": "Ledger"}}}]},
+            body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]},
         ).execute()
-        # Write headers
         get_service().spreadsheets().values().update(
             spreadsheetId=sheet_id,
-            range="Ledger!A1",
+            range=f"{tab_name}!A1",
             valueInputOption="RAW",
-            body={"values": [LEDGER_REQUIRED_COLUMNS]},
+            body={"values": [required_columns]},
         ).execute()
-        logger.info("Created Ledger tab in sheet %s", sheet_id)
+        logger.info("Created %s tab in sheet %s", tab_name, sheet_id)
     except Exception as e:
-        logger.warning("Could not create Ledger tab: %s", e)
+        logger.warning("Could not create %s tab: %s", tab_name, e)
+
+
+def ensure_ledger_tab(sheet_id: str):
+    """Create the Ledger tab with correct headers if it doesn't already exist."""
+    ensure_tab(sheet_id, "Ledger", LEDGER_REQUIRED_COLUMNS)

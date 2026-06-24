@@ -17,6 +17,13 @@ def _norm_name(name: str) -> str:
     return " ".join((name or "").split()).lower()
 
 
+def _check_wiw() -> str | None:
+    from config import config
+    if not config.wheniwork_ready:
+        return "WhenIWork not configured. Add WHENIWORK_API_KEY and WHENIWORK_ACCOUNT_ID to your Railway environment variables."
+    return None
+
+
 @api_retry()
 async def whenIwork_schedule(
     start_date: str,
@@ -31,6 +38,8 @@ async def whenIwork_schedule(
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_wiw()
+    if err: return err
     try:
         shifts = wheniwork_client.get_shifts(start_date, end_date)
         users = wheniwork_client.get_users()
@@ -106,6 +115,8 @@ async def whenIwork_labor_forecast(
         start_date: YYYY-MM-DD — required only when date_range=custom
         end_date:   YYYY-MM-DD — required only when date_range=custom
     """
+    err = _check_wiw()
+    if err: return err
     try:
         start, end = to_start_end(date_range, start_date, end_date)
         shifts = wheniwork_client.get_shifts(str(start), str(end))
@@ -200,6 +211,8 @@ async def whenIwork_schedule_cost(
         start_date: YYYY-MM-DD — required only when date_range=custom
         end_date:   YYYY-MM-DD — required only when date_range=custom
     """
+    err = _check_wiw()
+    if err: return err
     try:
         start, end = to_start_end(date_range, start_date, end_date)
         shifts = wheniwork_client.get_shifts(str(start), str(end))
