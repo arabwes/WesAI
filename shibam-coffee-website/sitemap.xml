@@ -1,37 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>[SITE_URL]/</loc>
+    <loc>https://www.shibamatlanta.com/</loc>
     <lastmod>2026-06-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>[SITE_URL]/menu.html</loc>
+    <loc>https://www.shibamatlanta.com/menu.html</loc>
     <lastmod>2026-06-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>[SITE_URL]/catering-events.html</loc>
+    <loc>https://www.shibamatlanta.com/catering-events.html</loc>
     <lastmod>2026-06-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>[SITE_URL]/about.html</loc>
+    <loc>https://www.shibamatlanta.com/about.html</loc>
     <lastmod>2026-06-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>[SITE_URL]/location.html</loc>
+    <loc>https://www.shibamatlanta.com/location.html</loc>
     <lastmod>2026-06-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>[SITE_URL]/contact.html</loc>
+    <loc>https://www.shibamatlanta.com/contact.html</loc>
     <lastmod>2026-06-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>

@@ -29,8 +29,8 @@ hero images. Fields used:
   the Google Business Profile listing before launch** — see the README
   "Before you go live" checklist.
 - `sameAs` — social profile URLs, used for entity disambiguation.
-- `url`, `image` — site URL and a representative photo; both use the
-  `[SITE_URL]` placeholder convention (see section 3).
+- `url`, `image` — the live site URL and a representative photo (see
+  section 3).
 
 `index.html` additionally carries a `WebSite` JSON-LD block (with
 `name`, `url`, and a `SearchAction` potentialAction) — this schema type
@@ -58,36 +58,32 @@ number if either ever changes.
 Every page has a self-referencing canonical tag:
 
 ```html
-<link rel="canonical" href="[SITE_URL]/page-name.html">
+<link rel="canonical" href="https://www.shibamatlanta.com/page-name.html">
 ```
 
-The homepage canonical is `[SITE_URL]/` (root, no filename) — internal
+The homepage canonical is `https://www.shibamatlanta.com/` (root, no filename) — internal
 links to the homepage also use `/` rather than `/index.html` for the
 same reason, so there's only ever one valid URL per page from both a
-crawler and an internal-linking perspective. `[SITE_URL]` is a literal
-placeholder string (see section 3) so canonical tags are never wrong by
-omission before launch — they simply won't resolve until the find/replace
-is done, instead of silently pointing at the wrong host.
+crawler and an internal-linking perspective.
 
 Open Graph (`og:url`, `og:image`) and Twitter Card (`twitter:image`) tags
-follow the same `[SITE_URL]`-prefixed pattern, so social share previews
+follow the same `https://www.shibamatlanta.com`-prefixed pattern, so social share previews
 and canonical tags always agree on the page's "real" URL.
 
-## 3. The `[SITE_URL]` placeholder
+## 3. The site URL
 
 Every absolute URL reference that depends on the live domain — canonical
 tags, OG/Twitter `url`/`image`, JSON-LD `url`/`image`/`hasMap`,
-`robots.txt`'s `Sitemap:` line, and every `<loc>` in `sitemap.xml` — uses
-the literal bracketed string `[SITE_URL]` instead of a guessed domain.
-Once the Cloudflare Pages custom domain is live, replace it everywhere
-in one pass:
+`robots.txt`'s `Sitemap:` line, and every `<loc>` in `sitemap.xml` — is
+set to `https://www.shibamatlanta.com`. If the domain ever changes,
+repoint everything in one pass:
 
 ```bash
-grep -rl '\[SITE_URL\]' . | xargs sed -i 's|\[SITE_URL\]|https://www.shibamatlanta.com|g'
+grep -rl 'https://www.shibamatlanta.com' . | xargs sed -i 's|https://www.shibamatlanta.com|https://new-domain.com|g'
 ```
 
-Run `grep -rn '\[SITE_URL\]' .` afterward to confirm zero matches remain
-before considering the site launch-ready.
+Run `grep -rn 'https://www.shibamatlanta.com' .` afterward to confirm
+every reference now points at the new domain.
 
 ## 4. Sitemap
 
@@ -98,7 +94,7 @@ about, location, contact) — legal pages (`privacy-policy.html`,
 results.
 
 Each `<url>` entry has:
-- `<loc>` — the page URL, using `[SITE_URL]`.
+- `<loc>` — the page URL, using `https://www.shibamatlanta.com`.
 - `<lastmod>` — date of last meaningful content change, `YYYY-MM-DD`.
 - `<changefreq>` — `weekly` for the homepage, `monthly` for the rest.
 - `<priority>` — `1.0` for the homepage, `0.8` for the other 5 pages.
@@ -107,7 +103,7 @@ Each `<url>` entry has:
 1. Add/update its `<url>` block in `sitemap.xml`.
 2. Update its `<lastmod>`.
 3. Confirm `robots.txt`'s `Sitemap:` line still points at
-   `[SITE_URL]/sitemap.xml`.
+   `https://www.shibamatlanta.com/sitemap.xml`.
 4. Resubmit the sitemap in Google Search Console (Sitemaps → enter
    `sitemap.xml` → Submit) so Google re-crawls promptly instead of
    waiting for its next scheduled crawl.

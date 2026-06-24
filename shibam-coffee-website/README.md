@@ -61,15 +61,15 @@ This site lives in the `shibam-coffee-website/` directory of the
 2. Enter your domain (e.g. `shibamatlanta.com` or a subdomain). If the
    domain's DNS is already on Cloudflare, the CNAME is added automatically;
    otherwise follow the CNAME instructions shown.
-3. Once the domain is live, replace every `[SITE_URL]` placeholder across
-   the codebase with the real URL:
+3. The live URL is `https://www.shibamatlanta.com` — every canonical tag,
+   Open Graph/Twitter `url`/`image` value, JSON-LD `url`/`image`/`hasMap`,
+   `robots.txt`'s `Sitemap:` line, and `sitemap.xml` `<loc>` already
+   points at it. If the domain ever changes, repoint everything in one
+   pass:
 
    ```bash
-   grep -rl '\[SITE_URL\]' . | xargs sed -i 's|\[SITE_URL\]|https://www.shibamatlanta.com|g'
+   grep -rl 'https://www.shibamatlanta.com' . | xargs sed -i 's|https://www.shibamatlanta.com|https://new-domain.com|g'
    ```
-
-   This updates canonical tags, Open Graph/Twitter `url`/`image` values,
-   JSON-LD, `robots.txt`, and `sitemap.xml` in one pass.
 
 ## 4. How to update the GTM ID
 
@@ -117,7 +117,7 @@ leaving the warm gradient background visible).
 
 1. Add/update the corresponding `<url>` block in `sitemap.xml`.
 2. Update `<lastmod>` to the date of the change (`YYYY-MM-DD`).
-3. Keep `robots.txt`'s `Sitemap:` line pointing at `[SITE_URL]/sitemap.xml`.
+3. Keep `robots.txt`'s `Sitemap:` line pointing at `https://www.shibamatlanta.com/sitemap.xml`.
 4. Resubmit the sitemap in Google Search Console after deploying.
 
 ## 8. UTM examples for all marketing channels
@@ -127,15 +127,15 @@ guide and the dataLayer events each CTA fires.
 
 | Channel | Example URL |
 |---|---|
-| Google Business Profile | `[SITE_URL]/?utm_source=google&utm_medium=organic&utm_campaign=gbp` |
-| Instagram bio | `[SITE_URL]/?utm_source=instagram&utm_medium=social&utm_campaign=bio` |
-| TikTok bio | `[SITE_URL]/?utm_source=tiktok&utm_medium=social&utm_campaign=bio` |
-| In-store QR (table sign) | `[SITE_URL]/?utm_source=store&utm_medium=qr&utm_campaign=table_sign` |
-| Catering flyer QR | `[SITE_URL]/catering-events.html?utm_source=flyer&utm_medium=qr&utm_campaign=catering` |
+| Google Business Profile | `https://www.shibamatlanta.com/?utm_source=google&utm_medium=organic&utm_campaign=gbp` |
+| Instagram bio | `https://www.shibamatlanta.com/?utm_source=instagram&utm_medium=social&utm_campaign=bio` |
+| TikTok bio | `https://www.shibamatlanta.com/?utm_source=tiktok&utm_medium=social&utm_campaign=bio` |
+| In-store QR (table sign) | `https://www.shibamatlanta.com/?utm_source=store&utm_medium=qr&utm_campaign=table_sign` |
+| Catering flyer QR | `https://www.shibamatlanta.com/catering-events.html?utm_source=flyer&utm_medium=qr&utm_campaign=catering` |
 
 ## Before you go live
 
-- [ ] Replace `[SITE_URL]` everywhere (see step 3 above).
+- [x] Site URL set to `https://www.shibamatlanta.com` everywhere.
 - [ ] Set `GTM_ID` in `js/config.js` and the noscript fallback in every HTML file.
 - [ ] Set `GOOGLE_MAPS_EMBED_SRC` in `js/config.js` (Google Maps → Share → Embed a map).
 - [ ] Set `CATERING_FORM_ENDPOINT` and `CONTACT_FORM_ENDPOINT` (e.g. Formspree).
