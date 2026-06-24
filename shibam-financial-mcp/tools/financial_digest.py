@@ -5,6 +5,11 @@ from datetime import date
 logger = logging.getLogger(__name__)
 
 
+def _is_error(text: str) -> bool:
+    lowered = text.lower()
+    return lowered.startswith("error") or "error fetching" in lowered or "invalid_grant" in lowered or "not configured" in lowered
+
+
 async def weekly_financial_digest(week: str = "last_7_days") -> str:
     """
     Generate a complete weekly financial snapshot for Shibam Coffee.
@@ -46,52 +51,69 @@ async def weekly_financial_digest(week: str = "last_7_days") -> str:
         month = today.strftime("%Y-%m")
         pl = await qb_pl_summary(start_month=month, end_month=month)
         sections.append(pl)
-        if "🔴" in pl:
+        if _is_error(pl):
+            issues.append("P&L data unavailable — check QuickBooks connection.")
+        elif "🔴" in pl:
             issues.append("Gross margin is below target — review COGS and pricing.")
     except Exception as e:
         sections.append(f"⚠️  P&L data unavailable: {e}")
+        issues.append("P&L data unavailable — check QuickBooks connection.")
 
     # ── Labor % ──────────────────────────────────────────────────────────
     sections.append("\n👥  LABOR\n" + "-" * 40)
     try:
         labor = await payroll_labor_percentage(str(start), str(end))
         sections.append(labor)
-        if "🔴" in labor or "ALERT" in labor:
+        if _is_error(labor):
+            issues.append("Labor % data unavailable — check QuickBooks/Toast connection.")
+        elif "🔴" in labor or "ALERT" in labor:
             issues.append("Labor % of revenue is above 35% — review staffing schedule.")
     except Exception as e:
         sections.append(f"⚠️  Labor data unavailable: {e}")
+        issues.append("Labor % data unavailable — check QuickBooks/Toast connection.")
 
     # ── Unreconciled ─────────────────────────────────────────────────────
     sections.append("\n📋  QUICKBOOKS HYGIENE\n" + "-" * 40)
     try:
         unrec = await qb_unreconciled_check()
         sections.append(unrec)
-        if "⚠️" in unrec:
+        if _is_error(unrec):
+            issues.append("QuickBooks hygiene check unavailable — check QuickBooks connection.")
+        elif "⚠️" in unrec:
             issues.append("Uncategorized QuickBooks transactions found — review before month-end.")
     except Exception as e:
         sections.append(f"⚠️  QuickBooks check unavailable: {e}")
+        issues.append("QuickBooks hygiene check unavailable — check QuickBooks connection.")
 
     # ── Vendor Spend ─────────────────────────────────────────────────────
     sections.append("\n🧾  VENDOR SPEND (Top 3)\n" + "-" * 40)
     try:
         spend = await vendor_spend_summary(str(start), str(end))
-        # Show only first 5 lines to keep digest tight
-        spend_lines = spend.split("\n")
-        sections.append("\n".join(spend_lines[:10]))
-        if len(spend_lines) > 10:
-            sections.append(f"  ... run vendor_spend_summary for full detail")
+        if _is_error(spend):
+            sections.append(spend)
+            issues.append("Vendor spend data unavailable — check Gmail/Google connection.")
+        else:
+            # Show only first 5 lines to keep digest tight
+            spend_lines = spend.split("\n")
+            sections.append("\n".join(spend_lines[:10]))
+            if len(spend_lines) > 10:
+                sections.append(f"  ... run vendor_spend_summary for full detail")
     except Exception as e:
         sections.append(f"⚠️  Vendor spend data unavailable: {e}")
+        issues.append("Vendor spend data unavailable — check Gmail/Google connection.")
 
     # ── Low Stock ────────────────────────────────────────────────────────
     sections.append("\n📦  INVENTORY\n" + "-" * 40)
     try:
         low = await inventory_low_stock()
         sections.append(low)
-        if "below par" in low.lower():
+        if _is_error(low):
+            issues.append("Inventory data unavailable — check Google Sheets connection.")
+        elif "below par" in low.lower():
             issues.append("Inventory items are below par level — run inventory_reorder_list to generate orders.")
     except Exception as e:
         sections.append(f"⚠️  Inventory data unavailable: {e}")
+        issues.append("Inventory data unavailable — check Google Sheets connection.")
 
     # ── Action Items ─────────────────────────────────────────────────────
     sections.append("\n⚡  ACTION ITEMS THIS WEEK\n" + "-" * 40)

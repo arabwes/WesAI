@@ -8,6 +8,11 @@ from tools.instagram import instagram_engagement_rate
 logger = logging.getLogger(__name__)
 
 
+def _is_error(text: str) -> bool:
+    lowered = text.lower()
+    return lowered.startswith("error") or "error checking" in lowered or "error fetching" in lowered or "invalid_grant" in lowered or "not configured" in lowered
+
+
 async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     """
     Generate a complete weekly marketing digest for Shibam Coffee.
@@ -36,10 +41,13 @@ async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     try:
         google_result = await google_ads_kpi_check(date_range=week)
         sections.append(google_result)
-        if "🔴" in google_result:
-            issues.append("Google Ads: one or more KPIs are below target — see Google Ads section above.")
-        if "ALERT" in google_result:
-            issues.append("Google Ads: immediate alert triggered — check CPC and CTR urgently.")
+        if _is_error(google_result):
+            issues.append("Google Ads data could not be retrieved — check Google Ads connection.")
+        else:
+            if "🔴" in google_result:
+                issues.append("Google Ads: one or more KPIs are below target — see Google Ads section above.")
+            if "ALERT" in google_result:
+                issues.append("Google Ads: immediate alert triggered — check CPC and CTR urgently.")
     except Exception as e:
         sections.append(f"⚠️  Google Ads data unavailable: {e}")
         issues.append("Google Ads data could not be retrieved.")
@@ -49,10 +57,13 @@ async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     try:
         meta_result = await meta_ads_kpi_check(date_range=week)
         sections.append(meta_result)
-        if "🔴" in meta_result:
-            issues.append("Meta Ads: one or more KPIs are below target — see Meta Ads section above.")
-        if "ALERT" in meta_result:
-            issues.append("Meta Ads: immediate alert triggered — check frequency and CPM urgently.")
+        if _is_error(meta_result):
+            issues.append("Meta Ads data could not be retrieved — check Meta Ads configuration.")
+        else:
+            if "🔴" in meta_result:
+                issues.append("Meta Ads: one or more KPIs are below target — see Meta Ads section above.")
+            if "ALERT" in meta_result:
+                issues.append("Meta Ads: immediate alert triggered — check frequency and CPM urgently.")
     except Exception as e:
         sections.append(f"⚠️  Meta Ads data unavailable: {e}")
         issues.append("Meta Ads data could not be retrieved.")
@@ -82,7 +93,9 @@ async def weekly_marketing_digest(week: str = "last_7_days") -> str:
     try:
         ig_result = await instagram_engagement_rate()
         sections.append(ig_result)
-        if "🔴" in ig_result:
+        if _is_error(ig_result):
+            issues.append("Instagram data could not be retrieved — check Instagram configuration.")
+        elif "🔴" in ig_result:
             issues.append("Instagram engagement rate is below target.")
     except Exception as e:
         sections.append(f"⚠️  Instagram data unavailable: {e}")
