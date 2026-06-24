@@ -3,6 +3,7 @@ the server starts and tools for unconfigured services return setup instructions.
 import logging
 import os
 from dataclasses import dataclass, field
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,6 +42,13 @@ class Config:
     google_refresh_token: str
     sheets_inventory_id: str
     sheets_ledger_id: str
+    financial_dashboard_sheet_id: str
+
+    # Claude API
+    anthropic_api_key: str
+
+    # OpenAI API (used by clients/claude_parser.py for structured invoice extraction)
+    openai_api_key: str
 
     # WhenIWork
     wheniwork_api_key: str
@@ -49,35 +57,58 @@ class Config:
     # Vendor domains (dynamic — loaded separately)
     vendor_domains: dict
 
-    # Computed availability flags (set in __post_init__)
-    qb_ready: bool = field(init=False)
-    google_ready: bool = field(init=False)
-    wheniwork_ready: bool = field(init=False)
-    toast_ready: bool = field(init=False)
+    @property
+    def qb_ready(self) -> bool:
+        return bool(self.qb_client_id and self.qb_client_secret and self.qb_refresh_token and self.qb_realm_id)
 
-    def __post_init__(self):
-        self.qb_ready = all([
-            self.qb_client_id,
-            self.qb_client_secret,
-            self.qb_refresh_token,
-            self.qb_realm_id,
-        ])
-        self.google_ready = all([
-            self.google_client_id,
-            self.google_client_secret,
-            self.google_refresh_token,
-            self.sheets_inventory_id,
-        ])
-        self.wheniwork_ready = all([
-            self.wheniwork_api_key,
-            self.wheniwork_account_id,
-        ])
-        self.toast_ready = (
+    @property
+    def google_ready(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret and self.google_refresh_token)
+
+    @property
+    def sheets_ready(self) -> bool:
+        return self.google_ready and bool(self.sheets_inventory_id)
+
+    @property
+    def gmail_ready(self) -> bool:
+        return self.google_ready
+
+    @property
+    def anthropic_ready(self) -> bool:
+        return bool(self.anthropic_api_key)
+
+    @property
+    def openai_ready(self) -> bool:
+        return bool(self.openai_api_key)
+
+    @property
+    def wheniwork_ready(self) -> bool:
+        return bool(self.wheniwork_api_key and self.wheniwork_account_id)
+
+    @property
+    def toast_ready(self) -> bool:
+        return (
             not self.toast_api_pending
             and bool(self.toast_client_id)
             and bool(self.toast_client_secret)
             and bool(self.toast_restaurant_guid)
         )
+
+    @property
+    def missing_vars(self) -> list:
+        missing = []
+        if not self.qb_client_id: missing.append("QB_CLIENT_ID")
+        if not self.qb_client_secret: missing.append("QB_CLIENT_SECRET")
+        if not self.qb_refresh_token: missing.append("QB_REFRESH_TOKEN")
+        if not self.qb_realm_id: missing.append("QB_REALM_ID")
+        if not self.google_client_id: missing.append("GOOGLE_CLIENT_ID")
+        if not self.google_client_secret: missing.append("GOOGLE_CLIENT_SECRET")
+        if not self.google_refresh_token: missing.append("GOOGLE_REFRESH_TOKEN")
+        if not self.sheets_inventory_id: missing.append("GOOGLE_SHEETS_INVENTORY_ID")
+        if not self.anthropic_api_key: missing.append("ANTHROPIC_API_KEY")
+        if not self.wheniwork_api_key: missing.append("WHENIWORK_API_KEY")
+        if not self.wheniwork_account_id: missing.append("WHENIWORK_ACCOUNT_ID")
+        return missing
 
 
 def _get(key: str, default: str = "") -> str:
@@ -115,13 +146,19 @@ def load_config() -> Config:
         google_refresh_token=_get("GOOGLE_REFRESH_TOKEN"),
         sheets_inventory_id=_get("GOOGLE_SHEETS_INVENTORY_ID"),
         sheets_ledger_id=_get("GOOGLE_SHEETS_LEDGER_ID"),
+        financial_dashboard_sheet_id=_get("FINANCIAL_DASHBOARD_SHEET_ID"),
+        anthropic_api_key=_get("ANTHROPIC_API_KEY"),
+        openai_api_key=_get("OPENAI_API_KEY"),
         wheniwork_api_key=_get("WHENIWORK_API_KEY"),
         wheniwork_account_id=_get("WHENIWORK_ACCOUNT_ID"),
         vendor_domains=_load_vendor_domains(),
     )
 
     groups = {
+        "QuickBooks":   cfg.qb_ready,
         "Gmail/Sheets": cfg.google_ready,
+        "Claude API":   cfg.anthropic_ready,
+        "WhenIWork":    cfg.wheniwork_ready,
         "Toast":        cfg.toast_ready,
     }
     for name, ready in groups.items():

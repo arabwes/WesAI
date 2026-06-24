@@ -16,6 +16,12 @@ from utils.retry import api_retry
 logger = logging.getLogger(__name__)
 
 
+def _check_sheets() -> str | None:
+    if not config.sheets_ready:
+        return "Google Sheets not configured. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, and GOOGLE_SHEETS_INVENTORY_ID to your Railway environment variables."
+    return None
+
+
 def _parse_float(val) -> float:
     try:
         return float(str(val).replace("$", "").replace(",", "").strip() or 0)
@@ -33,6 +39,8 @@ async def inventory_current(category: str = "") -> str:
     Args:
         category: optional — filter to one category (e.g., "Beans", "Dairy", "Syrups")
     """
+    err = _check_sheets()
+    if err: return err
     try:
         error, rows = sheet_to_dicts(config.sheets_inventory_id, "Inventory", INVENTORY_REQUIRED_COLUMNS)
         if error:
@@ -73,6 +81,8 @@ async def inventory_valuation() -> str:
 
     Returns total value and breakdown by category.
     """
+    err = _check_sheets()
+    if err: return err
     try:
         error, rows = sheet_to_dicts(config.sheets_inventory_id, "Inventory", INVENTORY_REQUIRED_COLUMNS)
         if error:
@@ -126,6 +136,8 @@ async def inventory_low_stock() -> str:
     Returns items sorted by how critically short they are (most urgent first).
     Use case: generate reorder list before placing supplier orders.
     """
+    err = _check_sheets()
+    if err: return err
     try:
         error, rows = sheet_to_dicts(config.sheets_inventory_id, "Inventory", INVENTORY_REQUIRED_COLUMNS)
         if error:
@@ -183,6 +195,8 @@ async def inventory_vs_sales(start_date: str, end_date: str) -> str:
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_sheets()
+    if err: return err
     try:
         # Read inventory and recipes
         inv_error, inv_rows = sheet_to_dicts(config.sheets_inventory_id, "Inventory", INVENTORY_REQUIRED_COLUMNS)
@@ -298,6 +312,8 @@ async def inventory_reorder_list() -> str:
     For each low-stock item, shows current count, par level, and suggested order quantity
     (par level × 1.5 minus current count).
     """
+    err = _check_sheets()
+    if err: return err
     try:
         error, rows = sheet_to_dicts(config.sheets_inventory_id, "Inventory", INVENTORY_REQUIRED_COLUMNS)
         if error:

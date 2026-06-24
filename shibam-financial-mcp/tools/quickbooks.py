@@ -11,6 +11,13 @@ from utils.retry import api_retry
 logger = logging.getLogger(__name__)
 
 
+def _check_qb() -> str | None:
+    from config import config
+    if not config.qb_ready:
+        return "QuickBooks not configured. Add QB_CLIENT_ID, QB_CLIENT_SECRET, QB_REFRESH_TOKEN, and QB_REALM_ID to your Railway environment variables."
+    return None
+
+
 @api_retry()
 async def qb_transaction_detail(
     start_date: str,
@@ -30,6 +37,8 @@ async def qb_transaction_detail(
         category:   optional — filter to a specific expense category/account name
         vendor:     optional — filter to a specific vendor/payee name
     """
+    err = _check_qb()
+    if err: return err
     try:
         sql = (
             f"SELECT * FROM Purchase WHERE TxnDate >= '{start_date}' AND TxnDate <= '{end_date}' "
@@ -97,6 +106,8 @@ async def qb_receipt_attachments(start_date: str, end_date: str) -> str:
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_qb()
+    if err: return err
     try:
         # Fetch attachments via Attachable resource
         sql = (
@@ -169,6 +180,8 @@ async def qb_pl_summary(
         start_month: YYYY-MM (e.g., 2025-01) — defaults to current month
         end_month:   YYYY-MM — defaults to current month
     """
+    err = _check_qb()
+    if err: return err
     try:
         today = date.today()
         if not start_month:
@@ -276,6 +289,8 @@ async def qb_vendor_spend(
         end_date:   YYYY-MM-DD
         top_n:      number of top vendors to show (default 20)
     """
+    err = _check_qb()
+    if err: return err
     try:
         purchases = qb_query(
             f"SELECT * FROM Purchase WHERE TxnDate >= '{start_date}' AND TxnDate <= '{end_date}' "
@@ -330,6 +345,8 @@ async def qb_unreconciled_check(as_of_date: str = "") -> str:
     Args:
         as_of_date: YYYY-MM-DD — defaults to today
     """
+    err = _check_qb()
+    if err: return err
     try:
         if not as_of_date:
             as_of_date = str(date.today())
@@ -385,6 +402,8 @@ async def qb_cashflow_summary(weeks: int = 8) -> str:
     Args:
         weeks: number of rolling weeks to show (default 8)
     """
+    err = _check_qb()
+    if err: return err
     try:
         from datetime import timedelta
         today = date.today()

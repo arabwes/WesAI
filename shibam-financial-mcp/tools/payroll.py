@@ -17,6 +17,20 @@ logger = logging.getLogger(__name__)
 _LABOR_ALERT_THRESHOLD = 35.0  # % of revenue — flag if exceeded
 
 
+def _check_qb() -> str | None:
+    from config import config
+    if not config.qb_ready:
+        return "QuickBooks not configured. Add QB_CLIENT_ID, QB_CLIENT_SECRET, QB_REFRESH_TOKEN, and QB_REALM_ID to your Railway environment variables."
+    return None
+
+
+def _check_wiw() -> str | None:
+    from config import config
+    if not config.wheniwork_ready:
+        return "WhenIWork not configured. Add WHENIWORK_API_KEY and WHENIWORK_ACCOUNT_ID to your Railway environment variables."
+    return None
+
+
 @api_retry()
 async def payroll_summary(
     start_date: str,
@@ -31,6 +45,8 @@ async def payroll_summary(
         end_date:    YYYY-MM-DD
         pay_period:  optional — filter to a specific pay period label
     """
+    err = _check_qb()
+    if err: return err
     try:
         report = qb_report("PayrollSummary", params={
             "start_date": start_date,
@@ -93,6 +109,8 @@ async def payroll_by_role(start_date: str, end_date: str) -> str:
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_qb()
+    if err: return err
     try:
         report = qb_report("PayrollSummary", params={
             "start_date": start_date,
@@ -168,6 +186,8 @@ async def payroll_labor_percentage(start_date: str, end_date: str) -> str:
         start_date: YYYY-MM-DD
         end_date:   YYYY-MM-DD
     """
+    err = _check_qb()
+    if err: return err
     try:
         # Get payroll from QuickBooks
         payroll_report = qb_report("PayrollSummary", params={
@@ -284,6 +304,8 @@ async def payroll_schedule_overview() -> str:
 
     Use case: cash flow planning — know how much payroll to prepare for.
     """
+    err = _check_qb()
+    if err: return err
     try:
         # Get recent payroll runs from QuickBooks
         from datetime import date as d_cls, timedelta
