@@ -1402,18 +1402,20 @@ async def toast_payment_type_breakdown(start_date: str, end_date: str) -> str:
 async def toast_sales_breakdown(start_date: str, end_date: str) -> str:
     """
     Full revenue breakdown for a date range — every component from gross item sales
-    down to net-of-fees, so you can read whichever figure you need and see exactly
-    how they relate (and reconcile against Toast's Sales Summary).
+    down to the cash actually available for business expenses, so you can read
+    whichever figure you need and see exactly how they relate (and reconcile
+    against Toast's Sales Summary).
 
-    Ladder:
+    Main ladder (this is YOUR money):
         Gross Sales (before discounts)
           − Discounts
         = Gross Sales (after discounts)   ← the "sales only" figure; = Toast "Net sales"
-          + Tax
-          + Tips
-        = Gross Revenue (total collected)
           − Card processing fees
-        = Net Sales (after processing fees)
+        = Net Sales                       ← cash available for business expenses
+
+    Memo (collected from customers on top of Sales, but not yours to spend —
+    tax is owed to the state, tips are owed to staff):
+        Tax + Tips = the rest of Gross Revenue (total collected from customers)
 
     Args:
         start_date: YYYY-MM-DD
@@ -1437,8 +1439,8 @@ async def toast_sales_breakdown(start_date: str, end_date: str) -> str:
             orders_counted += 1
 
         gross_pre_discount = sales + discounts
+        net_sales = sales - fees
         gross_revenue = sales + tax + tips
-        net_after_fees = gross_revenue - fees
 
         return "\n".join([
             f"Toast Sales Breakdown — {start_date} to {end_date}",
@@ -1447,13 +1449,14 @@ async def toast_sales_breakdown(start_date: str, end_date: str) -> str:
             f"  Less discounts:                    {fmt_currency(-discounts)}  (approx)",
             f"  ────────────────────────────────",
             f"  GROSS SALES (after discounts):     {fmt_currency(sales)}   ← 'sales only' (exact)",
-            f"  Plus tax:                          {fmt_currency(tax)}",
-            f"  Plus tips:                         {fmt_currency(tips)}",
-            f"  ────────────────────────────────",
-            f"  GROSS REVENUE (total collected):   {fmt_currency(gross_revenue)}   ← sales + tax + tip",
             f"  Less card processing fees:         {fmt_currency(-fees)}",
             f"  ────────────────────────────────",
-            f"  NET SALES (after processing fees): {fmt_currency(net_after_fees)}",
+            f"  NET SALES:                         {fmt_currency(net_sales)}   ← cash for business expenses",
+            f"",
+            f"  Memo — also collected from customers, but NOT yours to spend:",
+            f"    Tax (owed to state):             {fmt_currency(tax)}",
+            f"    Tips (owed to staff):            {fmt_currency(tips)}",
+            f"    Gross Revenue (total collected): {fmt_currency(gross_revenue)}   ← sales + tax + tip",
             f"",
             f"  Orders: {fmt_number(orders_counted)}",
             f"",
