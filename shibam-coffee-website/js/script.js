@@ -20,13 +20,17 @@
   // updating /js/config.js is the only place a URL ever needs to change.
   // Optional data-utm="utm_source=x&utm_medium=y" appends tracking params.
   // ---------------------------------------------------------------------
+  function isConfigured(value) {
+    return typeof value === 'string' && /^https?:\/\//i.test(value);
+  }
+
   function applyConfigLinks() {
     if (typeof CONFIG === 'undefined') return;
 
     document.querySelectorAll('[data-config-href]').forEach(function (el) {
       var key = el.getAttribute('data-config-href');
       var base = CONFIG[key];
-      if (!base) return;
+      if (!isConfigured(base)) return;
 
       var utm = el.getAttribute('data-utm');
       if (utm) {
@@ -39,7 +43,7 @@
     document.querySelectorAll('[data-config-src]').forEach(function (el) {
       var key = el.getAttribute('data-config-src');
       var value = CONFIG[key];
-      if (value) el.setAttribute('src', value);
+      if (isConfigured(value)) el.setAttribute('src', value);
     });
   }
 

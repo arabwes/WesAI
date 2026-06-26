@@ -13,16 +13,17 @@ const CONFIG = {
   // GTM ID in each HTML file's <body> to match this value.
   GTM_ID: "GTM-XXXXXXX",
 
-  // Where "Order Online" CTAs send customers. Point this at the live
-  // ordering platform (Appfront, Toast, ChowNow, etc.) once available.
-  ONLINE_ORDER_URL: "https://shibamcoffee.com",
+  // Where "Order Online" CTAs send customers.
+  ONLINE_ORDER_URL: "https://shibamcoffee.appfront.app/",
 
   // "Get Directions" CTA destination.
   GOOGLE_MAPS_URL: "https://maps.google.com/?q=4000+North+Point+Pkwy+Suite+900+Alpharetta+GA+30022",
 
-  // Embeddable Google Maps iframe src. Generate via Google Maps →
-  // Share → Embed a map → copy the src URL from the <iframe> snippet.
-  GOOGLE_MAPS_EMBED_SRC: "REPLACE_WITH_EMBED_URL",
+  // Embeddable Google Maps iframe src (key-less embed built from the
+  // address above). Generate via Google Maps → Share → Embed a map →
+  // copy the src URL from the <iframe> snippet if you want the
+  // official API-keyed embed instead.
+  GOOGLE_MAPS_EMBED_SRC: "https://www.google.com/maps?q=4000+North+Point+Pkwy+Suite+900+Alpharetta+GA+30022&output=embed",
 
   // Social profiles.
   INSTAGRAM_URL: "https://www.instagram.com/shibamatlanta/",
@@ -30,8 +31,8 @@ const CONFIG = {
   FACEBOOK_URL: "https://www.facebook.com/ShibamCoffee",
 
   // Order-ahead / rewards app (Appfront).
-  APP_STORE_URL: "https://apps.apple.com/app/shibam-coffee",
-  GOOGLE_PLAY_URL: "https://play.google.com/store/apps/shibam-coffee",
+  APP_STORE_URL: "https://apps.apple.com/us/app/shibam-coffee-co/id6739554858",
+  GOOGLE_PLAY_URL: "https://play.google.com/store/apps/details?id=ai.appfront.shibamcoffee",
 
   // Form submission endpoints (Formspree, Netlify Forms, or any service
   // that accepts a POST with FormData and an Accept: application/json
