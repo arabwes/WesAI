@@ -18,6 +18,7 @@ shibam-coffee-website/
 ├── js/script.js               Nav toggle, CTA tracking, form handling
 ├── images/                    Photo placeholders (see images/README.md)
 ├── robots.txt / sitemap.xml / _redirects
+├── TEST_PLAN.md               QA checklist — run after every push to main
 └── tracking-notes.md / seo-notes.md
 ```
 
