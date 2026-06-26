@@ -22,14 +22,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ── Import all tools ──────────────────────────────────────────────────────────
-from tools.quickbooks import (
-    qb_transaction_detail,
-    qb_receipt_attachments,
-    qb_pl_summary,
-    qb_vendor_spend,
-    qb_unreconciled_check,
-    qb_cashflow_summary,
-)
+# QuickBooks tools disabled — their availability was confusing the AI using them.
+# from tools.quickbooks import (
+#     qb_transaction_detail,
+#     qb_receipt_attachments,
+#     qb_pl_summary,
+#     qb_vendor_spend,
+#     qb_unreconciled_check,
+#     qb_cashflow_summary,
+# )
 from tools.toast_financial import (
     toast_modifier_revenue,
     toast_labor_summary,
@@ -91,13 +92,13 @@ from tools.sheets_writeback import sheets_write_labor_report
 
 mcp = FastMCP(config.server_name)
 
-# ── QuickBooks (6 tools) ──────────────────────────────────────────────────────
-mcp.tool()(qb_transaction_detail)
-mcp.tool()(qb_receipt_attachments)
-mcp.tool()(qb_pl_summary)
-mcp.tool()(qb_vendor_spend)
-mcp.tool()(qb_unreconciled_check)
-mcp.tool()(qb_cashflow_summary)
+# ── QuickBooks (6 tools) — disabled, see import comment above ───────────────
+# mcp.tool()(qb_transaction_detail)
+# mcp.tool()(qb_receipt_attachments)
+# mcp.tool()(qb_pl_summary)
+# mcp.tool()(qb_vendor_spend)
+# mcp.tool()(qb_unreconciled_check)
+# mcp.tool()(qb_cashflow_summary)
 
 # ── Toast Financial Extensions (14 tools) ────────────────────────────────────
 mcp.tool()(toast_modifier_revenue)
