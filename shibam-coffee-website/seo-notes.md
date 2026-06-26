@@ -32,10 +32,12 @@ hero images. Fields used:
 - `url`, `image` — the live site URL and a representative photo (see
   section 3).
 
-`index.html` additionally carries a `WebSite` JSON-LD block (with
-`name`, `url`, and a `SearchAction` potentialAction) — this schema type
-only belongs on the homepage, not on subpages, per Google's guidance on
-sitelinks search box eligibility.
+`index.html` additionally carries a `WebSite` JSON-LD block (`name` and
+`url` only) — this schema type only belongs on the homepage, not on
+subpages. It deliberately omits a `SearchAction` potentialAction since
+the site has no on-site search feature; add one only if a real search
+box is ever built (per Google's guidance on sitelinks search box
+eligibility — don't markup a feature that doesn't exist).
 
 **To validate:** paste any page's source into
 https://search.google.com/test/rich-results or
