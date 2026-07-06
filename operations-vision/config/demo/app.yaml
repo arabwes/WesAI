@@ -1,0 +1,44 @@
+# DEMO MODE configuration - runs the full pipeline against simulated
+# mock cameras. All events and visits produced here are flagged
+# is_demo=true so they are never confused with real data.
+
+log_level: INFO
+database_url: null
+
+detection:
+  provider: mock
+  classes: [person]
+
+tracking:
+  tracker: iou
+  max_age_seconds: 2.0
+  min_hits: 3
+
+matching:
+  auto_associate_threshold: 0.90
+  conditional_threshold: 0.75
+  conditional_min_temporal: 0.60
+  weights:
+    temporal: 0.30
+    topology: 0.20
+    direction: 0.15
+    appearance: 0.35
+  appearance_retention_minutes: 30
+  pending_track_ttl_seconds: 90
+  new_track_batch_seconds: 2.0
+
+visits:
+  # demo journeys are compressed, so expire faster than production
+  uncertain_after_minutes: 2
+  lost_after_minutes: 10
+
+demo:
+  enabled: true
+  scenario: scenario.yaml
+
+server:
+  host: 127.0.0.1
+  port: 8000
+  cors_origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173

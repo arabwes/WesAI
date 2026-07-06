@@ -1,0 +1,52 @@
+# Operations Vision - application settings
+# Copy to app.yaml and adjust. Missing keys use safe defaults.
+
+log_level: INFO
+
+# Default: sqlite file under <project>/data/operations.db
+# database_url: sqlite:///C:/opsvision/data/operations.db
+# Later migration path: postgresql+psycopg://user:pass@host/dbname
+database_url: null
+
+detection:
+  provider: ultralytics      # ultralytics | mock
+  model: yolov8n.pt          # downloaded automatically on first run
+  device: cpu                # cpu | cuda | cuda:0
+  classes: [person]
+
+tracking:
+  tracker: auto              # auto | iou | bytetrack
+  max_age_seconds: 2.0
+  min_hits: 3
+  iou_threshold: 0.25
+
+matching:
+  # Handoff confidence thresholds (spec section 15). Starting points -
+  # calibrate against real footage.
+  auto_associate_threshold: 0.90
+  conditional_threshold: 0.75
+  conditional_min_temporal: 0.60
+  weights:
+    temporal: 0.30
+    topology: 0.20
+    direction: 0.15
+    appearance: 0.35
+  # Temporary appearance features are deleted after this long (privacy)
+  appearance_retention_minutes: 30
+  pending_track_ttl_seconds: 120
+  new_track_batch_seconds: 2.0
+
+visits:
+  uncertain_after_minutes: 10
+  lost_after_minutes: 120
+
+demo:
+  enabled: false
+  scenario: null
+
+server:
+  host: 127.0.0.1
+  port: 8000
+  cors_origins:
+    - http://localhost:5173
+    - http://127.0.0.1:5173
