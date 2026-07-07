@@ -1,8 +1,11 @@
+# Deploy with Railway "Root Directory" set to the REPO ROOT (both services
+# need ../mcp-common). Set "Config Path" for this service to this file.
 [build]
 builder = "nixpacks"
+buildCommand = "pip install -r shibam-financial-mcp/requirements.txt -e ./mcp-common"
 
 [deploy]
-startCommand = "python main.py"
+startCommand = "python shibam-financial-mcp/main.py"
 healthcheckPath = "/"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"

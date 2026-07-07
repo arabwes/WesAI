@@ -12,6 +12,9 @@ from utils.kpi_status import labor_pct_status
 from utils.formatting import fmt_currency, fmt_pct, fmt_number, fmt_table
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
 
 _LABOR_ALERT_THRESHOLD = 35.0  # % of revenue — flag if exceeded
@@ -95,7 +98,9 @@ async def payroll_summary(
 
     except Exception as e:
         logger.error("payroll_summary failed: %s", e)
-        return f"Error fetching payroll summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching payroll summary")
 
 
 @api_retry()
@@ -171,7 +176,9 @@ async def payroll_by_role(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("payroll_by_role failed: %s", e)
-        return f"Error fetching payroll by role: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching payroll by role")
 
 
 @api_retry()
@@ -234,7 +241,10 @@ async def payroll_labor_percentage(start_date: str, end_date: str) -> str:
                         break
                     page += 1
             except Exception as te:
-                toast_note = f"(Toast revenue unavailable: {te})"
+                if getattr(te, "_user_facing", False) or isinstance(te, NotConfiguredError):
+                    toast_note = f"(Toast revenue unavailable: {te})"
+                else:
+                    toast_note = f"({safe_error(te, 'fetching Toast revenue')})"
         else:
             toast_note = "(Toast API pending — revenue estimated from QuickBooks)"
             # Fall back to QB revenue
@@ -268,7 +278,10 @@ async def payroll_labor_percentage(start_date: str, end_date: str) -> str:
                     e = datetime.fromisoformat(end_ts.replace("Z", "+00:00"))
                     scheduled_hrs += (e - s).total_seconds() / 3600
         except Exception as we:
-            wiw_note = f"(WhenIWork hours unavailable: {we})"
+            if getattr(we, "_user_facing", False) or isinstance(we, NotConfiguredError):
+                wiw_note = f"(WhenIWork hours unavailable: {we})"
+            else:
+                wiw_note = f"({safe_error(we, 'fetching WhenIWork hours')})"
 
         lines = [
             f"Payroll Labor Percentage — {start_date} to {end_date}",
@@ -294,7 +307,9 @@ async def payroll_labor_percentage(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("payroll_labor_percentage failed: %s", e)
-        return f"Error calculating payroll labor percentage: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "calculating payroll labor percentage")
 
 
 @api_retry()
@@ -375,4 +390,6 @@ async def payroll_schedule_overview() -> str:
 
     except Exception as e:
         logger.error("payroll_schedule_overview failed: %s", e)
-        return f"Error fetching payroll schedule overview: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching payroll schedule overview")

@@ -1,1 +1,1 @@
-web: python main.py
+web: python shibam-marketing-mcp/main.py

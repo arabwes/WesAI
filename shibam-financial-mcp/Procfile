@@ -1,1 +1,1 @@
-web: python main.py
+web: python shibam-financial-mcp/main.py

@@ -16,6 +16,9 @@ from utils.kpi_status import labor_pct_status
 from utils.formatting import fmt_currency, fmt_pct, fmt_number, fmt_table
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
 
 # Toast timestamps are UTC epoch milliseconds; convert to this timezone for
@@ -356,7 +359,9 @@ async def toast_modifier_revenue(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_modifier_revenue failed: %s", e)
-        return f"Error fetching Toast modifier revenue: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast modifier revenue")
 
 
 @api_retry()
@@ -435,7 +440,9 @@ async def toast_labor_summary(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_labor_summary failed: %s", e)
-        return f"Error fetching Toast labor summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast labor summary")
 
 
 @api_retry()
@@ -520,7 +527,9 @@ async def toast_labor_vs_revenue(
 
     except Exception as e:
         logger.error("toast_labor_vs_revenue failed: %s", e)
-        return f"Error fetching Toast labor vs revenue: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast labor vs revenue")
 
 
 @api_retry()
@@ -593,7 +602,9 @@ async def toast_void_refund_summary(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_void_refund_summary failed: %s", e)
-        return f"Error fetching Toast void/refund summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast void/refund summary")
 
 
 @api_retry()
@@ -646,7 +657,9 @@ async def toast_tips_summary(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_tips_summary failed: %s", e)
-        return f"Error fetching Toast tips summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast tips summary")
 
 
 @api_retry()
@@ -802,7 +815,9 @@ async def toast_tip_calculator(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_tip_calculator failed: %s", e)
-        return f"Error calculating tips: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "calculating tips")
 
 
 @api_retry()
@@ -936,7 +951,9 @@ async def toast_break_compliance(
 
     except Exception as e:
         logger.error("toast_break_compliance failed: %s", e)
-        return f"Error checking break compliance: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "checking break compliance")
 
 
 @api_retry()
@@ -1006,7 +1023,9 @@ async def toast_item_sales_detail(start_date: str, end_date: str, top_n: int = 1
 
     except Exception as e:
         logger.error("toast_item_sales_detail failed: %s", e)
-        return f"Error fetching item sales detail: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching item sales detail")
 
 
 @api_retry()
@@ -1084,7 +1103,9 @@ async def toast_waste_by_category(start_date: str, end_date: str, category: str 
 
     except Exception as e:
         logger.error("toast_waste_by_category failed: %s", e)
-        return f"Error fetching waste by category: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching waste by category")
 
 
 @api_retry()
@@ -1162,7 +1183,9 @@ async def toast_guest_report(start_date: str, end_date: str, min_visits: int = 1
 
     except Exception as e:
         logger.error("toast_guest_report failed: %s", e)
-        return f"Error fetching guest report: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching guest report")
 
 
 @api_retry()
@@ -1265,7 +1288,9 @@ async def toast_payout_reconciliation(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_payout_reconciliation failed: %s", e)
-        return f"Error reconciling payouts: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "reconciling payouts")
 
 
 @api_retry()
@@ -1326,7 +1351,9 @@ async def toast_payment_channel_breakdown(start_date: str, end_date: str) -> str
 
     except Exception as e:
         logger.error("toast_payment_channel_breakdown failed: %s", e)
-        return f"Error fetching payment channel breakdown: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching payment channel breakdown")
 
 
 @api_retry()
@@ -1395,7 +1422,9 @@ async def toast_payment_type_breakdown(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_payment_type_breakdown failed: %s", e)
-        return f"Error fetching payment type breakdown: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching payment type breakdown")
 
 
 @api_retry()
@@ -1466,4 +1495,6 @@ async def toast_sales_breakdown(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("toast_sales_breakdown failed: %s", e)
-        return f"Error building sales breakdown: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "building sales breakdown")

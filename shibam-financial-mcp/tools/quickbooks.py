@@ -8,6 +8,9 @@ from utils.kpi_status import gross_margin_status
 from utils.formatting import fmt_currency, fmt_pct, fmt_number, fmt_table
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
 
 
@@ -92,7 +95,9 @@ async def qb_transaction_detail(
 
     except Exception as e:
         logger.error("qb_transaction_detail failed: %s", e)
-        return f"Error fetching QuickBooks transactions: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching QuickBooks transactions")
 
 
 @api_retry()
@@ -162,7 +167,9 @@ async def qb_receipt_attachments(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("qb_receipt_attachments failed: %s", e)
-        return f"Error fetching QuickBooks receipt attachments: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching QuickBooks receipt attachments")
 
 
 @api_retry()
@@ -270,7 +277,9 @@ async def qb_pl_summary(
 
     except Exception as e:
         logger.error("qb_pl_summary failed: %s", e)
-        return f"Error fetching QuickBooks P&L: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching QuickBooks P&L")
 
 
 @api_retry()
@@ -332,7 +341,9 @@ async def qb_vendor_spend(
 
     except Exception as e:
         logger.error("qb_vendor_spend failed: %s", e)
-        return f"Error fetching QuickBooks vendor spend: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching QuickBooks vendor spend")
 
 
 @api_retry()
@@ -389,7 +400,9 @@ async def qb_unreconciled_check(as_of_date: str = "") -> str:
 
     except Exception as e:
         logger.error("qb_unreconciled_check failed: %s", e)
-        return f"Error checking QuickBooks unreconciled transactions: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "checking QuickBooks unreconciled transactions")
 
 
 @api_retry()
@@ -464,4 +477,6 @@ async def qb_cashflow_summary(weeks: int = 8) -> str:
 
     except Exception as e:
         logger.error("qb_cashflow_summary failed: %s", e)
-        return f"Error fetching QuickBooks cash flow: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching QuickBooks cash flow")

@@ -8,6 +8,8 @@ from utils.date_helpers import to_start_end, to_toast_datetime
 from utils.formatting import fmt_currency, fmt_number, fmt_pct, fmt_table
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,7 +98,9 @@ async def whenIwork_schedule(
 
     except Exception as e:
         logger.error("whenIwork_schedule failed: %s", e)
-        return f"Error fetching WhenIWork schedule: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching WhenIWork schedule")
 
 
 @api_retry()
@@ -192,7 +196,9 @@ async def whenIwork_labor_forecast(
 
     except Exception as e:
         logger.error("whenIwork_labor_forecast failed: %s", e)
-        return f"Error fetching WhenIWork labor forecast: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching WhenIWork labor forecast")
 
 
 @api_retry()
@@ -261,7 +267,9 @@ async def whenIwork_schedule_cost(
 
     except Exception as e:
         logger.error("whenIwork_schedule_cost failed: %s", e)
-        return f"Error fetching WhenIWork schedule cost: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching WhenIWork schedule cost")
 
 
 @api_retry()
@@ -421,4 +429,6 @@ async def whenIwork_punctuality_check(
         return str(e)
     except Exception as e:
         logger.error("whenIwork_punctuality_check failed: %s", e)
-        return f"Error checking punctuality: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "checking punctuality")

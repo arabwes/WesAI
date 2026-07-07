@@ -1,0 +1,25 @@
+name: Weekly tenant DB backup
+
+on:
+  schedule:
+    - cron: "0 6 * * 0"  # Sundays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump tenant database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          sudo apt-get -qq install -y postgresql-client
+          pg_dump "$DATABASE_URL" | gzip | \
+            openssl enc -aes-256-cbc -pbkdf2 -pass env:BACKUP_PASSPHRASE \
+            -out "tenants-$(date +%F).sql.gz.enc"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tenant-db-backup
+          path: tenants-*.sql.gz.enc
+          retention-days: 90

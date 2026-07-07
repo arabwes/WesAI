@@ -45,8 +45,10 @@ class ToastAuthError(RuntimeError):
     """Raised when Toast rejects a request with 401 even after a fresh token.
     Distinguishes the likely env-var cause, since Toast's 401 body rarely says
     which credential is wrong. _no_retry stops the tool-level api_retry decorator
-    from retrying a genuine auth/config failure."""
+    from retrying a genuine auth/config failure. _user_facing marks the message
+    as curated setup guidance that is safe to show the caller."""
     _no_retry = True
+    _user_facing = True
 
 
 def _fetch_token() -> str:
@@ -98,6 +100,10 @@ def _throttle() -> None:
 
 
 def _auth_error(path: str, body: str) -> "ToastAuthError":
+    # Full detail (including the upstream response body) is logged server-side
+    # only; the returned message contains no GUIDs or raw upstream content.
+    logger.error("Toast API 401 on %s (restaurant_guid set=%s, env=%s). Raw response: %s",
+                 path, bool(config.toast_restaurant_guid), config.toast_environment, body)
     if not config.toast_restaurant_guid:
         return ToastAuthError(
             f"Toast API 401 on {path} — TOAST_RESTAURANT_GUID is not set, so the "
@@ -108,15 +114,14 @@ def _auth_error(path: str, body: str) -> "ToastAuthError":
     return ToastAuthError(
         f"Toast API 401 on {path} even after a fresh token, so this is not token "
         "expiry. Most likely one of:\n"
-        f"  1. TOAST_RESTAURANT_GUID ({config.toast_restaurant_guid[:8]}...) does not "
+        "  1. TOAST_RESTAURANT_GUID does not "
         "match the restaurant tied to these credentials — verify it exactly matches "
         "Toast Web back-office Restaurant Info, no extra characters.\n"
         "  2. Your Toast app's API access is Sandbox/Pending rather than Production "
         "Approved, or the required read scope isn't granted — check the Developer "
         "Portal's API Access tab for this app.\n"
         f"  3. TOAST_ENVIRONMENT='{config.toast_environment}' doesn't match the type "
-        "of credentials issued (sandbox vs production).\n"
-        f"Toast's raw response: {body[:300]}"
+        "of credentials issued (sandbox vs production)."
     )
 
 

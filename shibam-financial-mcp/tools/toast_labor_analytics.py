@@ -11,6 +11,9 @@ from config import config
 from utils.date_helpers import to_start_end, to_toast_datetime
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
 
 _PENDING_MSG = (
@@ -117,7 +120,9 @@ async def toast_sales_by_hour(start_date: str, end_date: str) -> dict:
         }
     except Exception as e:
         logger.error("toast_sales_by_hour failed: %s", e)
-        return {"error": f"Error fetching Toast sales by hour: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "fetching Toast sales by hour")}
 
 
 @api_retry()
@@ -164,7 +169,9 @@ async def toast_labor_hourly_headcount(start_date: str, end_date: str) -> dict:
         return {"period": f"{start_date} to {end_date}", "by_day": by_day}
     except Exception as e:
         logger.error("toast_labor_hourly_headcount failed: %s", e)
-        return {"error": f"Error fetching Toast labor hourly headcount: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "fetching Toast labor hourly headcount")}
 
 
 @api_retry()
@@ -241,7 +248,9 @@ async def toast_labor_detail_by_day(start_date: str, end_date: str) -> dict:
         }
     except Exception as e:
         logger.error("toast_labor_detail_by_day failed: %s", e)
-        return {"error": f"Error fetching Toast labor detail by day: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "fetching Toast labor detail by day")}
 
 
 @api_retry()
@@ -296,4 +305,6 @@ async def toast_labor_cost_by_hour(start_date: str, end_date: str) -> dict:
         return {"period": f"{start_date} to {end_date}", "by_day": by_day}
     except Exception as e:
         logger.error("toast_labor_cost_by_hour failed: %s", e)
-        return {"error": f"Error fetching Toast labor cost by hour: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "fetching Toast labor cost by hour")}

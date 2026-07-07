@@ -23,6 +23,9 @@ from utils.pdf_utils import attachment_to_content
 from utils.formatting import fmt_currency, fmt_number, fmt_table
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error, requires_scope
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
 
 _MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
@@ -100,7 +103,7 @@ def _parse_email_invoices(start_date: str, end_date: str, vendor_filter: str = "
                     logger.error("Failed to parse attachment %s from '%s': %s", att["filename"], subject, e)
                     parsed_invoices.append({
                         "parse_error": True,
-                        "error_detail": str(e),
+                        "error_detail": str(e) if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError) else safe_error(e, "parsing invoice attachment"),
                         "_filename": att["filename"],
                         "_email_subject": subject,
                         "_email_date": msg_date,
@@ -120,7 +123,7 @@ async def parse_vendor_invoices(
     vendor: str = "",
 ) -> str:
     """
-    Search yemenicoffeeco@gmail.com for vendor invoices and parse them with Claude AI.
+    Search the business Gmail inbox for vendor invoices and parse them with Claude AI.
 
     Searches all configured vendor domains by default, or filters to one vendor.
     Extracts: vendor name, order date, order number, line items (description/qty/cost),
@@ -190,7 +193,9 @@ async def parse_vendor_invoices(
 
     except Exception as e:
         logger.error("parse_vendor_invoices failed: %s", e)
-        return f"Error parsing vendor invoices: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "parsing vendor invoices")
 
 
 @api_retry()
@@ -242,7 +247,9 @@ async def vendor_spend_summary(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("vendor_spend_summary failed: %s", e)
-        return f"Error generating vendor spend summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "generating vendor spend summary")
 
 
 @api_retry()
@@ -320,9 +327,12 @@ async def invoice_reconciliation_check(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("invoice_reconciliation_check failed: %s", e)
-        return f"Error running invoice reconciliation check: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "running invoice reconciliation check")
 
 
+@requires_scope("mutate")
 @api_retry()
 async def invoice_ledger_sync(start_date: str, end_date: str) -> str:
     """
@@ -417,4 +427,6 @@ async def invoice_ledger_sync(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("invoice_ledger_sync failed: %s", e)
-        return f"Error syncing invoice ledger: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "syncing invoice ledger")

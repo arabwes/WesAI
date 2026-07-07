@@ -1,6 +1,6 @@
 """Google Sheets inventory MCP tools — 5 tools for current stock, valuation, low stock, recipes, and reorder lists.
 
-Required sheet: "Shibam Inventory" Google Sheet with tabs:
+Required sheet: the business inventory Google Sheet with tabs:
   - Inventory (columns: Item Name, Category, Unit, Par Level, Current Count, Unit Cost ($), Supplier, Last Updated, Notes)
   - Recipes (columns: Menu Item, Ingredient, Qty Per Serving, Unit, Notes)
 
@@ -12,6 +12,9 @@ from clients.sheets_client import sheet_to_dicts, INVENTORY_REQUIRED_COLUMNS, RE
 from config import config
 from utils.formatting import fmt_currency, fmt_number, fmt_pct, fmt_table
 from utils.retry import api_retry
+
+from mcp_common.errors import safe_error
+from config import NotConfiguredError
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,7 @@ def _parse_float(val) -> float:
 @api_retry()
 async def inventory_current(category: str = "") -> str:
     """
-    Fetch all current inventory from the Shibam Inventory Google Sheet.
+    Fetch all current inventory from the business inventory Google Sheet.
 
     Returns item name, category, unit, current count, unit cost, and last updated date.
 
@@ -71,7 +74,9 @@ async def inventory_current(category: str = "") -> str:
 
     except Exception as e:
         logger.error("inventory_current failed: %s", e)
-        return f"Error fetching inventory: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching inventory")
 
 
 @api_retry()
@@ -125,7 +130,9 @@ async def inventory_valuation() -> str:
 
     except Exception as e:
         logger.error("inventory_valuation failed: %s", e)
-        return f"Error calculating inventory valuation: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "calculating inventory valuation")
 
 
 @api_retry()
@@ -180,7 +187,9 @@ async def inventory_low_stock() -> str:
 
     except Exception as e:
         logger.error("inventory_low_stock failed: %s", e)
-        return f"Error checking inventory low stock: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "checking inventory low stock")
 
 
 @api_retry()
@@ -301,7 +310,9 @@ async def inventory_vs_sales(start_date: str, end_date: str) -> str:
 
     except Exception as e:
         logger.error("inventory_vs_sales failed: %s", e)
-        return f"Error running inventory vs sales: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "running inventory vs sales")
 
 
 @api_retry()
@@ -355,4 +366,6 @@ async def inventory_reorder_list() -> str:
 
     except Exception as e:
         logger.error("inventory_reorder_list failed: %s", e)
-        return f"Error generating inventory reorder list: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "generating inventory reorder list")

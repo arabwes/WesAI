@@ -10,6 +10,9 @@ from clients import toast_client
 from config import config
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error, requires_scope
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
 
 _PENDING_MSG = (
@@ -67,7 +70,9 @@ async def toast_get_employees(modified_after: str = "", include_archived: bool =
         return {"count": len(result), "employees": result}
     except Exception as e:
         logger.error("toast_get_employees failed: %s", e)
-        return {"error": f"Error fetching Toast employees: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "fetching Toast employees")}
 
 
 def _validate_employee_fields(first_name: str = "", last_name: str = "", passcode: str = "") -> Optional[str]:
@@ -79,6 +84,7 @@ def _validate_employee_fields(first_name: str = "", last_name: str = "", passcod
     return None
 
 
+@requires_scope("mutate")
 @api_retry()
 async def toast_create_employee(
     first_name: str,
@@ -127,9 +133,12 @@ async def toast_create_employee(
         }
     except Exception as e:
         logger.error("toast_create_employee failed: %s", e)
-        return {"error": f"Error creating Toast employee: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "creating Toast employee")}
 
 
+@requires_scope("mutate")
 @api_retry()
 async def toast_update_employee(
     employee_guid: str,
@@ -177,9 +186,12 @@ async def toast_update_employee(
         return {"employee": result} if not offboard else {"employee": result, "note": "Employee offboarded (soft-deleted)."}
     except Exception as e:
         logger.error("toast_update_employee failed: %s", e)
-        return {"error": f"Error updating Toast employee: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "updating Toast employee")}
 
 
+@requires_scope("mutate")
 @api_retry()
 async def toast_unarchive_employee(employee_guid: str) -> dict:
     """
@@ -202,4 +214,6 @@ async def toast_unarchive_employee(employee_guid: str) -> dict:
         }
     except Exception as e:
         logger.error("toast_unarchive_employee failed: %s", e)
-        return {"error": f"Error unarchiving Toast employee: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "unarchiving Toast employee")}

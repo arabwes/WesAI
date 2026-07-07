@@ -43,7 +43,7 @@ def get_service():
     if not config.google_ready:
         raise NotConfiguredError(
             "Google Sheets not configured. Run: python scripts/get_google_token.py — "
-            "sign in as yemenicoffeeco@gmail.com. Then set GOOGLE_SHEETS_INVENTORY_ID."
+            "sign in with the business Gmail account. Then set GOOGLE_SHEETS_INVENTORY_ID."
         )
     if _service is None:
         _service = build("sheets", "v4", credentials=_get_credentials(), cache_discovery=False)

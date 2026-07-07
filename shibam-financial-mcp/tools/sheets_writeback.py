@@ -4,6 +4,9 @@ from clients.sheets_client import ensure_tab, append_rows, LABOR_LOG_REQUIRED_CO
 from config import config
 from utils.retry import api_retry
 
+from mcp_common.errors import safe_error, requires_scope
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,6 +18,7 @@ def _check_sheets() -> str | None:
     return None
 
 
+@requires_scope("mutate")
 @api_retry()
 async def sheets_write_labor_report(
     week_ending: str,
@@ -53,4 +57,6 @@ async def sheets_write_labor_report(
         return f"Logged labor report for week ending {week_ending} to the Labor Log tab."
     except Exception as e:
         logger.error("sheets_write_labor_report failed: %s", e)
-        return f"Error writing labor report to Google Sheets: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "writing labor report to Google Sheets")

@@ -2,7 +2,17 @@
 import logging
 from datetime import date
 
+from mcp_common.errors import safe_error
+from config import NotConfiguredError
+
 logger = logging.getLogger(__name__)
+
+
+def _msg(e: Exception, ctx: str) -> str:
+    """Curated setup guidance passes through; everything else is sanitized."""
+    if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+        return str(e)
+    return safe_error(e, ctx)
 
 
 def _is_error(text: str) -> bool:
@@ -16,7 +26,7 @@ async def weekly_financial_digest(
     end_date: str = "",
 ) -> str:
     """
-    Generate a complete weekly financial snapshot for Shibam Coffee.
+    Generate a complete weekly financial snapshot for the business.
 
     Calls all key financial tools and returns one formatted report covering:
     - Revenue vs estimated gross margin
@@ -50,7 +60,7 @@ async def weekly_financial_digest(
     period_label = f"{start} to {end}" if week == "custom" else week
     sections.append(
         f"{'='*60}\n"
-        f"  SHIBAM COFFEE — WEEKLY FINANCIAL DIGEST\n"
+        f"  WEEKLY FINANCIAL DIGEST\n"
         f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {period_label}\n"
         f"{'='*60}"
     )
@@ -66,7 +76,7 @@ async def weekly_financial_digest(
         elif "🔴" in pl:
             issues.append("Gross margin is below target — review COGS and pricing.")
     except Exception as e:
-        sections.append(f"⚠️  P&L data unavailable: {e}")
+        sections.append(f"⚠️  P&L data unavailable: {_msg(e, 'fetching P&L')}")
         issues.append("P&L data unavailable — check QuickBooks connection.")
 
     # ── Labor % ──────────────────────────────────────────────────────────
@@ -79,7 +89,7 @@ async def weekly_financial_digest(
         elif "🔴" in labor or "ALERT" in labor:
             issues.append("Labor % of revenue is above 35% — review staffing schedule.")
     except Exception as e:
-        sections.append(f"⚠️  Labor data unavailable: {e}")
+        sections.append(f"⚠️  Labor data unavailable: {_msg(e, 'fetching labor data')}")
         issues.append("Labor % data unavailable — check QuickBooks/Toast connection.")
 
     # ── Unreconciled ─────────────────────────────────────────────────────
@@ -92,7 +102,7 @@ async def weekly_financial_digest(
         elif "⚠️" in unrec:
             issues.append("Uncategorized QuickBooks transactions found — review before month-end.")
     except Exception as e:
-        sections.append(f"⚠️  QuickBooks check unavailable: {e}")
+        sections.append(f"⚠️  QuickBooks check unavailable: {_msg(e, 'checking QuickBooks')}")
         issues.append("QuickBooks hygiene check unavailable — check QuickBooks connection.")
 
     # ── Vendor Spend ─────────────────────────────────────────────────────
@@ -109,7 +119,7 @@ async def weekly_financial_digest(
             if len(spend_lines) > 10:
                 sections.append(f"  ... run vendor_spend_summary for full detail")
     except Exception as e:
-        sections.append(f"⚠️  Vendor spend data unavailable: {e}")
+        sections.append(f"⚠️  Vendor spend data unavailable: {_msg(e, 'fetching vendor spend')}")
         issues.append("Vendor spend data unavailable — check Gmail/Google connection.")
 
     # ── Low Stock ────────────────────────────────────────────────────────
@@ -122,7 +132,7 @@ async def weekly_financial_digest(
         elif "below par" in low.lower():
             issues.append("Inventory items are below par level — run inventory_reorder_list to generate orders.")
     except Exception as e:
-        sections.append(f"⚠️  Inventory data unavailable: {e}")
+        sections.append(f"⚠️  Inventory data unavailable: {_msg(e, 'fetching inventory')}")
         issues.append("Inventory data unavailable — check Google Sheets connection.")
 
     # ── Action Items ─────────────────────────────────────────────────────
@@ -177,7 +187,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
 
     header = (
         f"{'='*60}\n"
-        f"  SHIBAM COFFEE — MONTHLY CLOSE CHECKLIST\n"
+        f"  MONTHLY CLOSE CHECKLIST\n"
         f"  Month: {month}  ({start_str} to {end_str})\n"
         f"  Generated: {today.strftime('%B %d, %Y')}\n"
         f"{'='*60}\n"
@@ -193,7 +203,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
             f"{parsed_count} invoices parsed for {month}. Run invoice_ledger_sync to add to sheet.",
         )
     except Exception as e:
-        check("All vendor invoices parsed and in ledger sheet", False, str(e))
+        check("All vendor invoices parsed and in ledger sheet", False, _msg(e, "parsing vendor invoices"))
 
     # 2. QB categorized
     try:
@@ -206,7 +216,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
             count_str = f"{m.group(1)} transactions need review" if m else "some transactions flagged"
         check("All QuickBooks transactions categorized", is_clean, count_str)
     except Exception as e:
-        check("All QuickBooks transactions categorized", False, str(e))
+        check("All QuickBooks transactions categorized", False, _msg(e, "checking QuickBooks transactions"))
 
     # 3. Payroll reconciled
     try:
@@ -214,7 +224,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
         has_data = "$" in labor
         check("Payroll reconciled against QuickBooks", has_data, "Labor % calculated." if has_data else "No payroll data found.")
     except Exception as e:
-        check("Payroll reconciled against QuickBooks", False, str(e))
+        check("Payroll reconciled against QuickBooks", False, _msg(e, "reconciling payroll"))
 
     # 4. Inventory counted
     try:
@@ -222,7 +232,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
         has_items = "items" in inv.lower() and "(no data)" not in inv
         check("Inventory count completed and sheet updated", has_items, "Verify Last Updated dates are current for all items." if has_items else "No inventory data found.")
     except Exception as e:
-        check("Inventory count completed and sheet updated", False, str(e))
+        check("Inventory count completed and sheet updated", False, _msg(e, "fetching inventory"))
 
     # 5. P&L reviewed
     try:
@@ -231,7 +241,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
         margin_line = next((l for l in pl.split("\n") if "Gross Margin" in l), "")
         check("P&L reviewed — gross and net margin noted", has_pl, margin_line.strip() if margin_line else "")
     except Exception as e:
-        check("P&L reviewed — gross and net margin noted", False, str(e))
+        check("P&L reviewed — gross and net margin noted", False, _msg(e, "fetching P&L"))
 
     # 6. Invoice reconciliation
     try:
@@ -244,7 +254,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
             unmatched_note = f"{m.group(1)} unbooked invoices found" if m else "unbooked invoices detected"
         check("Invoice reconciliation check run — no missing entries", is_clean, unmatched_note)
     except Exception as e:
-        check("Invoice reconciliation check run — no missing entries", False, str(e))
+        check("Invoice reconciliation check run — no missing entries", False, _msg(e, "running invoice reconciliation"))
 
     # 7. Labor %
     try:
@@ -253,7 +263,7 @@ async def monthly_financial_close_checklist(month: str = "") -> str:
         labor_line = next((l for l in labor.split("\n") if "Labor %" in l), "")
         check("Labor % reviewed vs 35% benchmark", within_target, labor_line.strip() if labor_line else "")
     except Exception as e:
-        check("Labor % reviewed vs 35% benchmark", False, str(e))
+        check("Labor % reviewed vs 35% benchmark", False, _msg(e, "calculating labor percentage"))
 
     passed = sum(1 for c in checklist if c.startswith("✅"))
     total = len(checklist)
