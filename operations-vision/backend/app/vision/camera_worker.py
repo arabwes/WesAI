@@ -76,7 +76,7 @@ class CameraWorker(threading.Thread):
         self.settings = settings
         self.out = out_queue
         self.health = CameraHealth()
-        self._stop = threading.Event()
+        self._stop_evt = threading.Event()
         self._lock = threading.Lock()
         self._last_frame: Optional[np.ndarray] = None
         self._spatial_lock = threading.Lock()
@@ -88,7 +88,7 @@ class CameraWorker(threading.Thread):
     # ------------------------------------------------------------------ API
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_evt.set()
 
     def last_frame(self) -> Optional[np.ndarray]:
         with self._lock:
@@ -152,14 +152,14 @@ class CameraWorker(threading.Thread):
         backoff = self.cam.processing.reconnect_delay_seconds
         max_backoff = self.cam.processing.max_reconnect_delay_seconds
 
-        while not self._stop.is_set():
+        while not self._stop_evt.is_set():
             try:
                 source = build_source(self.cam)
             except Exception as exc:  # noqa: BLE001
                 self._set_state("offline", error=str(exc))
                 log.error("camera %s: source config error: %s", self.cam.camera_id, exc)
                 # configuration errors won't fix themselves quickly; slow retry
-                if self._stop.wait(max_backoff):
+                if self._stop_evt.wait(max_backoff):
                     break
                 continue
 
@@ -167,7 +167,7 @@ class CameraWorker(threading.Thread):
                 self.health.reconnect_attempts += 1
                 self._set_state("reconnecting", error=f"cannot open {source.describe}")
                 source.close()
-                if self._stop.wait(backoff):
+                if self._stop_evt.wait(backoff):
                     break
                 backoff = min(backoff * 2, max_backoff)
                 continue
@@ -180,7 +180,7 @@ class CameraWorker(threading.Thread):
             next_process = 0.0
 
             try:
-                while not self._stop.is_set():
+                while not self._stop_evt.is_set():
                     ok, frame = source.read()
                     if not ok or frame is None:
                         self.health.decode_errors += 1
@@ -223,8 +223,8 @@ class CameraWorker(threading.Thread):
                     self._emit_track_ended(tr, utcnow())
                 source.close()
 
-            if not self._stop.is_set():
-                if self._stop.wait(backoff):
+            if not self._stop_evt.is_set():
+                if self._stop_evt.wait(backoff):
                     break
                 backoff = min(backoff * 2, max_backoff)
 

@@ -6,6 +6,7 @@ config/topology.yaml
 
 # data & models
 data/
+sample_data/*.mp4
 *.db
 *.db-shm
 *.db-wal
