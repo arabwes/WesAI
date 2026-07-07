@@ -33,11 +33,6 @@ def to_start_end(
         )
 
 
-def to_gaql_date(d: date) -> str:
-    """Format date for Google Ads Query Language (YYYY-MM-DD)."""
-    return d.strftime("%Y-%m-%d")
-
-
 def to_meta_time_range(
     date_range: str, start_date: str = "", end_date: str = ""
 ) -> dict:

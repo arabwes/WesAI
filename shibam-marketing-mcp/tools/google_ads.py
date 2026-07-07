@@ -1,8 +1,12 @@
 """Google Ads MCP tools — 5 tools covering campaign performance, spend, KPIs, assets, and impression share."""
 import logging
 from typing import Optional
+from mcp_common.errors import safe_error
+from mcp_common.validators import gaql_date
+from mcp_common.tenant import maybe_tenant
 from clients.google_ads_client import run_query
-from utils.date_helpers import to_start_end, to_gaql_date
+from config import NotConfiguredError
+from utils.date_helpers import to_start_end
 from utils.kpi_status import (
     google_ctr_status, google_cpc_status,
     google_conv_rate_status, google_cost_per_conv_status,
@@ -12,6 +16,11 @@ from utils.formatting import fmt_currency, fmt_pct, fmt_number, fmt_table
 from utils.retry import api_retry
 
 logger = logging.getLogger(__name__)
+
+
+def _setting(key, default):
+    t = maybe_tenant()
+    return t.setting(key, default) if t else default
 
 
 @api_retry()
@@ -45,7 +54,7 @@ async def google_ads_campaign_performance(
                 metrics.cost_micros,
                 metrics.conversions_from_interactions_rate
             FROM campaign
-            WHERE segments.date BETWEEN '{to_gaql_date(start)}' AND '{to_gaql_date(end)}'
+            WHERE segments.date BETWEEN '{gaql_date(start)}' AND '{gaql_date(end)}'
               AND campaign.status = 'ENABLED'
             ORDER BY metrics.cost_micros DESC
         """
@@ -76,8 +85,9 @@ async def google_ads_campaign_performance(
         return header + fmt_table(table_rows, cols)
 
     except Exception as e:
-        logger.error("google_ads_campaign_performance failed: %s", e)
-        return f"Error fetching Google Ads campaign performance: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Google Ads campaign performance")
 
 
 @api_retry()
@@ -105,7 +115,7 @@ async def google_ads_spend_summary(
                 metrics.impressions,
                 metrics.clicks
             FROM campaign
-            WHERE segments.date BETWEEN '{to_gaql_date(start)}' AND '{to_gaql_date(end)}'
+            WHERE segments.date BETWEEN '{gaql_date(start)}' AND '{gaql_date(end)}'
               AND campaign.status = 'ENABLED'
         """
         rows = run_query(query)
@@ -146,13 +156,14 @@ async def google_ads_spend_summary(
         lines += [
             f"",
             f"Projected remaining spend this month ({days_remaining} days left): {fmt_currency(projected_remaining_spend)}",
-            f"Monthly budget target: $800–$1,200",
+            f"Monthly budget target: {_setting('kpi_budget_range', '$800–$1,200')}",
         ]
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("google_ads_spend_summary failed: %s", e)
-        return f"Error fetching Google Ads spend summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Google Ads spend summary")
 
 
 @api_retry()
@@ -162,7 +173,7 @@ async def google_ads_kpi_check(
     end_date: str = "",
 ) -> str:
     """
-    Check Google Ads KPIs against Shibam's targets and return 🟢🟡🔴 status per metric.
+    Check Google Ads KPIs against configured targets and return 🟢🟡🔴 status per metric.
 
     Targets:
       CTR:               🟢 ≥5%   / 🟡 3–5%   / 🔴 <3%
@@ -190,7 +201,7 @@ async def google_ads_kpi_check(
                 metrics.conversions_from_interactions_rate,
                 metrics.cost_per_conversion
             FROM customer
-            WHERE segments.date BETWEEN '{to_gaql_date(start)}' AND '{to_gaql_date(end)}'
+            WHERE segments.date BETWEEN '{gaql_date(start)}' AND '{gaql_date(end)}'
         """
         rows = run_query(query)
         if not rows:
@@ -229,8 +240,9 @@ async def google_ads_kpi_check(
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("google_ads_kpi_check failed: %s", e)
-        return f"Error checking Google Ads KPIs: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "checking Google Ads KPIs")
 
 
 @api_retry()
@@ -293,8 +305,9 @@ async def google_ads_asset_review() -> str:
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("google_ads_asset_review failed: %s", e)
-        return f"Error reviewing Google Ads assets: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "reviewing Google Ads assets")
 
 
 @api_retry()
@@ -323,7 +336,7 @@ async def google_ads_impression_share(
                 metrics.search_budget_lost_impression_share,
                 metrics.search_rank_lost_impression_share
             FROM campaign
-            WHERE segments.date BETWEEN '{to_gaql_date(start)}' AND '{to_gaql_date(end)}'
+            WHERE segments.date BETWEEN '{gaql_date(start)}' AND '{gaql_date(end)}'
               AND campaign.status = 'ENABLED'
               AND campaign.advertising_channel_type = 'SEARCH'
         """
@@ -352,5 +365,6 @@ async def google_ads_impression_share(
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("google_ads_impression_share failed: %s", e)
-        return f"Error fetching Google Ads impression share: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Google Ads impression share")

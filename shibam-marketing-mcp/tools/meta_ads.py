@@ -1,9 +1,11 @@
 """Meta Ads MCP tools — 4 tools covering campaign performance, KPIs, objective breakdown, and creative performance."""
 import logging
 from typing import Optional
+from mcp_common.errors import safe_error
 from facebook_business.adobjects.campaign import Campaign
 from facebook_business.adobjects.ad import Ad
 from clients.meta_client import get_account
+from config import NotConfiguredError
 from utils.date_helpers import to_meta_time_range
 from utils.kpi_status import meta_cpm_status, meta_link_ctr_status, meta_frequency_status, alert
 from utils.formatting import fmt_currency, fmt_pct, fmt_number, fmt_table
@@ -42,8 +44,6 @@ async def meta_ads_campaign_performance(
 
     Returns campaign name, objective, reach, impressions, CPM, link clicks,
     link CTR, frequency, spend, and cost per result.
-
-    Always queries account act_817875271884127 explicitly.
 
     Args:
         date_range: last_7_days | last_30_days | this_month | last_month | custom
@@ -88,8 +88,9 @@ async def meta_ads_campaign_performance(
         return f"Meta Ads Campaign Performance — {date_range}\n\n" + fmt_table(rows, cols)
 
     except Exception as e:
-        logger.error("meta_ads_campaign_performance failed: %s", e)
-        return f"Error fetching Meta Ads campaign performance: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Meta Ads campaign performance")
 
 
 @api_retry()
@@ -99,7 +100,7 @@ async def meta_ads_kpi_check(
     end_date: str = "",
 ) -> str:
     """
-    Check Meta Ads account-level KPIs against Shibam's targets and return 🟢🟡🔴 status.
+    Check Meta Ads account-level KPIs against configured targets and return 🟢🟡🔴 status.
 
     Targets:
       CPM:       🟢 ≤$10   / 🟡 $10–$15 / 🔴 >$15
@@ -153,8 +154,9 @@ async def meta_ads_kpi_check(
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("meta_ads_kpi_check failed: %s", e)
-        return f"Error checking Meta Ads KPIs: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "checking Meta Ads KPIs")
 
 
 @api_retry()
@@ -166,7 +168,7 @@ async def meta_ads_objective_breakdown(
     """
     Break down Meta Ads spend and performance by campaign objective.
 
-    Highlights the Traffic objective, which historically outperforms for Shibam.
+    Highlights the Traffic objective, historically the strongest objective for this account.
 
     Args:
         date_range: last_7_days | last_30_days | this_month | last_month | custom
@@ -205,7 +207,7 @@ async def meta_ads_objective_breakdown(
         for obj, data in sorted(by_objective.items(), key=lambda x: -x[1]["spend"]):
             ctr = (data["clicks"] / data["impressions"] * 100) if data["impressions"] else 0
             pct_spend = (data["spend"] / total_spend * 100) if total_spend else 0
-            note = "  ← historically best for Shibam" if obj == "OUTCOME_TRAFFIC" else ""
+            note = "  ← historically strongest for this account" if obj == "OUTCOME_TRAFFIC" else ""
             rows.append({
                 "Objective": obj + note,
                 "Campaigns": str(data["campaigns"]),
@@ -220,8 +222,9 @@ async def meta_ads_objective_breakdown(
         return f"Meta Ads Objective Breakdown — {date_range}\n\n" + fmt_table(rows, cols)
 
     except Exception as e:
-        logger.error("meta_ads_objective_breakdown failed: %s", e)
-        return f"Error fetching Meta Ads objective breakdown: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Meta Ads objective breakdown")
 
 
 @api_retry()
@@ -285,5 +288,6 @@ async def meta_ads_creative_performance(
         return f"Meta Ads Creative Performance — {date_range}\n\n" + fmt_table(rows, cols)
 
     except Exception as e:
-        logger.error("meta_ads_creative_performance failed: %s", e)
-        return f"Error fetching Meta Ads creative performance: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Meta Ads creative performance")

@@ -1,8 +1,9 @@
 """Google Business Profile + Places API MCP tools — 3 tools covering reviews, profile completeness, and competitor listings."""
 import logging
 from datetime import date, timedelta
+from mcp_common.errors import safe_error
 from clients.gbp_client import get_reviews_service, get_info_service, places_find, places_details
-from config import config
+from config import config, NotConfiguredError
 from utils.formatting import fmt_table
 from utils.retry import api_retry
 
@@ -21,7 +22,7 @@ _REQUIRED_FIELDS = ["hours", "photos", "description", "website", "menu"]
 @api_retry()
 async def gbp_review_summary() -> str:
     """
-    Fetch Shibam Coffee's current Google review summary.
+    Fetch the business's current Google review summary.
 
     Returns star rating, total review count, reviews from the last 30 days,
     and average rating trend.
@@ -74,14 +75,15 @@ async def gbp_review_summary() -> str:
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("gbp_review_summary failed: %s", e)
-        return f"Error fetching Google Business Profile reviews: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Google Business Profile reviews")
 
 
 @api_retry()
 async def gbp_profile_completeness() -> str:
     """
-    Check that Shibam Coffee's Google Business Profile is fully filled out.
+    Check that the business's Google Business Profile is fully filled out.
 
     Checks: business hours, photos, description, website link, and menu link.
     Flags any missing or incomplete fields.
@@ -135,16 +137,15 @@ async def gbp_profile_completeness() -> str:
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("gbp_profile_completeness failed: %s", e)
-        return f"Error checking Google Business Profile completeness: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "checking Google Business Profile completeness")
 
 
 @api_retry()
 async def gbp_competitor_listings() -> str:
     """
-    Fetch Google Places data for Shibam Coffee's four key competitors.
-
-    Competitors: 967 Coffee Co, MOTW Coffee and Pastries, Qamaria Yemeni Coffee, Haraz Coffee.
+    Fetch Google Places data for the configured competitor listings.
 
     Returns star rating, review count, price level, and hours for each.
     No parameters needed — competitor list is configured in the server.
@@ -198,5 +199,6 @@ async def gbp_competitor_listings() -> str:
         )
 
     except Exception as e:
-        logger.error("gbp_competitor_listings failed: %s", e)
-        return f"Error fetching competitor listings: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching competitor listings")

@@ -1,33 +1,52 @@
 """Instagram Insights MCP tools — 3 tools covering account summary, post performance, and engagement rate."""
 import logging
+from mcp_common.errors import safe_error
+from mcp_common.tenant import maybe_tenant
 from clients.instagram_client import get, account_id
+from config import NotConfiguredError
 from utils.kpi_status import instagram_engagement_status
 from utils.formatting import fmt_number, fmt_pct, fmt_table
 from utils.retry import api_retry
 
 logger = logging.getLogger(__name__)
 
+# Defaults; overridable per tenant via settings.
 _BASELINE_FOLLOWERS = 4735
 _GROWTH_TARGET_PCT = 5.0  # ≥5% month-over-month
+
+
+def _setting(key, default):
+    t = maybe_tenant()
+    return t.setting(key, default) if t else default
+
+
+def _baseline_followers() -> int:
+    return int(_setting("instagram_follower_baseline", _BASELINE_FOLLOWERS))
+
+
+def _growth_target_pct() -> float:
+    return float(_setting("instagram_growth_target_pct", _GROWTH_TARGET_PCT))
 
 
 @api_retry()
 async def instagram_account_summary() -> str:
     """
-    Fetch @shibamatlanta Instagram account summary.
+    Fetch the connected Instagram business account's summary.
 
-    Returns follower count, following count, media count, and profile views.
-    Baseline: 4,735 followers. Target: ≥5% month-over-month growth.
+    Returns follower count, following count, media count, and profile views,
+    plus growth versus the configured follower baseline and growth target.
     """
     try:
+        baseline = _baseline_followers()
+        growth_target = _growth_target_pct()
         ig_id = account_id()
         data = get(ig_id, params={
             "fields": "followers_count,follows_count,media_count,name,username,biography"
         })
 
         followers = data.get("followers_count", 0)
-        growth_vs_baseline = followers - _BASELINE_FOLLOWERS
-        growth_pct = (growth_vs_baseline / _BASELINE_FOLLOWERS * 100) if _BASELINE_FOLLOWERS else 0
+        growth_vs_baseline = followers - baseline
+        growth_pct = (growth_vs_baseline / baseline * 100) if baseline else 0
 
         # Fetch profile views from insights (requires business account)
         profile_views = "—"
@@ -46,29 +65,29 @@ async def instagram_account_summary() -> str:
             pass  # profile_views requires additional permissions; not critical
 
         lines = [
-            f"Instagram Account Summary — @{data.get('username', 'shibamatlanta')}",
+            f"Instagram Account Summary — @{data.get('username', '')}",
             f"",
             f"Followers:      {fmt_number(followers)}",
             f"Following:      {fmt_number(data.get('follows_count', 0))}",
             f"Total Posts:    {fmt_number(data.get('media_count', 0))}",
             f"Profile Views:  {fmt_number(profile_views) if isinstance(profile_views, int) else profile_views}",
             f"",
-            f"Growth vs baseline ({fmt_number(_BASELINE_FOLLOWERS)} followers):",
+            f"Growth vs baseline ({fmt_number(baseline)} followers):",
             f"  Change:  {'+' if growth_vs_baseline >= 0 else ''}{fmt_number(growth_vs_baseline)} followers ({fmt_pct(growth_pct, 1)})",
         ]
 
         if growth_vs_baseline >= 0:
-            growth_from_target = growth_pct - _GROWTH_TARGET_PCT
-            if growth_pct >= _GROWTH_TARGET_PCT:
-                lines.append(f"  Status:  🟢  Above {_GROWTH_TARGET_PCT}% MoM growth target")
+            if growth_pct >= growth_target:
+                lines.append(f"  Status:  🟢  Above {growth_target}% MoM growth target")
             else:
-                lines.append(f"  Status:  🔴  Below {_GROWTH_TARGET_PCT}% MoM growth target (need +{fmt_number(round(_BASELINE_FOLLOWERS * _GROWTH_TARGET_PCT / 100 - growth_vs_baseline))} more followers)")
+                lines.append(f"  Status:  🔴  Below {growth_target}% MoM growth target (need +{fmt_number(round(baseline * growth_target / 100 - growth_vs_baseline))} more followers)")
 
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("instagram_account_summary failed: %s", e)
-        return f"Error fetching Instagram account summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Instagram account summary")
 
 
 @api_retry()
@@ -98,7 +117,7 @@ async def instagram_post_performance(limit: int = 20) -> str:
 
         # Get account followers for engagement rate calculation
         account_data = get(ig_id, params={"fields": "followers_count"})
-        followers = account_data.get("followers_count", _BASELINE_FOLLOWERS)
+        followers = account_data.get("followers_count", _baseline_followers())
 
         rows = []
         for item in media_items:
@@ -145,8 +164,9 @@ async def instagram_post_performance(limit: int = 20) -> str:
         )
 
     except Exception as e:
-        logger.error("instagram_post_performance failed: %s", e)
-        return f"Error fetching Instagram post performance: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Instagram post performance")
 
 
 @api_retry()
@@ -168,7 +188,7 @@ async def instagram_engagement_rate() -> str:
         media_items = media_data.get("data", [])
 
         account_data = get(ig_id, params={"fields": "followers_count"})
-        followers = account_data.get("followers_count", _BASELINE_FOLLOWERS)
+        followers = account_data.get("followers_count", _baseline_followers())
 
         if not media_items:
             return "No Instagram posts found to calculate engagement rate."
@@ -203,5 +223,6 @@ async def instagram_engagement_rate() -> str:
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("instagram_engagement_rate failed: %s", e)
-        return f"Error calculating Instagram engagement rate: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "calculating Instagram engagement rate")

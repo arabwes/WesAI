@@ -5,8 +5,9 @@ Complements toast_hourly_heatmap (symbol-based) without replacing it.
 import logging
 from collections import defaultdict
 from datetime import datetime
+from mcp_common.errors import safe_error
 from clients import toast_client
-from config import config
+from config import config, NotConfiguredError
 from utils.date_helpers import to_start_end, to_toast_datetime
 from utils.formatting import fmt_currency
 from utils.retry import api_retry
@@ -126,8 +127,9 @@ async def toast_sales_by_daypart(start_date: str, end_date: str) -> dict:
             "by_day_of_week": by_day_of_week,
         }
     except Exception as e:
-        logger.error("toast_sales_by_daypart failed: %s", e)
-        return {"error": f"Error fetching Toast sales by daypart: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "fetching Toast sales by daypart")}
 
 
 @api_retry()
@@ -180,5 +182,6 @@ async def toast_hourly_revenue(start_date: str, end_date: str) -> dict:
         top_5 = sorted(flat, key=lambda x: -x["avg_revenue"])[:5]
         return {"period": f"{start_date} to {end_date}", "by_day": by_day, "top_5_hours": top_5}
     except Exception as e:
-        logger.error("toast_hourly_revenue failed: %s", e)
-        return {"error": f"Error fetching Toast hourly revenue: {e}"}
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return {"error": str(e)}
+        return {"error": safe_error(e, "fetching Toast hourly revenue")}

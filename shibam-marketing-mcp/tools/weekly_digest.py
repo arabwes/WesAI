@@ -1,11 +1,19 @@
 """Composite weekly marketing digest tool — aggregates all key KPIs into one report."""
 import logging
+from mcp_common.errors import safe_error
+from config import NotConfiguredError
 from tools.google_ads import google_ads_kpi_check
 from tools.meta_ads import meta_ads_kpi_check
 from tools.toast_pos import toast_sales_summary, toast_weekend_evening_share
 from tools.instagram import instagram_engagement_rate
 
 logger = logging.getLogger(__name__)
+
+
+def _section_error(e: Exception, context: str) -> str:
+    if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+        return str(e)
+    return safe_error(e, context)
 
 
 def _is_error(text: str) -> bool:
@@ -19,7 +27,7 @@ async def weekly_marketing_digest(
     end_date: str = "",
 ) -> str:
     """
-    Generate a complete weekly marketing digest for Shibam Coffee.
+    Generate a complete weekly marketing digest for the business.
 
     Calls all KPI checks and sales tools and returns a single formatted report
     with all metrics, 🟢🟡🔴 ratings, and plain-English action items.
@@ -42,10 +50,15 @@ async def weekly_marketing_digest(
     except ValueError as e:
         return f"Error: {e}"
 
+    from mcp_common.tenant import maybe_tenant
+    _t = maybe_tenant()
+    business = _t.setting("business_name") if _t else None
+    header = f"{business.upper()} — WEEKLY MARKETING DIGEST" if business else "WEEKLY MARKETING DIGEST"
+
     period_label = f"{start} to {end}" if week == "custom" else week
     sections.append(
         f"{'='*60}\n"
-        f"  SHIBAM COFFEE — WEEKLY MARKETING DIGEST\n"
+        f"  {header}\n"
         f"  Generated: {today.strftime('%B %d, %Y')}  |  Period: {period_label}\n"
         f"{'='*60}"
     )
@@ -63,7 +76,7 @@ async def weekly_marketing_digest(
             if "ALERT" in google_result:
                 issues.append("Google Ads: immediate alert triggered — check CPC and CTR urgently.")
     except Exception as e:
-        sections.append(f"⚠️  Google Ads data unavailable: {e}")
+        sections.append(f"⚠️  Google Ads data unavailable: {_section_error(e, 'fetching Google Ads KPIs for the digest')}")
         issues.append("Google Ads data could not be retrieved.")
 
     # ── Meta Ads ─────────────────────────────────────────────────────────
@@ -79,7 +92,7 @@ async def weekly_marketing_digest(
             if "ALERT" in meta_result:
                 issues.append("Meta Ads: immediate alert triggered — check frequency and CPM urgently.")
     except Exception as e:
-        sections.append(f"⚠️  Meta Ads data unavailable: {e}")
+        sections.append(f"⚠️  Meta Ads data unavailable: {_section_error(e, 'fetching Meta Ads KPIs for the digest')}")
         issues.append("Meta Ads data could not be retrieved.")
 
     # ── Toast Sales ──────────────────────────────────────────────────────
@@ -88,7 +101,7 @@ async def weekly_marketing_digest(
         toast_result = await toast_sales_summary(str(start), str(end))
         sections.append(toast_result)
     except Exception as e:
-        sections.append(f"⚠️  Toast sales data unavailable: {e}")
+        sections.append(f"⚠️  Toast sales data unavailable: {_section_error(e, 'fetching Toast sales for the digest')}")
 
     # ── Weekend Evening Share ─────────────────────────────────────────────
     sections.append("\n🌙  WEEKEND EVENING SHARE\n" + "-" * 40)
@@ -96,7 +109,7 @@ async def weekly_marketing_digest(
         weekend_result = await toast_weekend_evening_share(str(start), str(end))
         sections.append(weekend_result)
     except Exception as e:
-        sections.append(f"⚠️  Weekend evening data unavailable: {e}")
+        sections.append(f"⚠️  Weekend evening data unavailable: {_section_error(e, 'fetching weekend evening share for the digest')}")
 
     # ── Instagram ─────────────────────────────────────────────────────────
     sections.append("\n📸  INSTAGRAM\n" + "-" * 40)
@@ -108,7 +121,7 @@ async def weekly_marketing_digest(
         elif "🔴" in ig_result:
             issues.append("Instagram engagement rate is below target.")
     except Exception as e:
-        sections.append(f"⚠️  Instagram data unavailable: {e}")
+        sections.append(f"⚠️  Instagram data unavailable: {_section_error(e, 'fetching Instagram engagement for the digest')}")
         issues.append("Instagram data could not be retrieved.")
 
     # ── Action Items ──────────────────────────────────────────────────────

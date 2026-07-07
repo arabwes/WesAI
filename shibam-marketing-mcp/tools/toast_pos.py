@@ -10,8 +10,10 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional
+from mcp_common.errors import safe_error
+from mcp_common.tenant import maybe_tenant
 from clients import toast_client
-from config import config
+from config import config, NotConfiguredError
 from utils.date_helpers import to_start_end, to_toast_datetime
 from utils.formatting import fmt_currency, fmt_pct, fmt_number, fmt_table
 from utils.retry import api_retry
@@ -85,7 +87,18 @@ _PENDING_MSG = (
     "All other tools continue to work normally while this is pending."
 )
 
-_TOP_PERFORMERS = {"pistachio latte", "shibam latte", "adeni tea", "milk cake"}
+# Default known-top-seller list; overridable per tenant via the
+# "top_performer_items" setting (list of item names, case-insensitive).
+_TOP_PERFORMERS = ["pistachio latte", "shibam latte", "adeni tea", "milk cake"]
+
+
+def _setting(key, default):
+    t = maybe_tenant()
+    return t.setting(key, default) if t else default
+
+
+def _top_performers() -> set:
+    return {str(i).lower() for i in _setting("top_performer_items", _TOP_PERFORMERS)}
 
 
 def _check_pending() -> Optional[str]:
@@ -248,8 +261,9 @@ async def toast_sales_summary(start_date: str, end_date: str) -> str:
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("toast_sales_summary failed: %s", e)
-        return f"Error fetching Toast sales summary: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast sales summary")
 
 
 @api_retry()
@@ -261,8 +275,8 @@ async def toast_top_items(
     """
     Fetch the top 10 Toast menu items ranked by revenue and by quantity sold.
 
-    Flags if any of Shibam's known top performers (Pistachio Latte, Shibam Latte,
-    Adeni Tea, Milk Cake) have dropped out of the top 10.
+    Flags if any of the business's known top sellers (configurable per tenant)
+    have dropped out of the top 10.
 
     Args:
         date_range: last_7_days | last_30_days | this_month | last_month | custom
@@ -292,10 +306,11 @@ async def toast_top_items(
         top_by_rev = sorted(item_revenue.items(), key=lambda x: -x[1])[:10]
         top_by_qty = sorted(item_qty.items(), key=lambda x: -x[1])[:10]
 
+        top_performers = _top_performers()
         top_rev_names = {n.lower() for n, _ in top_by_rev}
         top_qty_names = {n.lower() for n, _ in top_by_qty}
-        missing_from_rev = [p for p in _TOP_PERFORMERS if p not in top_rev_names]
-        missing_from_qty = [p for p in _TOP_PERFORMERS if p not in top_qty_names]
+        missing_from_rev = [p for p in top_performers if p not in top_rev_names]
+        missing_from_qty = [p for p in top_performers if p not in top_qty_names]
 
         rev_rows = [{"Rank": str(i + 1), "Item": n, "Revenue": fmt_currency(v)} for i, (n, v) in enumerate(top_by_rev)]
         qty_rows = [{"Rank": str(i + 1), "Item": n, "Qty Sold": fmt_number(q)} for i, (n, q) in enumerate(top_by_qty)]
@@ -317,8 +332,9 @@ async def toast_top_items(
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("toast_top_items failed: %s", e)
-        return f"Error fetching Toast top items: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast top items")
 
 
 @api_retry()
@@ -329,7 +345,7 @@ async def toast_weekend_evening_share(
     """
     Fetch Friday and Saturday 6PM–midnight revenue as a percentage of total weekly revenue.
 
-    Weekend evenings are peak trading for Shibam Coffee — this is a core KPI.
+    Weekend evenings are typically peak trading for this business — this is a core KPI.
 
     Args:
         start_date: YYYY-MM-DD (defaults to start of current week if not provided)
@@ -368,13 +384,14 @@ async def toast_weekend_evening_share(
             f"Fri/Sat 6PM–Midnight Revenue:    {fmt_currency(weekend_evening)}",
             f"Weekend Evening Share:           {fmt_pct(share_pct)}",
             f"",
-            f"Note: Weekend evenings (Fri/Sat 6PM–midnight) are Shibam's peak trading window.",
+            f"Note: Weekend evenings (Fri/Sat 6PM–midnight) are the tracked peak trading window.",
         ]
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("toast_weekend_evening_share failed: %s", e)
-        return f"Error fetching Toast weekend evening share: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast weekend evening share")
 
 
 @api_retry()
@@ -464,8 +481,9 @@ async def toast_hourly_heatmap(
         return "\n".join(lines)
 
     except Exception as e:
-        logger.error("toast_hourly_heatmap failed: %s", e)
-        return f"Error building Toast hourly heatmap: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "building Toast hourly heatmap")
 
 
 @api_retry()
@@ -475,7 +493,7 @@ async def toast_category_breakdown(
     end_date: str = "",
 ) -> str:
     """
-    Fetch Toast revenue split by menu category (Espresso Bar, Yemeni Bar, Pastries, etc.).
+    Fetch Toast revenue split by menu category (e.g. espresso bar, pastries).
 
     Args:
         date_range: last_7_days | last_30_days | this_month | last_month | custom
@@ -525,5 +543,6 @@ async def toast_category_breakdown(
         )
 
     except Exception as e:
-        logger.error("toast_category_breakdown failed: %s", e)
-        return f"Error fetching Toast category breakdown: {e}"
+        if getattr(e, "_user_facing", False) or isinstance(e, NotConfiguredError):
+            return str(e)
+        return safe_error(e, "fetching Toast category breakdown")
