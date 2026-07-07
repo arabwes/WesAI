@@ -132,7 +132,7 @@ Apply for API access at **developers.toasttab.com**. Set `TOAST_API_PENDING=true
 
 2. **Create Railway project**
    - railway.app → New Project → Deploy from GitHub → select `wesai`
-   - In Railway settings → Root Directory: `cafe-mcp/shibam-marketing-mcp`
+   - In Railway settings → Root Directory: `cafe-mcp` (shared with the financial service — mcp-common must be in the build context)
 
 3. **Add environment variables**
    - Railway dashboard → your service → Variables tab

@@ -1,13 +1,14 @@
-# Railway service settings for this server:
-#   Root Directory: cafe-mcp/shibam-financial-mcp
-# (No separate Config Path needed — Railway auto-discovers this file
-#  at the Root Directory root.)
+# NOT auto-discovered by Railway (Root Directory for this service is the
+# shared cafe-mcp/ parent, and Railway only auto-finds railway.toml at the
+# Root Directory root). Kept here for reference / local tooling; the
+# actual build & start commands are set directly in the Railway service's
+# Settings -> Deploy tab (see docs/runbook.md), using these exact values:
 [build]
 builder = "nixpacks"
-buildCommand = "pip install -r requirements.txt -e ../mcp-common"
+buildCommand = "pip install -r shibam-financial-mcp/requirements.txt -e ./mcp-common"
 
 [deploy]
-startCommand = "python main.py"
+startCommand = "python shibam-financial-mcp/main.py"
 healthcheckPath = "/"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"

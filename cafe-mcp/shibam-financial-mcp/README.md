@@ -325,7 +325,7 @@ This deploys as a **second** Railway project, separate from `shibam-marketing-mc
 
 1. **Create second Railway project**
    - railway.app → New Project → Deploy from GitHub → select `wesai`
-   - In Railway settings → Root Directory: `cafe-mcp/shibam-financial-mcp`
+   - In Railway settings → Root Directory: `cafe-mcp` (shared with the marketing service — mcp-common must be in the build context)
 
 2. **Set environment variables**
    - Railway dashboard → your service → Variables → add all variables from `.env.example`

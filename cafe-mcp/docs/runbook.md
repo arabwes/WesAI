@@ -30,12 +30,30 @@ Claude/ChatGPT connector
 
 ## Deploys
 
-Railway root directory must be the **repo root** (both services need
-`mcp-common/`). Per-service config:
+Railway's build context is limited to files under a service's **Root
+Directory** — it cannot reach outside it (`../mcp-common` does not work,
+even though it works in a local shell). Since both servers depend on the
+shared `mcp-common/` package, each service's Root Directory must be
+**`cafe-mcp`** (the parent of both servers), not the server's own folder.
 
-- Build: `pip install -r <server>/requirements.txt -e ./mcp-common`
-- Start: `python <server>/main.py` (or `cd <server> && python main.py`)
-- Health check path: `/` (returns only `{"status":"ok"}`)
+Railway only auto-discovers `railway.toml` when it sits *at* the Root
+Directory root — with Root Directory set to `cafe-mcp`, it won't find
+`cafe-mcp/shibam-financial-mcp/railway.toml`, so the earlier config-as-code
+approach silently falls back to Railpack auto-detection and fails
+("could not determine how to build"). **Set build/start commands directly
+in Settings → Deploy for each service instead of relying on config-as-code
+discovery:**
+
+| Service | Root Directory | Build Command | Start Command |
+|---|---|---|---|
+| financial | `cafe-mcp` | `pip install -r shibam-financial-mcp/requirements.txt -e ./mcp-common` | `python shibam-financial-mcp/main.py` |
+| marketing | `cafe-mcp` | `pip install -r shibam-marketing-mcp/requirements.txt -e ./mcp-common` | `python shibam-marketing-mcp/main.py` |
+
+Health check path for both: `/` (returns only `{"status":"ok"}`).
+
+The `railway.toml` file in each server directory is kept for reference and
+local tooling only — it is not auto-applied under this Root Directory
+layout.
 
 ## Backups & restore
 
