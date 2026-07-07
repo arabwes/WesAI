@@ -1,12 +1,13 @@
 # Railway service settings for this server:
-#   Root Directory: cafe-mcp
-#   Config Path:    cafe-mcp/shibam-financial-mcp/railway.toml
+#   Root Directory: cafe-mcp/shibam-financial-mcp
+# (No separate Config Path needed — Railway auto-discovers this file
+#  at the Root Directory root.)
 [build]
 builder = "nixpacks"
-buildCommand = "pip install -r shibam-financial-mcp/requirements.txt -e ./mcp-common"
+buildCommand = "pip install -r requirements.txt -e ../mcp-common"
 
 [deploy]
-startCommand = "python shibam-financial-mcp/main.py"
+startCommand = "python main.py"
 healthcheckPath = "/"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
