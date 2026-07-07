@@ -163,22 +163,12 @@ mcp.tool()(sheets_write_labor_report)
 
 @mcp.custom_route("/", methods=["GET"])
 async def health_check(request):
-    """Health check endpoint used by Railway.app."""
+    """Health check endpoint used by Railway.app. Deliberately minimal —
+    config state must not be disclosed to anonymous callers."""
     from starlette.responses import JSONResponse
-    vendor_count = len(config.vendor_domains)
-    return JSONResponse({
-        "status": "ok",
-        "server": config.server_name,
-        "tools": 48,
-        "toast_pending": config.toast_api_pending,
-        "vendor_domains_configured": vendor_count,
-    })
+    return JSONResponse({"status": "ok"})
 
 
 if __name__ == "__main__":
-    logger.info("Starting %s on port %d", config.server_name, config.port)
-    logger.info("Toast API pending: %s", config.toast_api_pending)
-    logger.info("Vendor domains configured: %d", len(config.vendor_domains))
-    for name, domain in config.vendor_domains.items():
-        logger.info("  Vendor: %s → %s", name, domain)
-    mcp.run(transport="http", host="0.0.0.0", port=config.port)
+    from mcp_common.serverapp import run_server
+    run_server(mcp, server_name="financial", port=config.port)

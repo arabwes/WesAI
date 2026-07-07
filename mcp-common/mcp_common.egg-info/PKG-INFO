@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: mcp-common
+Version: 0.1.0
+Summary: Shared multi-tenant infrastructure for WesAI MCP servers: auth, tenant context, credential store, audit, rate limiting.
+Requires-Python: >=3.11
+Requires-Dist: cryptography>=42.0.0
+Requires-Dist: asyncpg>=0.29.0
+Requires-Dist: starlette>=0.37.0

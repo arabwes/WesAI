@@ -1,10 +1,26 @@
-"""Loads all environment variables at startup. Missing credentials are logged as warnings;
-the server starts and tools for unconfigured services return setup instructions."""
+"""Configuration resolution.
+
+Single-tenant mode: values come from environment variables (loaded once).
+Multi-tenant mode: when a request carries an authenticated tenant context
+(see mcp_common.middleware), values come from that tenant's stored settings
+and encrypted credentials instead. Precedence: tenant > env.
+
+The module-level `config` object is a proxy — every attribute access resolves
+against the current request's tenant, so tools and clients keep using
+`config.x` unchanged.
+"""
 import logging
 import os
+import sys
+import pathlib
 from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
+
+# Monorepo path fallback so `import mcp_common` works without pip install
+_COMMON = pathlib.Path(__file__).resolve().parent.parent / "mcp-common"
+if str(_COMMON) not in sys.path and _COMMON.exists():
+    sys.path.insert(0, str(_COMMON))
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -173,4 +189,68 @@ def load_config() -> Config:
     return cfg
 
 
-config = load_config()
+_env_config = load_config()
+
+
+def _config_from_tenant(tenant) -> Config:
+    """Build a Config from a tenant's stored settings + decrypted credentials.
+
+    Credential bundle services: 'quickbooks', 'toast', 'google', 'wheniwork',
+    'anthropic', 'openai'. Everything else lives in tenant settings.
+    """
+    s = tenant.settings
+    qb = tenant.credential("quickbooks") or {}
+    toast = tenant.credential("toast") or {}
+    google = tenant.credential("google") or {}
+    wiw = tenant.credential("wheniwork") or {}
+    anthropic = tenant.credential("anthropic") or {}
+    openai_c = tenant.credential("openai") or {}
+
+    return Config(
+        port=_env_config.port,
+        server_name=_env_config.server_name,
+        qb_client_id=qb.get("client_id", ""),
+        qb_client_secret=qb.get("client_secret", ""),
+        qb_refresh_token=qb.get("refresh_token", ""),
+        qb_realm_id=qb.get("realm_id", ""),
+        qb_environment=qb.get("environment", "production"),
+        toast_api_pending=bool(s.get("toast_api_pending", not bool(toast))),
+        toast_client_id=toast.get("client_id", ""),
+        toast_client_secret=toast.get("client_secret", ""),
+        toast_restaurant_guid=toast.get("restaurant_guid", ""),
+        toast_environment=toast.get("environment", "production"),
+        google_client_id=google.get("client_id", ""),
+        google_client_secret=google.get("client_secret", ""),
+        google_refresh_token=google.get("refresh_token", ""),
+        sheets_inventory_id=s.get("sheets_inventory_id", ""),
+        sheets_ledger_id=s.get("sheets_ledger_id", ""),
+        financial_dashboard_sheet_id=s.get("financial_dashboard_sheet_id", ""),
+        anthropic_api_key=anthropic.get("api_key", ""),
+        openai_api_key=openai_c.get("api_key", ""),
+        wheniwork_api_key=wiw.get("api_key", ""),
+        wheniwork_account_id=wiw.get("account_id", ""),
+        vendor_domains=s.get("vendor_domains", {}),
+    )
+
+
+def current_config() -> Config:
+    """Tenant-scoped config if a request tenant is set; env config otherwise."""
+    try:
+        from mcp_common.tenant import maybe_tenant
+        tenant = maybe_tenant()
+    except ImportError:
+        tenant = None
+    if tenant is None:
+        return _env_config
+    return _config_from_tenant(tenant)
+
+
+class _ConfigProxy:
+    """Resolves every attribute against the current request's tenant, so all
+    existing `config.x` call sites become tenant-aware without modification."""
+
+    def __getattr__(self, name):
+        return getattr(current_config(), name)
+
+
+config = _ConfigProxy()

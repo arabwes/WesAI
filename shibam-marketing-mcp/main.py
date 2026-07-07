@@ -94,19 +94,12 @@ mcp.tool()(weekly_marketing_digest)
 
 @mcp.custom_route("/", methods=["GET"])
 async def health_check(request):
-    """Health check endpoint used by Railway.app."""
+    """Health check endpoint used by Railway.app. Deliberately minimal —
+    config state must not be disclosed to anonymous callers."""
     from starlette.responses import JSONResponse
-    return JSONResponse({
-        "status": "ok",
-        "server": config.server_name,
-        "tools": 23,
-        "toast_pending": config.toast_api_pending,
-    })
+    return JSONResponse({"status": "ok"})
 
 
 if __name__ == "__main__":
-    logger.info("Starting %s on port %d", config.server_name, config.port)
-    logger.info("Toast API pending: %s", config.toast_api_pending)
-    if config.toast_api_pending:
-        logger.info("Toast tools will return a setup message until TOAST_API_PENDING=false")
-    mcp.run(transport="http", host="0.0.0.0", port=config.port)
+    from mcp_common.serverapp import run_server
+    run_server(mcp, server_name="marketing", port=config.port)
