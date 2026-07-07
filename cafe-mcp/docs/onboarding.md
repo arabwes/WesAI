@@ -2,6 +2,9 @@
 
 How to add a new customer to the WesAI MCP servers (multi-tenant mode).
 
+All commands below assume your working directory is `cafe-mcp/` (where
+`scripts/`, `mcp-common/`, and both server directories live as siblings).
+
 ## Prerequisites (one-time platform setup)
 
 1. Railway Postgres addon provisioned; `DATABASE_URL` set on both server services.

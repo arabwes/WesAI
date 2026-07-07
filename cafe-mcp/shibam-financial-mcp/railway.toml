@@ -1,5 +1,6 @@
-# Deploy with Railway "Root Directory" set to the REPO ROOT (both services
-# need ../mcp-common). Set "Config Path" for this service to this file.
+# Railway service settings for this server:
+#   Root Directory: cafe-mcp
+#   Config Path:    cafe-mcp/shibam-financial-mcp/railway.toml
 [build]
 builder = "nixpacks"
 buildCommand = "pip install -r shibam-financial-mcp/requirements.txt -e ./mcp-common"

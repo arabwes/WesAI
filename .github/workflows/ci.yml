@@ -18,12 +18,12 @@ jobs:
           python-version: "3.11"
       - name: Install
         run: |
-          pip install -r ${{ matrix.server }}/requirements.txt -e ./mcp-common
+          pip install -r cafe-mcp/${{ matrix.server }}/requirements.txt -e ./cafe-mcp/mcp-common
           pip install pytest pytest-asyncio
       - name: Shared package tests
-        run: python -m pytest mcp-common/tests -q
+        run: python -m pytest cafe-mcp/mcp-common/tests -q
       - name: Server tests
-        working-directory: ${{ matrix.server }}
+        working-directory: cafe-mcp/${{ matrix.server }}
         run: python -m pytest tests -q
 
   security:
@@ -36,8 +36,8 @@ jobs:
       - name: Dependency audit
         run: |
           pip install pip-audit
-          pip-audit -r shibam-financial-mcp/requirements.txt || true
-          pip-audit -r shibam-marketing-mcp/requirements.txt || true
+          pip-audit -r cafe-mcp/shibam-financial-mcp/requirements.txt || true
+          pip-audit -r cafe-mcp/shibam-marketing-mcp/requirements.txt || true
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v2
         env:
