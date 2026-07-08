@@ -54,7 +54,27 @@ def build_app(mcp, server_name: str, mcp_path: str = "/mcp"):
 
 
 def run_server(mcp, server_name: str, port: int, host: str = "0.0.0.0"):
+    import asyncio
     import uvicorn
+
+    from mcp_common.db import db_configured
+
+    if db_configured():
+        from mcp_common.db import close_pool
+        from mcp_common.migrate import migrate_on_startup
+
+        async def _migrate_then_close():
+            await migrate_on_startup()
+            # The pool just created is bound to THIS throwaway event loop;
+            # uvicorn will run its own loop next, so close it here and let
+            # get_pool() lazily create a fresh one bound to that loop.
+            await close_pool()
+
+        logger.info("DATABASE_URL is set — running schema migrations before startup...")
+        asyncio.run(_migrate_then_close())
+    else:
+        logger.info("DATABASE_URL not set — running in single-tenant env-fallback mode, no migration needed.")
+
     app = build_app(mcp, server_name)
     logger.info("Starting %s MCP server on %s:%d (auth enforced)", server_name, host, port)
     uvicorn.run(app, host=host, port=port, timeout_keep_alive=30)

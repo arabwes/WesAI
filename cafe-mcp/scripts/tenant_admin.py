@@ -2,6 +2,12 @@
 
 Requires DATABASE_URL and TENANT_MASTER_KEY in the environment.
 
+Note: the server also auto-migrates on every startup (see
+mcp_common.migrate.migrate_on_startup, wired into main.py) — you do NOT
+need to run `migrate` manually before deploying. It's kept here for
+manual/CI use (e.g. running a migration ahead of a deploy, or in a
+`railway run` shell) if you'd rather not wait for a redeploy.
+
 Usage:
     python scripts/tenant_admin.py migrate
     python scripts/tenant_admin.py create-tenant <slug> --name "Shibam Coffee"
@@ -22,26 +28,8 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "mcp-com
 
 from mcp_common.crypto import CredentialCipher, generate_master_key
 from mcp_common.db import get_pool, close_pool
+from mcp_common.migrate import migrate
 from mcp_common import store
-
-MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / "mcp-common" / "migrations"
-
-
-async def migrate():
-    pool = await get_pool()
-    try:
-        applied = {
-            r["version"] for r in await pool.fetch("SELECT version FROM schema_migrations")
-        }
-    except Exception:
-        applied = set()
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        version = int(path.name.split("_")[0])
-        if version in applied:
-            continue
-        print(f"Applying {path.name}...")
-        await pool.execute(path.read_text())
-    print("Migrations up to date.")
 
 
 async def main():

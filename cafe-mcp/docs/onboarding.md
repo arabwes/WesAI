@@ -12,10 +12,13 @@ All commands below assume your working directory is `cafe-mcp/` (where
    ```bash
    python scripts/tenant_admin.py gen-master-key --key-id v1
    ```
-3. Schema applied:
-   ```bash
-   railway run python scripts/tenant_admin.py migrate
-   ```
+3. Redeploy. **The schema applies itself automatically** — the server runs
+   any pending migrations on every startup when `DATABASE_URL` is set
+   (`mcp_common.migrate.migrate_on_startup`, wired into `main.py`), so no
+   manual `railway run ... migrate` step is needed. Check the deploy logs
+   for `Auto-migration applied version(s): [...]` or `Schema is up to
+   date` to confirm. (`scripts/tenant_admin.py migrate` still exists for
+   manual/CI use if you ever want to apply a migration ahead of a deploy.)
 
 ## Per-tenant steps
 
