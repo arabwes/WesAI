@@ -1,10 +1,10 @@
-# NOT auto-discovered by Railway (Root Directory for this service is the
-# shared cafe-mcp/ parent, and Railway only auto-finds railway.toml at the
-# Root Directory root). Kept here for reference / local tooling; the
-# actual build & start commands are set directly in the Railway service's
-# Settings -> Deploy tab (see docs/runbook.md), using these exact values:
+# Railway service settings:
+#   Root Directory: cafe-mcp
+# Railway auto-discovers this file even though it's nested one level below
+# Root Directory (confirmed: it resolves paths here as "/shibam-marketing-mcp/railway.toml").
+# No [build].builder set — Railway picks its current default builder
+# (Railpack) rather than pinning the deprecated Nixpacks value.
 [build]
-builder = "nixpacks"
 buildCommand = "pip install -r shibam-marketing-mcp/requirements.txt -e ./mcp-common"
 
 [deploy]
