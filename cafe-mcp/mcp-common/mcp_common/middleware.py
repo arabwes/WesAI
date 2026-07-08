@@ -33,7 +33,9 @@ from mcp_common.tenant import tenant_scope
 logger = logging.getLogger("mcp.middleware")
 
 MAX_BODY_BYTES = 1_000_000
-HEALTH_PATHS = {"/", "/health"}
+# Public product/compliance pages + healthcheck: reachable anonymously by
+# design (Google/Meta reviewers must be able to load them).
+HEALTH_PATHS = {"/", "/health", "/privacy", "/terms", "/data-deletion"}
 OAUTH_EXEMPT_PATHS = {
     "/authorize", "/token", "/register", "/revoke",
     "/oauth/login", "/oauth/login/submit",
@@ -47,11 +49,18 @@ def _is_oauth_exempt(path: str) -> bool:
 
 
 class TenancyMiddleware:
-    def __init__(self, app: ASGIApp, rate_per_min: float = 60.0, burst: int = 20, oauth_provider=None):
+    def __init__(self, app: ASGIApp, rate_per_min: float = 60.0, burst: int = 20,
+                 oauth_provider=None, onboarding_enabled: bool | None = None):
         self.app = app
         self.oauth_provider = oauth_provider
+        self.onboarding_enabled = (
+            db_configured() if onboarding_enabled is None else onboarding_enabled
+        )
         self.authenticator = default_authenticator(oauth_provider)
         self.bucket = TokenBucket(rate_per_min, burst)
+        # Separate, stricter bucket for the keyless public onboarding pages,
+        # keyed by client IP.
+        self.onboard_bucket = TokenBucket(rate_per_min=30, burst=10)
         env_configured = EnvKeyAuthenticator().configured
         if not env_configured and not db_configured():
             if os.getenv("MCP_ALLOW_ANONYMOUS", "").lower() == "true":
@@ -71,6 +80,16 @@ class TenancyMiddleware:
             await self.app(scope, receive, send)
             return
         if self.oauth_provider is not None and _is_oauth_exempt(path):
+            await self.app(scope, receive, send)
+            return
+        if self.onboarding_enabled and path.startswith("/onboard"):
+            # Keyless public surface: link tokens are the credential; add an
+            # IP-keyed rate limit in front.
+            client = scope.get("client")
+            ip = client[0] if client else "unknown"
+            if not self.onboard_bucket.allow(f"ob:{ip}"):
+                await JSONResponse({"error": "rate limit exceeded"}, status_code=429)(scope, receive, send)
+                return
             await self.app(scope, receive, send)
             return
 

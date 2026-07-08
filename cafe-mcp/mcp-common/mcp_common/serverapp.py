@@ -29,6 +29,16 @@ def build_app(mcp, server_name: str, mcp_path: str = "/mcp"):
     audit.configure(server_name)
     mcp.add_middleware(AuditMiddleware())
 
+    from mcp_common.db import db_configured as _db_configured
+    from mcp_common.publicsite import register_public_pages
+    register_public_pages(mcp)
+
+    onboarding_enabled = _db_configured()
+    if onboarding_enabled:
+        from mcp_common.onboarding.routes import register_onboarding_routes
+        register_onboarding_routes(mcp)
+        logger.info("Onboarding portal enabled at /onboard")
+
     oauth_provider = None
     public_url = os.getenv("OAUTH_PUBLIC_URL", "").strip()
     if public_url:
@@ -50,7 +60,8 @@ def build_app(mcp, server_name: str, mcp_path: str = "/mcp"):
         for route in oauth_provider.get_routes(mcp_path=mcp_path):
             app.router.routes.append(route)
 
-    return TenancyMiddleware(app, oauth_provider=oauth_provider)
+    return TenancyMiddleware(app, oauth_provider=oauth_provider,
+                             onboarding_enabled=onboarding_enabled)
 
 
 def run_server(mcp, server_name: str, port: int, host: str = "0.0.0.0"):

@@ -229,13 +229,8 @@ mcp.tool()(toast_hourly_revenue)
 mcp.tool()(weekly_marketing_digest)
 
 
-@mcp.custom_route("/", methods=["GET"])
-async def health_check(request):
-    """Health check endpoint used by Railway.app. Deliberately minimal —
-    config state must not be disclosed to anonymous callers."""
-    from starlette.responses import JSONResponse
-    return JSONResponse({"status": "ok"})
-
+# Public pages ("/" homepage, /health, /privacy, /terms, /data-deletion)
+# are registered by mcp_common.serverapp.build_app -> publicsite.py.
 
 if __name__ == "__main__":
     from mcp_common.serverapp import run_server

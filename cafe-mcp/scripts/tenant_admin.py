@@ -11,6 +11,7 @@ manual/CI use (e.g. running a migration ahead of a deploy, or in a
 Usage:
     python scripts/tenant_admin.py migrate
     python scripts/tenant_admin.py create-tenant <slug> --name "Shibam Coffee"
+    python scripts/tenant_admin.py onboard-link <slug> [--ttl-days 7]
     python scripts/tenant_admin.py mint-key <slug> --scopes read,mutate --label "owner laptop"
     python scripts/tenant_admin.py revoke-key <raw-key>
     python scripts/tenant_admin.py set-credential <slug> <service> --json '{"client_id": "..."}'
@@ -39,6 +40,8 @@ async def main():
     sub.add_parser("migrate")
 
     c = sub.add_parser("create-tenant"); c.add_argument("slug"); c.add_argument("--name", required=True)
+    ol = sub.add_parser("onboard-link"); ol.add_argument("slug")
+    ol.add_argument("--ttl-days", type=int, default=7)
     k = sub.add_parser("mint-key"); k.add_argument("slug")
     k.add_argument("--scopes", default="read"); k.add_argument("--label", default="")
     r = sub.add_parser("revoke-key"); r.add_argument("raw_key")
@@ -61,6 +64,13 @@ async def main():
         elif args.cmd == "create-tenant":
             tid = await store.create_tenant(args.slug, args.name)
             print(f"Created tenant {args.slug} ({tid})")
+        elif args.cmd == "onboard-link":
+            import os
+            from mcp_common.onboarding.links import mint_link
+            raw = await mint_link(args.slug, args.ttl_days)
+            base = os.getenv("OAUTH_PUBLIC_URL", "https://<your-domain>").rstrip("/")
+            print(f"One-time onboarding link for '{args.slug}' (valid {args.ttl_days} days, shown ONCE):")
+            print(f"{base}/onboard?t={raw}")
         elif args.cmd == "mint-key":
             raw = await store.create_api_key(args.slug, args.scopes.split(","), args.label)
             print("API key (shown ONCE, store it now):")

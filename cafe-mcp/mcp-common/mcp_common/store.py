@@ -202,3 +202,29 @@ async def reencrypt_all(cipher: CredentialCipher) -> int:
         n += 1
     invalidate_tenant_cache()
     return n
+
+
+async def credential_services(tenant_slug: str) -> set[str]:
+    """Which services have stored credentials (no decryption) — used by the
+    onboarding portal to show connected/not-connected status."""
+    pool = await get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT c.service FROM tenant_credentials c
+        JOIN tenants t ON t.id = c.tenant_id WHERE t.slug = $1
+        """,
+        tenant_slug,
+    )
+    return {r["service"] for r in rows}
+
+
+async def get_settings(tenant_slug: str) -> dict:
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        """
+        SELECT ts.settings FROM tenant_settings ts
+        JOIN tenants t ON t.id = ts.tenant_id WHERE t.slug = $1
+        """,
+        tenant_slug,
+    )
+    return json.loads(row["settings"]) if row else {}
