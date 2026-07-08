@@ -94,9 +94,16 @@ The raw key is printed ONCE. Deliver it over a secure channel.
 
 ### 5. Connect their AI client
 
-Claude.ai / ChatGPT custom connector:
+**If their client supports a custom header** (e.g. ChatGPT custom connectors):
 - URL: `https://<server>.up.railway.app/mcp`
 - Auth header: `Authorization: Bearer wes_...`
+
+**If their client is OAuth-only** (e.g. Claude.ai's connector picker on
+personal plans — no custom header field): make sure `OAUTH_PUBLIC_URL` is
+set on the deployment (see `docs/oauth.md`), then they add the connector
+with just the URL above (no header). Claude redirects them to a login page
+on your server where they paste the same `wes_...` key once to authorize —
+after that it's a normal OAuth session, auto-refreshed.
 
 ### 6. Smoke test
 
