@@ -1,14 +1,18 @@
 # Railway service settings:
 #   Root Directory: cafe-mcp
-# Railway auto-discovers this file even though it's nested one level below
-# Root Directory (confirmed: it resolves paths here as "/shibam-financial-mcp/railway.toml").
-# No [build].builder set — Railway picks its current default builder
-# (Railpack) rather than pinning the deprecated Nixpacks value.
+#   (Dockerfile Path is set inside this file below — no separate UI field
+#    needed, but if your Railway plan requires it, set it explicitly to
+#    shibam-financial-mcp/Dockerfile)
+#
+# Uses an explicit Dockerfile instead of Railpack/Nixpacks auto-detection:
+# Root Directory must be the shared cafe-mcp/ parent (so mcp-common is in
+# the build context), but neither service's requirements.txt sits at that
+# root, so auto-detection built images with no Python/pip installed at all.
 [build]
-buildCommand = "pip install -r shibam-financial-mcp/requirements.txt -e ./mcp-common"
+builder = "DOCKERFILE"
+dockerfilePath = "shibam-financial-mcp/Dockerfile"
 
 [deploy]
-startCommand = "python shibam-financial-mcp/main.py"
 healthcheckPath = "/"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
