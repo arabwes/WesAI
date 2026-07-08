@@ -20,7 +20,11 @@ logger = logging.getLogger("mcp.serverapp")
 def build_app(mcp, server_name: str):
     audit.configure(server_name)
     mcp.add_middleware(AuditMiddleware())
-    app = mcp.http_app()
+    # FastMCP's DNS-rebinding Host-header check is redundant behind our own
+    # bearer-auth middleware and rejects Railway's proxy/healthcheck Host
+    # header with 421 Misdirected Request. TenancyMiddleware is the actual
+    # access control here, so disable FastMCP's own layer.
+    app = mcp.http_app(host_origin_protection=False)
     return TenancyMiddleware(app)
 
 
