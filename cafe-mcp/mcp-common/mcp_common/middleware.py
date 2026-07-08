@@ -1,10 +1,16 @@
 """ASGI middleware: rate-limit -> authenticate -> set tenant contextvar.
 
-Pipeline per request (except the health path):
+Pipeline per request (except the health and OAuth-flow paths):
   1. Reject bodies over MAX_BODY_BYTES.
   2. Rate-limit by API-key hash.
-  3. Authenticate via ChainAuthenticator (env keys, then tenant DB).
+  3. Authenticate via ChainAuthenticator (env keys, tenant DB keys, then
+     OAuth-issued tokens if an OAuth provider is configured).
   4. Set the tenant contextvar for downstream tools; reset afterwards.
+
+OAUTH_EXEMPT_PATHS are the OAuth 2.1 wire-protocol endpoints (metadata,
+authorize, token, register, revoke) plus our own /oauth/login pages — these
+must be reachable WITHOUT an existing bearer token, since going through them
+is how a client obtains one in the first place.
 
 If NO auth provider is configured (no MCP_API_KEYS and no DATABASE_URL) the
 middleware refuses to start rather than silently running an open server. Set
@@ -28,12 +34,23 @@ logger = logging.getLogger("mcp.middleware")
 
 MAX_BODY_BYTES = 1_000_000
 HEALTH_PATHS = {"/", "/health"}
+OAUTH_EXEMPT_PATHS = {
+    "/authorize", "/token", "/register", "/revoke",
+    "/oauth/login", "/oauth/login/submit",
+}
+
+
+def _is_oauth_exempt(path: str) -> bool:
+    # Well-known routes are mounted MCP-path-scoped (e.g.
+    # /.well-known/oauth-protected-resource/mcp), so match by prefix.
+    return path in OAUTH_EXEMPT_PATHS or path.startswith("/.well-known/")
 
 
 class TenancyMiddleware:
-    def __init__(self, app: ASGIApp, rate_per_min: float = 60.0, burst: int = 20):
+    def __init__(self, app: ASGIApp, rate_per_min: float = 60.0, burst: int = 20, oauth_provider=None):
         self.app = app
-        self.authenticator = default_authenticator()
+        self.oauth_provider = oauth_provider
+        self.authenticator = default_authenticator(oauth_provider)
         self.bucket = TokenBucket(rate_per_min, burst)
         env_configured = EnvKeyAuthenticator().configured
         if not env_configured and not db_configured():
@@ -49,7 +66,11 @@ class TenancyMiddleware:
             self.open_mode = False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        if scope["type"] != "http" or scope["path"] in HEALTH_PATHS:
+        path = scope.get("path", "")
+        if scope["type"] != "http" or path in HEALTH_PATHS:
+            await self.app(scope, receive, send)
+            return
+        if self.oauth_provider is not None and _is_oauth_exempt(path):
             await self.app(scope, receive, send)
             return
 

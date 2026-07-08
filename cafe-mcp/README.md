@@ -38,9 +38,16 @@ One MCP server exposing 65 tools for running a small business, spanning:
 
 ## Connect an AI client
 
-Claude.ai / ChatGPT custom connector:
+**Custom-header connectors** (URL + `Authorization` header):
 - URL: `https://<deployment>/mcp`
 - Header: `Authorization: Bearer wes_...`
+
+**OAuth-only connectors** (e.g. Claude.ai's connector picker, which doesn't
+support pasting a custom header): set `OAUTH_PUBLIC_URL` to this server's
+own public HTTPS URL to enable a built-in OAuth 2.1 bridge. Add the
+connector with just the URL — the client discovers OAuth support, self
+registers, and redirects you to a login page here where you paste your
+existing `wes_...` API key once to authorize it. See `docs/oauth.md`.
 
 ## Develop & test
 

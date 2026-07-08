@@ -72,6 +72,33 @@ class DbKeyAuthenticator:
             return None
 
 
+class OAuthTokenAuthenticator:
+    """Validates access tokens issued by the OAuth bridge (mcp_common.oauth)
+    for OAuth-only client UIs, and maps them back to a TenantContext."""
+
+    def __init__(self, provider):
+        self._provider = provider  # TenantOAuthProvider, or None if OAuth is disabled
+
+    async def authenticate(self, bearer: str) -> TenantContext | None:
+        if self._provider is None:
+            return None
+        access = await self._provider.load_access_token(bearer)
+        if access is None:
+            return None
+        if access.subject == "__env__":
+            return AUTHENTICATED_NO_TENANT
+        from mcp_common.db import db_configured
+        if not db_configured():
+            return None
+        from mcp_common.crypto import CredentialCipher
+        from mcp_common.store import load_tenant_by_slug
+        try:
+            return await load_tenant_by_slug(access.subject, frozenset(access.scopes), CredentialCipher())
+        except Exception as e:
+            logger.error("OAuth token tenant resolution failed: %r", e)
+            return None
+
+
 class ChainAuthenticator:
     def __init__(self, *providers):
         self.providers = providers
@@ -84,5 +111,8 @@ class ChainAuthenticator:
         return None
 
 
-def default_authenticator() -> ChainAuthenticator:
-    return ChainAuthenticator(EnvKeyAuthenticator(), DbKeyAuthenticator())
+def default_authenticator(oauth_provider=None) -> ChainAuthenticator:
+    providers = [EnvKeyAuthenticator(), DbKeyAuthenticator()]
+    if oauth_provider is not None:
+        providers.append(OAuthTokenAuthenticator(oauth_provider))
+    return ChainAuthenticator(*providers)

@@ -27,6 +27,22 @@ def mint_key() -> str:
     return KEY_PREFIX + secrets.token_urlsafe(32)
 
 
+async def _load_settings_and_credentials(conn, tenant_id, cipher: CredentialCipher) -> tuple[dict, dict]:
+    settings_row = await conn.fetchrow(
+        "SELECT settings FROM tenant_settings WHERE tenant_id = $1", tenant_id
+    )
+    cred_rows = await conn.fetch(
+        "SELECT service, key_id, ciphertext FROM tenant_credentials WHERE tenant_id = $1",
+        tenant_id,
+    )
+    credentials = {
+        r["service"]: json.loads(cipher.decrypt(r["key_id"], bytes(r["ciphertext"])))
+        for r in cred_rows
+    }
+    settings = json.loads(settings_row["settings"]) if settings_row else {}
+    return settings, credentials
+
+
 async def resolve_api_key(raw_key: str, cipher: CredentialCipher) -> TenantContext | None:
     """Look up an API key by hash; return the fully-loaded tenant context or None.
 
@@ -51,29 +67,49 @@ async def resolve_api_key(raw_key: str, cipher: CredentialCipher) -> TenantConte
         )
         if row is None or row["status"] != "active":
             return None
-
-        settings_row = await conn.fetchrow(
-            "SELECT settings FROM tenant_settings WHERE tenant_id = $1", row["tenant_id"]
-        )
-        cred_rows = await conn.fetch(
-            "SELECT service, key_id, ciphertext FROM tenant_credentials WHERE tenant_id = $1",
-            row["tenant_id"],
-        )
+        settings, credentials = await _load_settings_and_credentials(conn, row["tenant_id"], cipher)
         await conn.execute(
             "UPDATE api_keys SET last_used_at = now() WHERE id = $1", row["key_id"]
         )
 
-    credentials = {
-        r["service"]: json.loads(cipher.decrypt(r["key_id"], bytes(r["ciphertext"])))
-        for r in cred_rows
-    }
     ctx = TenantContext(
         tenant_id=str(row["tenant_id"]),
         slug=row["slug"],
         scopes=frozenset(row["scopes"]),
-        settings=json.loads(settings_row["settings"]) if settings_row else {},
+        settings=settings,
         credentials=credentials,
         api_key_id=str(row["key_id"]),
+    )
+    _tenant_cache[cache_key] = (time.monotonic(), ctx)
+    return ctx
+
+
+async def load_tenant_by_slug(slug: str, scopes: frozenset, cipher: CredentialCipher) -> TenantContext | None:
+    """Load a tenant's settings/credentials by slug (not by API key) — used to
+    resolve OAuth-issued access tokens, whose subject is a tenant slug rather
+    than a key hash. `scopes` come from the OAuth token itself (already
+    filtered against the tenant's key scopes at issuance time)."""
+    cache_key = f"slug:{slug}"
+    hit = _tenant_cache.get(cache_key)
+    if hit and (time.monotonic() - hit[0]) < _TENANT_CACHE_TTL_S:
+        cached = hit[1]
+        return TenantContext(
+            tenant_id=cached.tenant_id, slug=cached.slug, scopes=scopes,
+            settings=cached.settings, credentials=cached.credentials,
+        )
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, status FROM tenants WHERE slug = $1", slug
+        )
+        if row is None or row["status"] != "active":
+            return None
+        settings, credentials = await _load_settings_and_credentials(conn, row["id"], cipher)
+
+    ctx = TenantContext(
+        tenant_id=str(row["id"]), slug=slug, scopes=scopes,
+        settings=settings, credentials=credentials,
     )
     _tenant_cache[cache_key] = (time.monotonic(), ctx)
     return ctx
