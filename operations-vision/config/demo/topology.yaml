@@ -1,0 +1,32 @@
+# DEMO MODE topology (matches scenario.yaml journey gaps).
+
+transitions:
+  - from: entrance_front
+    to: service_area
+    min_seconds: 1
+    expected_seconds: 5
+    max_seconds: 25
+
+  - from: service_area
+    to: seating_main
+    min_seconds: 1
+    expected_seconds: 6
+    max_seconds: 30
+
+  - from: service_area
+    to: entrance_front
+    min_seconds: 1
+    expected_seconds: 6
+    max_seconds: 30
+
+  - from: seating_main
+    to: entrance_front
+    min_seconds: 2
+    expected_seconds: 8
+    max_seconds: 40
+
+  - from: seating_main
+    to: service_area
+    min_seconds: 1
+    expected_seconds: 6
+    max_seconds: 30

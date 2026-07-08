@@ -1,0 +1,34 @@
+# Camera topology: which camera-to-camera transitions are physically
+# possible and how long a walk between them takes.
+# Copy to topology.yaml and adjust for the store floor plan.
+
+transitions:
+  - from: entrance_front
+    to: service_area
+    min_seconds: 1
+    expected_seconds: 7
+    max_seconds: 30
+
+  - from: service_area
+    to: seating_main
+    min_seconds: 2
+    expected_seconds: 8
+    max_seconds: 45
+
+  - from: service_area
+    to: entrance_front       # grab-and-go
+    min_seconds: 1
+    expected_seconds: 8
+    max_seconds: 45
+
+  - from: seating_main
+    to: entrance_front
+    min_seconds: 2
+    expected_seconds: 10
+    max_seconds: 60
+
+  - from: seating_main
+    to: service_area          # refill / second order
+    min_seconds: 2
+    expected_seconds: 8
+    max_seconds: 45

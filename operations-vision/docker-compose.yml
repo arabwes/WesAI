@@ -1,0 +1,32 @@
+# Local store-PC deployment.
+#   docker compose up -d --build
+# Dashboard: http://localhost:8080   API: http://localhost:8000
+#
+# Cameras are on the local network; RTSP URLs come from .env.
+# For demo mode instead of real cameras:
+#   OPSVISION_CONFIG_DIR=/config/demo docker compose up  (see backend env below)
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # point at /config/demo to run the simulator instead of real cameras
+      OPSVISION_CONFIG_DIR: /config
+    volumes:
+      - ./config:/config
+      - opsvision-data:/data
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  opsvision-data:

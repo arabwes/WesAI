@@ -1,0 +1,29 @@
+# secrets & local config
+.env
+config/app.yaml
+config/cameras.yaml
+config/topology.yaml
+
+# data & models
+data/
+sample_data/*.mp4
+*.db
+*.db-shm
+*.db-wal
+*.pt
+*.onnx
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+
+# node
+node_modules/
+frontend/dist/
+
+# misc
+.DS_Store
+Thumbs.db

@@ -1,0 +1,116 @@
+cameras:
+- camera_id: entrance_front
+  name: Front Entrance (mock)
+  enabled: true
+  source:
+    type: mock
+    loop: true
+    device_index: 0
+  processing:
+    stream: sub
+    target_fps: 5.0
+    detection_confidence: 0.3
+    min_bbox_area: 400
+    reconnect_delay_seconds: 5.0
+    max_reconnect_delay_seconds: 60.0
+  role:
+  - entrance
+  - exit
+  lines:
+  - line_id: front_door
+    name: Front Door
+    points:
+    - - 200.0
+      - 150.0
+    - - 760.0
+      - 150.0
+    direction_in: down
+    hysteresis_px: 12.0
+    cooldown_seconds: 2.0
+    min_displacement_px: 20.0
+  zones:
+  - zone_id: vestibule
+    name: Vestibule
+    type: transition
+    points:
+    - - 200.0
+      - 150.0
+    - - 760.0
+      - 150.0
+    - - 760.0
+      - 420.0
+    - - 200.0
+      - 420.0
+  ignore_zones: []
+- camera_id: service_area
+  name: Order & Pickup (mock)
+  enabled: true
+  source:
+    type: mock
+    loop: true
+    device_index: 0
+  processing:
+    stream: sub
+    target_fps: 5.0
+    detection_confidence: 0.3
+    min_bbox_area: 400
+    reconnect_delay_seconds: 5.0
+    max_reconnect_delay_seconds: 60.0
+  role: []
+  lines: []
+  zones:
+  - zone_id: order_queue
+    name: Order Queue
+    type: queue
+    points:
+    - - 150.0
+      - 330.0
+    - - 650.0
+      - 330.0
+    - - 650.0
+      - 500.0
+    - - 150.0
+      - 500.0
+  - zone_id: pickup_counter
+    name: Pickup Counter
+    type: pickup
+    points:
+    - - 350.0
+      - 160.0
+    - - 640.0
+      - 160.0
+    - - 640.0
+      - 310.0
+    - - 350.0
+      - 310.0
+  ignore_zones: []
+- camera_id: seating_main
+  name: Main Seating (mock)
+  enabled: true
+  source:
+    type: mock
+    loop: true
+    device_index: 0
+  processing:
+    stream: sub
+    target_fps: 5.0
+    detection_confidence: 0.3
+    min_bbox_area: 400
+    reconnect_delay_seconds: 5.0
+    max_reconnect_delay_seconds: 60.0
+  role: []
+  lines: []
+  zones:
+  - zone_id: seating
+    name: Seating Area
+    type: seating
+    points:
+    - - 220.0
+      - 140.0
+    - - 900.0
+      - 140.0
+    - - 900.0
+      - 500.0
+    - - 220.0
+      - 500.0
+  ignore_zones: []

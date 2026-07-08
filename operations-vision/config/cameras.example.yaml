@@ -1,0 +1,73 @@
+# Camera definitions. Copy to cameras.yaml and adjust.
+#
+# RTSP URLs are NEVER stored here - put them in .env and reference the
+# environment variable name (url_env). Reolink substream example:
+#   CAMERA_ENTRANCE_RTSP_URL=rtsp://user:pass@192.168.1.50/Preview_01_sub
+
+cameras:
+  - camera_id: entrance_front
+    name: Front Entrance
+    enabled: true
+    source:
+      type: rtsp                       # rtsp | video_file | webcam | mock
+      url_env: CAMERA_ENTRANCE_RTSP_URL
+    processing:
+      stream: sub
+      target_fps: 5
+      detection_confidence: 0.45
+      min_bbox_area: 400
+      reconnect_delay_seconds: 5
+    role: [entrance, exit]
+    lines:
+      - line_id: front_door
+        name: Front Door
+        points: [[120, 330], [920, 330]]
+        direction_in: down             # walking down in the image = entering
+        hysteresis_px: 12
+        cooldown_seconds: 2
+        min_displacement_px: 20
+    zones:
+      - zone_id: vestibule
+        name: Vestibule
+        type: transition
+        points: []
+    ignore_zones:
+      - zone_id: exterior_sidewalk
+        name: Sidewalk (outside)
+        type: ignore
+        points: []
+
+  - camera_id: service_area
+    name: Order & Pickup
+    enabled: true
+    source:
+      type: rtsp
+      url_env: CAMERA_SERVICE_RTSP_URL
+    processing:
+      target_fps: 5
+    role: []
+    lines: []
+    zones:
+      - zone_id: order_queue
+        name: Order Queue
+        type: queue
+        points: []
+      - zone_id: pickup_counter
+        name: Pickup Counter
+        type: pickup
+        points: []
+
+  - camera_id: seating_main
+    name: Main Seating
+    enabled: true
+    source:
+      type: rtsp
+      url_env: CAMERA_SEATING_RTSP_URL
+    processing:
+      target_fps: 3
+    role: []
+    zones:
+      - zone_id: seating
+        name: Seating Area
+        type: seating
+        points: []

@@ -1,0 +1,57 @@
+# DEMO scenario: anonymous simulated customers moving through three
+# mock cameras. Dwell times are compressed (minutes -> ~seconds scale)
+# so the pipeline demonstrates entry -> handoffs -> exit quickly.
+
+seed: 42
+frame_size: [960, 540]
+arrivals_per_minute: 2.0
+duration_jitter: 0.25
+detection_noise_px: 1.5
+
+journeys:
+  # enter -> queue/order -> pickup -> sit -> leave
+  - name: buy_and_sit
+    weight: 0.5
+    steps:
+      - camera: entrance_front
+        path: [[480, 60], [480, 440]]     # crosses front_door downward = IN
+        duration: 6
+      - gap: 5
+      - camera: service_area
+        path: [[880, 430], [400, 430], [250, 430], [420, 240], [560, 240]]
+        duration: 40
+      - gap: 6
+      - camera: seating_main
+        path: [[240, 300], [560, 320], [580, 330]]
+        duration: 80
+      - gap: 8
+      - camera: entrance_front
+        path: [[480, 440], [480, 60]]     # crosses front_door upward = OUT
+        duration: 6
+
+  # enter -> order -> take out
+  - name: grab_and_go
+    weight: 0.35
+    steps:
+      - camera: entrance_front
+        path: [[420, 60], [420, 440]]
+        duration: 5
+      - gap: 5
+      - camera: service_area
+        path: [[880, 430], [350, 430], [450, 240], [600, 240]]
+        duration: 35
+      - gap: 6
+      - camera: entrance_front
+        path: [[540, 440], [540, 60]]
+        duration: 5
+
+  # walks in, looks around, leaves without buying
+  - name: browse_and_leave
+    weight: 0.15
+    steps:
+      - camera: entrance_front
+        path: [[520, 60], [520, 400], [430, 420]]
+        duration: 12
+      - camera: entrance_front
+        path: [[430, 420], [480, 60]]
+        duration: 6
