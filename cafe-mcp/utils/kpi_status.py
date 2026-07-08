@@ -110,3 +110,21 @@ def instagram_engagement_status(rate_pct: float) -> str:
 def alert(condition: bool, message: str) -> Optional[str]:
     """Returns an alert string if condition is True, else None."""
     return f"⚠️  ALERT: {message}" if condition else None
+
+
+# ── Financial KPIs ───────────────────────────────────────────────────────────
+
+def labor_pct_status(pct: float) -> str:
+    """Labor % of revenue — default: 🟢 ≤28% / 🟡 28–35% / 🔴 >35%
+    (settings: kpi_max_labor_pct, kpi_max_labor_pct_yellow)."""
+    green = float(_setting("kpi_max_labor_pct", 28.0))
+    yellow = float(_setting("kpi_max_labor_pct_yellow", 35.0))
+    return status(pct, green, yellow, higher_is_better=False)
+
+
+def gross_margin_status(pct: float) -> str:
+    """Gross margin — default: 🟢 ≥65% / 🟡 55–65% / 🔴 <55%
+    (settings: kpi_min_gross_margin_pct, kpi_min_gross_margin_pct_yellow)."""
+    green = float(_setting("kpi_min_gross_margin_pct", 65.0))
+    yellow = float(_setting("kpi_min_gross_margin_pct_yellow", 55.0))
+    return status(pct, green, yellow, higher_is_better=True)

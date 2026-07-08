@@ -14,11 +14,13 @@ def _tenant(slug, guid):
         settings={
             "sheets_inventory_id": f"sheet-{slug}",
             "vendor_domains": {slug: f"{slug}.example.com"},
+            "meta_ad_account_id": f"act_{slug}",
         },
         credentials={
             "toast": {"client_id": f"cid-{slug}", "client_secret": "s",
                       "restaurant_guid": guid, "environment": "sandbox"},
             "google": {"client_id": "g", "client_secret": "s", "refresh_token": "r"},
+            "meta": {"access_token": "t", "app_id": "a", "app_secret": "s"},
         },
     )
 
@@ -53,3 +55,19 @@ async def test_concurrent_tenants_no_bleed():
         read_guid("a", "guid-a"), read_guid("b", "guid-b"), read_guid("c", "guid-c"),
     )
     assert results == ["cid-a", "cid-b", "cid-c"]
+
+
+def test_no_baked_account_id_defaults():
+    """Account IDs must come only from env or tenant settings, never source-code defaults."""
+    import os
+    if not os.getenv("GOOGLE_ADS_CUSTOMER_ID"):
+        assert _env_config.google_ads_customer_id == ""
+    if not os.getenv("META_AD_ACCOUNT_ID"):
+        assert _env_config.meta_ad_account_id == ""
+
+
+def test_marketing_fields_tenant_scoped():
+    with tenant_scope(_tenant("alpha", "guid-alpha")):
+        assert config.meta_ad_account_id == "act_alpha"
+        assert config.meta_ready is True
+        assert config.google_ads_ready is False  # no google_ads bundle enrolled

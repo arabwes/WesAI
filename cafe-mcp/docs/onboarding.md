@@ -1,14 +1,14 @@
 # Tenant Onboarding Runbook
 
-How to add a new customer to the WesAI MCP servers (multi-tenant mode).
+How to add a new customer to the cafe-mcp server (multi-tenant mode).
 
 All commands below assume your working directory is `cafe-mcp/` (where
-`scripts/`, `mcp-common/`, and both server directories live as siblings).
+`scripts/`, `mcp-common/`, and the unified server live together).
 
 ## Prerequisites (one-time platform setup)
 
-1. Railway Postgres addon provisioned; `DATABASE_URL` set on both server services.
-2. `TENANT_MASTER_KEY` set on both services. Generate with:
+1. Railway Postgres addon provisioned; `DATABASE_URL` set on the cafe-mcp service.
+2. `TENANT_MASTER_KEY` set on the service. Generate with:
    ```bash
    python scripts/tenant_admin.py gen-master-key --key-id v1
    ```
@@ -30,11 +30,11 @@ python scripts/tenant_admin.py create-tenant acme --name "Acme Coffee Co"
 Each service gets one JSON bundle. Only enroll what the customer uses.
 
 ```bash
-# Toast POS (both servers read this)
+# Toast POS
 python scripts/tenant_admin.py set-credential acme toast \
   --json '{"client_id":"...","client_secret":"...","restaurant_guid":"...","environment":"production"}'
 
-# Financial server services
+# Financial services
 python scripts/tenant_admin.py set-credential acme google \
   --json '{"client_id":"...","client_secret":"...","refresh_token":"..."}'
 python scripts/tenant_admin.py set-credential acme quickbooks \
@@ -44,7 +44,7 @@ python scripts/tenant_admin.py set-credential acme wheniwork \
 python scripts/tenant_admin.py set-credential acme openai --json '{"api_key":"..."}'
 python scripts/tenant_admin.py set-credential acme anthropic --json '{"api_key":"..."}'
 
-# Marketing server services
+# Marketing services
 python scripts/tenant_admin.py set-credential acme google_ads \
   --json '{"developer_token":"...","client_id":"...","client_secret":"...","refresh_token":"..."}'
 python scripts/tenant_admin.py set-credential acme meta \
@@ -54,8 +54,8 @@ python scripts/tenant_admin.py set-credential acme gbp --json '{"places_api_key"
 ```
 
 Google/Meta refresh tokens are minted with the existing consent scripts
-(`shibam-financial-mcp/scripts/get_google_token.py`,
-`shibam-marketing-mcp/scripts/get_refresh_token.py`) run against the
+(`scripts/get_google_token.py` for Gmail/Sheets,
+`scripts/get_refresh_token.py` for Google Ads/GBP) run against the
 customer's OAuth client, signing in as the customer's account.
 
 ### 3. Set tenant settings (non-secret identifiers & preferences)

@@ -1,4 +1,4 @@
-# Operations Runbook — WesAI MCP Servers
+# Operations Runbook — Cafe MCP
 
 ## Architecture (multi-tenant)
 
@@ -18,7 +18,7 @@ Claude/ChatGPT connector
 - Server refuses to boot with no auth configured unless
   `MCP_ALLOW_ANONYMOUS=true` (local dev only).
 
-## Environment variables (per Railway service)
+## Environment variables (single Railway service)
 
 | Var | Required | Purpose |
 |---|---|---|
@@ -26,34 +26,20 @@ Claude/ChatGPT connector
 | `TENANT_MASTER_KEY` | multi-tenant mode | Fernet key(s), `id:key` CSV, first = primary |
 | `MCP_API_KEYS` | break-glass | static bearer keys (CSV) |
 | `PORT` | yes (Railway sets) | listen port |
-| legacy service creds | env-fallback only | see each server's `.env.example` |
+| legacy service creds | env-fallback only | see `.env.example` |
 
 ## Deploys
 
-Railway's build context is limited to files under a service's **Root
-Directory** — it cannot reach outside it (`../mcp-common` does not work,
-even though it works in a local shell). Since both servers depend on the
-shared `mcp-common/` package, each service's Root Directory must be
-**`cafe-mcp`** (the parent of both servers), not the server's own folder.
+One Railway service for the unified server:
 
-Railway only auto-discovers `railway.toml` when it sits *at* the Root
-Directory root — with Root Directory set to `cafe-mcp`, it won't find
-`cafe-mcp/shibam-financial-mcp/railway.toml`, so the earlier config-as-code
-approach silently falls back to Railpack auto-detection and fails
-("could not determine how to build"). **Set build/start commands directly
-in Settings → Deploy for each service instead of relying on config-as-code
-discovery:**
-
-| Service | Root Directory | Build Command | Start Command |
-|---|---|---|---|
-| financial | `cafe-mcp` | `pip install -r shibam-financial-mcp/requirements.txt -e ./mcp-common` | `python shibam-financial-mcp/main.py` |
-| marketing | `cafe-mcp` | `pip install -r shibam-marketing-mcp/requirements.txt -e ./mcp-common` | `python shibam-marketing-mcp/main.py` |
-
-Health check path for both: `/` (returns only `{"status":"ok"}`).
-
-The `railway.toml` file in each server directory is kept for reference and
-local tooling only — it is not auto-applied under this Root Directory
-layout.
+- Root Directory: `cafe-mcp`
+- Build: the `Dockerfile` at the cafe-mcp root is the single build file —
+  Railway auto-detects it there (builder = Dockerfile, see `railway.toml`).
+  No language auto-detection (Railpack/Nixpacks) is involved; earlier
+  split-server layouts failed because neither requirements.txt sat at the
+  Root Directory root, producing images without Python/pip.
+- Start: the Dockerfile's `CMD ["python", "main.py"]`.
+- Health check path: `/` (returns only `{"status":"ok"}`).
 
 ## Backups & restore
 

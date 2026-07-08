@@ -1,0 +1,12 @@
+# Railway service settings for the unified cafe-mcp server:
+#   Root Directory: cafe-mcp
+# The Dockerfile at this directory's root is the single build file —
+# no language auto-detection involved.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"

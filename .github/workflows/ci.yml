@@ -8,23 +8,19 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        server: [shibam-financial-mcp, shibam-marketing-mcp]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install
+        working-directory: cafe-mcp
         run: |
-          pip install -r cafe-mcp/${{ matrix.server }}/requirements.txt -e ./cafe-mcp/mcp-common
+          pip install -r requirements.txt -e ./mcp-common
           pip install pytest pytest-asyncio
-      - name: Shared package tests
-        run: python -m pytest cafe-mcp/mcp-common/tests -q
-      - name: Server tests
-        working-directory: cafe-mcp/${{ matrix.server }}
-        run: python -m pytest tests -q
+      - name: Tests (server + shared package)
+        working-directory: cafe-mcp
+        run: python -m pytest tests mcp-common/tests -q
 
   security:
     runs-on: ubuntu-latest
@@ -36,8 +32,7 @@ jobs:
       - name: Dependency audit
         run: |
           pip install pip-audit
-          pip-audit -r cafe-mcp/shibam-financial-mcp/requirements.txt || true
-          pip-audit -r cafe-mcp/shibam-marketing-mcp/requirements.txt || true
+          pip-audit -r cafe-mcp/requirements.txt || true
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v2
         env:

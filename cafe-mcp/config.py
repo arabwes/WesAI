@@ -1,4 +1,4 @@
-"""Configuration resolution.
+"""Configuration resolution for the unified cafe-mcp server.
 
 Single-tenant mode: values come from environment variables (loaded once).
 Multi-tenant mode: when a request carries an authenticated tenant context
@@ -6,8 +6,8 @@ Multi-tenant mode: when a request carries an authenticated tenant context
 and encrypted credentials instead. Precedence: tenant > env.
 
 The module-level `config` object is a proxy — every attribute access resolves
-against the current request's tenant, so tools and clients keep using
-`config.x` unchanged.
+against the current request's tenant, so tools and clients use `config.x`
+without threading tenant state through call sites.
 """
 import logging
 import os
@@ -18,7 +18,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # Monorepo path fallback so `import mcp_common` works without pip install
-_COMMON = pathlib.Path(__file__).resolve().parent.parent / "mcp-common"
+_COMMON = pathlib.Path(__file__).resolve().parent / "mcp-common"
 if str(_COMMON) not in sys.path and _COMMON.exists():
     sys.path.insert(0, str(_COMMON))
 
@@ -45,7 +45,7 @@ class Config:
     qb_realm_id: str
     qb_environment: str
 
-    # Toast (reuse from marketing server)
+    # Toast
     toast_api_pending: bool
     toast_client_id: str
     toast_client_secret: str
@@ -60,10 +60,31 @@ class Config:
     sheets_ledger_id: str
     financial_dashboard_sheet_id: str
 
-    # Claude API
-    anthropic_api_key: str
+    # Google Ads
+    google_ads_developer_token: str
+    google_ads_client_id: str
+    google_ads_client_secret: str
+    google_ads_refresh_token: str
+    google_ads_customer_id: str
+    google_ads_login_customer_id: Optional[str]
 
-    # OpenAI API (used by clients/claude_parser.py for structured invoice extraction)
+    # Meta Ads
+    meta_access_token: str
+    meta_ad_account_id: str
+    meta_app_id: str
+    meta_app_secret: str
+
+    # Google Business Profile
+    gbp_account_id: str
+    gbp_location_id: str
+    google_places_api_key: str
+
+    # Instagram
+    instagram_access_token: str
+    instagram_business_account_id: str
+
+    # LLM APIs (invoice parsing)
+    anthropic_api_key: str
     openai_api_key: str
 
     # WhenIWork
@@ -72,6 +93,8 @@ class Config:
 
     # Vendor domains (dynamic — loaded separately)
     vendor_domains: dict
+
+    # ── Readiness flags ──────────────────────────────────────────────────────
 
     @property
     def qb_ready(self) -> bool:
@@ -111,20 +134,30 @@ class Config:
         )
 
     @property
-    def missing_vars(self) -> list:
-        missing = []
-        if not self.qb_client_id: missing.append("QB_CLIENT_ID")
-        if not self.qb_client_secret: missing.append("QB_CLIENT_SECRET")
-        if not self.qb_refresh_token: missing.append("QB_REFRESH_TOKEN")
-        if not self.qb_realm_id: missing.append("QB_REALM_ID")
-        if not self.google_client_id: missing.append("GOOGLE_CLIENT_ID")
-        if not self.google_client_secret: missing.append("GOOGLE_CLIENT_SECRET")
-        if not self.google_refresh_token: missing.append("GOOGLE_REFRESH_TOKEN")
-        if not self.sheets_inventory_id: missing.append("GOOGLE_SHEETS_INVENTORY_ID")
-        if not self.anthropic_api_key: missing.append("ANTHROPIC_API_KEY")
-        if not self.wheniwork_api_key: missing.append("WHENIWORK_API_KEY")
-        if not self.wheniwork_account_id: missing.append("WHENIWORK_ACCOUNT_ID")
-        return missing
+    def google_ads_ready(self) -> bool:
+        return bool(
+            self.google_ads_developer_token
+            and self.google_ads_client_id
+            and self.google_ads_client_secret
+            and self.google_ads_refresh_token
+        )
+
+    @property
+    def meta_ready(self) -> bool:
+        return bool(self.meta_access_token and self.meta_app_id and self.meta_app_secret)
+
+    @property
+    def gbp_ready(self) -> bool:
+        return bool(
+            self.google_ads_refresh_token
+            and self.gbp_account_id
+            and self.gbp_location_id
+            and self.google_places_api_key
+        )
+
+    @property
+    def instagram_ready(self) -> bool:
+        return bool(self.instagram_access_token and self.instagram_business_account_id)
 
 
 def _get(key: str, default: str = "") -> str:
@@ -142,17 +175,15 @@ def _load_vendor_domains() -> dict:
 
 
 def load_config() -> Config:
-    toast_pending = _get("TOAST_API_PENDING", "true").lower() == "true"
-
     cfg = Config(
-        port=int(_get("PORT", "8001")),
-        server_name=_get("MCP_SERVER_NAME", "shibam-financial-mcp"),
+        port=int(_get("PORT", "8000")),
+        server_name=_get("MCP_SERVER_NAME", "cafe-mcp"),
         qb_client_id=_get("QB_CLIENT_ID"),
         qb_client_secret=_get("QB_CLIENT_SECRET"),
         qb_refresh_token=_get("QB_REFRESH_TOKEN"),
         qb_realm_id=_get("QB_REALM_ID"),
         qb_environment=_get("QB_ENVIRONMENT", "production"),
-        toast_api_pending=toast_pending,
+        toast_api_pending=_get("TOAST_API_PENDING", "true").lower() == "true",
         toast_client_id=_get("TOAST_CLIENT_ID"),
         toast_client_secret=_get("TOAST_CLIENT_SECRET"),
         toast_restaurant_guid=_get("TOAST_RESTAURANT_GUID"),
@@ -163,6 +194,21 @@ def load_config() -> Config:
         sheets_inventory_id=_get("GOOGLE_SHEETS_INVENTORY_ID"),
         sheets_ledger_id=_get("GOOGLE_SHEETS_LEDGER_ID"),
         financial_dashboard_sheet_id=_get("FINANCIAL_DASHBOARD_SHEET_ID"),
+        google_ads_developer_token=_get("GOOGLE_ADS_DEVELOPER_TOKEN"),
+        google_ads_client_id=_get("GOOGLE_ADS_CLIENT_ID"),
+        google_ads_client_secret=_get("GOOGLE_ADS_CLIENT_SECRET"),
+        google_ads_refresh_token=_get("GOOGLE_ADS_REFRESH_TOKEN"),
+        google_ads_customer_id=_get("GOOGLE_ADS_CUSTOMER_ID"),
+        google_ads_login_customer_id=_get("GOOGLE_ADS_LOGIN_CUSTOMER_ID") or None,
+        meta_access_token=_get("META_ACCESS_TOKEN"),
+        meta_ad_account_id=_get("META_AD_ACCOUNT_ID"),
+        meta_app_id=_get("META_APP_ID"),
+        meta_app_secret=_get("META_APP_SECRET"),
+        gbp_account_id=_get("GBP_ACCOUNT_ID"),
+        gbp_location_id=_get("GBP_LOCATION_ID"),
+        google_places_api_key=_get("GOOGLE_PLACES_API_KEY"),
+        instagram_access_token=_get("INSTAGRAM_ACCESS_TOKEN"),
+        instagram_business_account_id=_get("INSTAGRAM_BUSINESS_ACCOUNT_ID"),
         anthropic_api_key=_get("ANTHROPIC_API_KEY"),
         openai_api_key=_get("OPENAI_API_KEY"),
         wheniwork_api_key=_get("WHENIWORK_API_KEY"),
@@ -173,9 +219,13 @@ def load_config() -> Config:
     groups = {
         "QuickBooks":   cfg.qb_ready,
         "Gmail/Sheets": cfg.google_ready,
-        "Claude API":   cfg.anthropic_ready,
         "WhenIWork":    cfg.wheniwork_ready,
         "Toast":        cfg.toast_ready,
+        "Google Ads":   cfg.google_ads_ready,
+        "Meta Ads":     cfg.meta_ready,
+        "GBP":          cfg.gbp_ready,
+        "Instagram":    cfg.instagram_ready,
+        "OpenAI":       cfg.openai_ready,
     }
     for name, ready in groups.items():
         logger.info("  %-15s %s", name, "READY" if ready else "not configured")
@@ -185,7 +235,6 @@ def load_config() -> Config:
             "Unconfigured service groups: %s — tools will return setup instructions when called.",
             not_ready,
         )
-
     return cfg
 
 
@@ -195,13 +244,18 @@ _env_config = load_config()
 def _config_from_tenant(tenant) -> Config:
     """Build a Config from a tenant's stored settings + decrypted credentials.
 
-    Credential bundle services: 'quickbooks', 'toast', 'google', 'wheniwork',
-    'anthropic', 'openai'. Everything else lives in tenant settings.
+    Credential bundle services: 'quickbooks', 'toast', 'google', 'google_ads',
+    'meta', 'instagram', 'gbp', 'wheniwork', 'anthropic', 'openai'.
+    Non-secret identifiers live in tenant settings.
     """
     s = tenant.settings
     qb = tenant.credential("quickbooks") or {}
     toast = tenant.credential("toast") or {}
     google = tenant.credential("google") or {}
+    gads = tenant.credential("google_ads") or {}
+    meta = tenant.credential("meta") or {}
+    ig = tenant.credential("instagram") or {}
+    gbp = tenant.credential("gbp") or {}
     wiw = tenant.credential("wheniwork") or {}
     anthropic = tenant.credential("anthropic") or {}
     openai_c = tenant.credential("openai") or {}
@@ -225,6 +279,21 @@ def _config_from_tenant(tenant) -> Config:
         sheets_inventory_id=s.get("sheets_inventory_id", ""),
         sheets_ledger_id=s.get("sheets_ledger_id", ""),
         financial_dashboard_sheet_id=s.get("financial_dashboard_sheet_id", ""),
+        google_ads_developer_token=gads.get("developer_token", ""),
+        google_ads_client_id=gads.get("client_id", ""),
+        google_ads_client_secret=gads.get("client_secret", ""),
+        google_ads_refresh_token=gads.get("refresh_token", ""),
+        google_ads_customer_id=s.get("google_ads_customer_id", ""),
+        google_ads_login_customer_id=s.get("google_ads_login_customer_id") or None,
+        meta_access_token=meta.get("access_token", ""),
+        meta_ad_account_id=s.get("meta_ad_account_id", ""),
+        meta_app_id=meta.get("app_id", ""),
+        meta_app_secret=meta.get("app_secret", ""),
+        gbp_account_id=s.get("gbp_account_id", ""),
+        gbp_location_id=s.get("gbp_location_id", ""),
+        google_places_api_key=gbp.get("places_api_key", ""),
+        instagram_access_token=ig.get("access_token", ""),
+        instagram_business_account_id=s.get("instagram_business_account_id", ""),
         anthropic_api_key=anthropic.get("api_key", ""),
         openai_api_key=openai_c.get("api_key", ""),
         wheniwork_api_key=wiw.get("api_key", ""),
