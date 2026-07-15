@@ -141,28 +141,30 @@ def finished(session, api_key: str, connector_url: str):
     product = os.getenv("PRODUCT_NAME", "Cafe MCP")
     body = f"""
 <h1>You're all set 🎉</h1>
-<p><strong>Save these now — the key is shown only once.</strong></p>
-
-<div class="card">
-  <h2 style="margin-top:0">Your connection details</h2>
-  <label>Connector URL</label>
-  <p><code>{_esc(connector_url)}</code></p>
-  <label>Your access key</label>
-  <p><code class="key">{_esc(api_key)}</code></p>
-</div>
+<p>You can also <a href="/login">sign back into your portal</a> anytime
+using the same Google/Facebook account you just connected — bookmark it,
+no key required.</p>
 
 <div class="card">
   <h2 style="margin-top:0">Add to Claude</h2>
   <ol>
     <li>Claude.ai → Settings → Connectors → <em>Add custom connector</em></li>
-    <li>Paste the Connector URL above and add</li>
-    <li>When Claude opens a sign-in page, paste your access key</li>
+    <li>URL: <code>{_esc(connector_url)}</code></li>
+    <li>When Claude opens a sign-in page, choose <strong>Continue with
+    Google</strong> or <strong>Continue with Facebook</strong> — the same
+    account you just connected. No key needed.</li>
     <li>Ask Claude something like <em>"How were my sales last week?"</em></li>
   </ol>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0">Add to ChatGPT</h2>
+  <h2 style="margin-top:0">Add to ChatGPT (or anything needing a manual key)</h2>
+  <p class="hint">Some assistants don't support signing in — they need a
+  key in a header instead.</p>
+  <label>Connector URL</label>
+  <p><code>{_esc(connector_url)}</code></p>
+  <label>Access key <span class="hint">(shown once — save it now)</span></label>
+  <p><code class="key">{_esc(api_key)}</code></p>
   <ol>
     <li>ChatGPT → Settings → Connectors → create a custom connector</li>
     <li>URL: the Connector URL above</li>
@@ -170,9 +172,8 @@ def finished(session, api_key: str, connector_url: str):
   </ol>
 </div>
 
-<p class="hint">Lost the key or need to connect more services later?
-Contact the person who sent you the setup link — they can issue a new one
-in seconds. Welcome to {_esc(product)}!</p>
+<p class="hint">Need to connect more services or generate another key
+later? <a href="/login">Sign in</a> anytime. Welcome to {_esc(product)}!</p>
 """
     return page("Setup complete", body)
 

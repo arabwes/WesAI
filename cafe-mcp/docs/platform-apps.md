@@ -37,13 +37,17 @@ Set `PRODUCT_NAME` and `OPERATOR_EMAIL` env vars so they display correctly.
      · Terms: `https://<domain>/terms`.
    - Authorized domain: `<domain>` (must be Search-Console-verified, step 0.4).
 4. **Scopes**: add
+   - `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` — **non-sensitive**, used only to identify who's signing in (never grants data access)
    - `.../auth/gmail.readonly` (**restricted** scope — see verification notes)
    - `.../auth/spreadsheets` (sensitive)
    - `.../auth/adwords` (sensitive)
    - `.../auth/business.manage` (sensitive)
 5. **Credentials → Create Credentials → OAuth client ID**:
    - Application type: **Web application**
-   - Authorized redirect URIs: `https://<domain>/onboard/google/callback`
+   - Authorized redirect URIs — all three are needed:
+     - `https://<domain>/onboard/google/callback` (connecting Gmail/Sheets/Ads data access, during onboarding)
+     - `https://<domain>/login/google/callback` (returning-tenant sign-in on the marketing site portal)
+     - `https://<domain>/oauth/login/google/callback` (sign-in when an AI assistant like Claude connects)
    - Copy the client ID/secret → Railway env vars
      `PLATFORM_GOOGLE_CLIENT_ID` / `PLATFORM_GOOGLE_CLIENT_SECRET`.
 6. **Google Ads developer token**: ads.google.com (a manager account) →
@@ -67,6 +71,10 @@ Set `PRODUCT_NAME` and `OPERATOR_EMAIL` env vars so they display correctly.
 - The privacy policy at `/privacy` includes the required Google API
   Services User Data Policy **Limited Use** disclosure — keep it accurate
   if you change what the product does with Gmail data.
+- The `openid`/`userinfo.email`/`userinfo.profile` scopes used for sign-in
+  are non-sensitive and don't require verification on their own — they
+  only add review burden when bundled with the restricted/sensitive scopes
+  above, which is unavoidable since it's the same platform app.
 
 ## 2. Meta (Facebook Ads + Instagram)
 
@@ -80,8 +88,11 @@ Set `PRODUCT_NAME` and `OPERATOR_EMAIL` env vars so they display correctly.
    - Copy App ID / App Secret → `PLATFORM_META_APP_ID` /
      `PLATFORM_META_APP_SECRET`.
 3. **Add products**:
-   - **Facebook Login** (Web) → Settings → Valid OAuth Redirect URIs:
-     `https://<domain>/onboard/meta/callback`
+   - **Facebook Login** (Web) → Settings → Valid OAuth Redirect URIs — all
+     three are needed:
+     - `https://<domain>/onboard/meta/callback` (connecting ad/Instagram data access, during onboarding)
+     - `https://<domain>/login/facebook/callback` (returning-tenant sign-in on the marketing site portal)
+     - `https://<domain>/oauth/login/facebook/callback` (sign-in when an AI assistant like Claude connects)
    - **Marketing API**.
 4. **Business verification** (Settings → Business verification): submit
    your legal business details/documents. Prerequisite for Advanced Access.
@@ -89,7 +100,9 @@ Set `PRODUCT_NAME` and `OPERATOR_EMAIL` env vars so they display correctly.
    `business_management`, `instagram_basic`, `instagram_manage_insights`,
    `pages_show_list`. Provide a screencast of the onboarding portal flow
    and explain each permission's use (reading the customer's own ad
-   metrics / IG insights to generate their reports).
+   metrics / IG insights to generate their reports). `email` (used for
+   sign-in identity) and `public_profile` (implicitly granted) are
+   non-sensitive and don't require review.
 
 ### Meta review path (compliance)
 

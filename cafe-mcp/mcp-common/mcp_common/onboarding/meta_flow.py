@@ -26,7 +26,10 @@ logger = logging.getLogger("mcp.onboarding.meta")
 
 GRAPH = "https://graph.facebook.com/v19.0"
 DIALOG = "https://www.facebook.com/v19.0/dialog/oauth"
-SCOPES = "ads_read,business_management,instagram_basic,instagram_manage_insights,pages_show_list"
+# email is a default/non-sensitive permission — included so we can link a
+# sign-in identity for later portal login; public_profile (id, name) is
+# always implicitly granted by Facebook Login regardless of scope list.
+SCOPES = "ads_read,business_management,instagram_basic,instagram_manage_insights,pages_show_list,email"
 STATE_COOKIE = "onboard_mnonce"
 
 
@@ -71,6 +74,16 @@ async def _exchange_code(code: str) -> str:
         })
         r.raise_for_status()
         return r.json()["access_token"]
+
+
+async def _fetch_me(access_token: str) -> dict:
+    """Best-effort {id, email} for identity linking. Empty dict on failure."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            return await _graph_get(client, "me", access_token, fields="id,email")
+    except Exception:
+        logger.warning("Meta /me fetch failed", exc_info=True)
+        return {}
 
 
 async def _discover(access_token: str) -> tuple[list[dict], list[dict]]:
@@ -158,6 +171,14 @@ def register_meta_routes(mcp) -> None:
             "access_token": token, "issued_at": issued_at,
         }, cipher)
         await audit.record("onboarding.set_credential", {"service": "meta+instagram", "tenant": session.slug}, "ok")
+
+        me = await _fetch_me(token)
+        if me.get("id"):
+            # Same rationale as the Google flow: safe to link here because
+            # reaching this callback already required a valid, token-gated
+            # onboarding session.
+            from mcp_common.identity import link_identity
+            await link_identity(session.tenant_id, "facebook", me["id"], me.get("email"))
 
         ad_accounts, ig_accounts = await _discover(token)
         auto = {}

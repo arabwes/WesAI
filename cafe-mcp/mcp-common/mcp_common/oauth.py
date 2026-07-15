@@ -17,6 +17,7 @@ disruptive to users mid-session.
 """
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 from dataclasses import dataclass
@@ -36,6 +37,8 @@ from fastmcp.server.auth.auth import ClientRegistrationOptions, OAuthProvider
 
 from mcp_common.auth import AUTHENTICATED_NO_TENANT, default_authenticator
 from mcp_common.tenant import TenantContext
+
+logger = logging.getLogger("mcp.oauth")
 
 AUTH_CODE_TTL_S = 300
 LOGIN_TXN_TTL_S = 600
@@ -195,30 +198,69 @@ class TenantOAuthProvider(OAuthProvider):
 
 
 # ── Login page routes (mounted on the FastMCP app in main.py) ─────────────────
+#
+# This is the page an OAuth-only MCP client (Claude, ChatGPT) is redirected
+# to mid-connector-setup. Primary path is the same Google/Facebook identity
+# sign-in used by the marketing-site portal (mcp_common.identity) — no API
+# key required. The API-key form is kept as a secondary fallback for the
+# static-key break-glass case (MCP_API_KEYS) and for tenants who haven't
+# linked a sign-in identity yet.
 
-def _render_login_html(txn: str, error: str | None = None) -> str:
+OAUTH_LOGIN_NONCE_COOKIE = "cafemcp_oauth_login_nonce"
+
+
+@dataclass(frozen=True)
+class _IdentityTenant:
+    """Minimal duck-typed stand-in for TenantContext — complete_login()
+    only reads .slug and .scopes."""
+    slug: str
+    scopes: frozenset
+
+
+def _google_login_configured() -> bool:
+    from mcp_common.onboarding.login_flow import google_login_configured
+    return google_login_configured()
+
+
+def _facebook_login_configured() -> bool:
+    from mcp_common.onboarding.login_flow import facebook_login_configured
+    return facebook_login_configured()
+
+
+def _login_page(txn: str, error: str | None = None, show_key_form: bool = False, status_code: int | None = None):
+    """Render the full connector-authorization page (theme shell + security
+    headers via htmlpages.page())."""
+    from mcp_common.htmlpages import page
+
     error_html = f'<p class="error">{error}</p>' if error else ""
-    return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Connect to Cafe MCP</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  body {{ font-family: -apple-system, sans-serif; max-width: 420px; margin: 80px auto; padding: 0 16px; color: #1a1a1a; }}
-  h1 {{ font-size: 1.25rem; }}
-  input {{ width: 100%; padding: 10px; font-size: 1rem; box-sizing: border-box; margin: 8px 0 16px; border: 1px solid #ccc; border-radius: 6px; }}
-  button {{ width: 100%; padding: 10px; font-size: 1rem; background: #1a1a1a; color: white; border: none; border-radius: 6px; cursor: pointer; }}
-  .error {{ color: #c0392b; }}
-  .hint {{ color: #666; font-size: 0.85rem; }}
-</style></head>
-<body>
-  <h1>Connect to Cafe MCP</h1>
-  <p class="hint">Enter your API key to authorize this connection.</p>
-  {error_html}
-  <form method="post" action="/oauth/login/submit">
-    <input type="hidden" name="txn" value="{txn}">
-    <input type="password" name="api_key" placeholder="wes_..." autofocus required>
-    <button type="submit">Authorize</button>
-  </form>
-</body></html>"""
+    google_btn = (
+        f'<a class="btn btn-provider" href="/oauth/login/google/start?txn={txn}">Continue with Google</a>'
+        if _google_login_configured() else ""
+    )
+    facebook_btn = (
+        f'<a class="btn btn-provider" href="/oauth/login/facebook/start?txn={txn}">Continue with Facebook</a>'
+        if _facebook_login_configured() else ""
+    )
+    key_form = f"""
+  <details {"open" if show_key_form else ""} style="margin-top:1.4em">
+    <summary class="hint" style="cursor:pointer">Use an access key instead</summary>
+    <form method="post" action="/oauth/login/submit" style="margin-top:10px">
+      <input type="hidden" name="txn" value="{txn}">
+      <input type="password" name="api_key" placeholder="wes_..." autocomplete="off">
+      <button type="submit" class="btn-secondary">Authorize with key</button>
+    </form>
+  </details>
+"""
+    body = f"""
+<h1>Connect your AI assistant</h1>
+<p class="hint">Sign in with the Google or Facebook account connected to your business.</p>
+{error_html}
+{google_btn}
+{facebook_btn}
+{key_form}
+"""
+    code = status_code if status_code is not None else (400 if error else 200)
+    return page("Connect to CafeMCP", body, status_code=code, nav="")
 
 
 def register_login_routes(mcp, provider: "TenantOAuthProvider") -> None:
@@ -228,18 +270,18 @@ def register_login_routes(mcp, provider: "TenantOAuthProvider") -> None:
     code immediately, since OAuth's authorize() must return synchronously
     with no way to render an interactive form itself.
     """
+    import secrets as _secrets
+
+    import httpx
     from starlette.requests import Request
-    from starlette.responses import HTMLResponse, RedirectResponse
+    from starlette.responses import RedirectResponse
 
     @mcp.custom_route("/oauth/login", methods=["GET"])
     async def oauth_login_page(request: Request):
         txn = request.query_params.get("txn", "")
         if provider.peek_pending(txn) is None:
-            return HTMLResponse(
-                _render_login_html(txn, error="This login link expired or is invalid. Please reconnect from your AI client."),
-                status_code=400,
-            )
-        return HTMLResponse(_render_login_html(txn))
+            return _login_page(txn, error="This login link expired or is invalid. Please reconnect from your AI client.")
+        return _login_page(txn)
 
     @mcp.custom_route("/oauth/login/submit", methods=["POST"])
     async def oauth_login_submit(request: Request):
@@ -248,20 +290,152 @@ def register_login_routes(mcp, provider: "TenantOAuthProvider") -> None:
         api_key = str(form.get("api_key", "")).strip()
 
         if provider.peek_pending(txn) is None:
-            return HTMLResponse(
-                _render_login_html(txn, error="This login link expired. Please reconnect from your AI client."),
-                status_code=400,
-            )
+            return _login_page(txn, error="This login link expired. Please reconnect from your AI client.")
 
         tenant = await provider.verify_api_key(api_key) if api_key else None
         if tenant is None:
-            return HTMLResponse(_render_login_html(txn, error="Invalid API key."), status_code=401)
+            return _login_page(txn, error="Invalid API key.", show_key_form=True, status_code=401)
 
         try:
             redirect_uri = await provider.complete_login(txn, tenant)
         except AuthorizeError as e:
-            return HTMLResponse(
-                _render_login_html(txn, error=e.error_description or "Login failed."),
-                status_code=400,
-            )
+            return _login_page(txn, error=e.error_description or "Login failed.")
         return RedirectResponse(redirect_uri, status_code=302)
+
+    async def _complete_with_identity(request: Request, txn: str, provider_name: str,
+                                       provider_user_id: str):
+        from mcp_common.identity import find_tenant_by_identity
+
+        found = await find_tenant_by_identity(provider_name, provider_user_id)
+        if found is None:
+            return _login_page(
+                txn, error="We don't recognize that sign-in. If you're a new customer, "
+                          "contact your operator for an invite.", status_code=404)
+        tenant = _IdentityTenant(slug=found.slug, scopes=frozenset({"read"}))
+        try:
+            redirect_uri = await provider.complete_login(txn, tenant)
+        except AuthorizeError as e:
+            return _login_page(txn, error=e.error_description or "Login failed.")
+        return RedirectResponse(redirect_uri, status_code=302)
+
+    # ── Google identity sign-in ─────────────────────────────────────────
+    @mcp.custom_route("/oauth/login/google/start", methods=["GET"])
+    async def oauth_login_google_start(request: Request):
+        import os
+        from mcp_common.onboarding.login_flow import GOOGLE_AUTH_URL, GOOGLE_LOGIN_SCOPES
+
+        txn = request.query_params.get("txn", "")
+        if provider.peek_pending(txn) is None or not _google_login_configured():
+            return _login_page(txn, error="Google sign-in is unavailable right now.")
+        nonce = _secrets.token_urlsafe(16)
+        redirect_uri = f"{os.environ['OAUTH_PUBLIC_URL'].rstrip('/')}/oauth/login/google/callback"
+        params = httpx.QueryParams({
+            "client_id": os.environ["PLATFORM_GOOGLE_CLIENT_ID"],
+            "redirect_uri": redirect_uri, "response_type": "code",
+            "scope": GOOGLE_LOGIN_SCOPES, "state": f"{txn}.{nonce}", "prompt": "select_account",
+        })
+        resp = RedirectResponse(f"{GOOGLE_AUTH_URL}?{params}", status_code=302)
+        resp.set_cookie(OAUTH_LOGIN_NONCE_COOKIE, nonce, httponly=True, samesite="lax",
+                        secure=request.url.scheme == "https", max_age=600)
+        return resp
+
+    @mcp.custom_route("/oauth/login/google/callback", methods=["GET"])
+    async def oauth_login_google_callback(request: Request):
+        import os
+        from mcp_common.onboarding.login_flow import GOOGLE_TOKEN_URL, GOOGLE_USERINFO_URL
+
+        state = str(request.query_params.get("state", ""))
+        txn, _, nonce = state.partition(".")
+        if not nonce or not _secrets.compare_digest(nonce, request.cookies.get(OAUTH_LOGIN_NONCE_COOKIE, "")):
+            return _login_page(txn, error="Sign-in session mismatch — please try again.")
+        if request.query_params.get("error"):
+            return _login_page(txn, error="Google sign-in was cancelled or denied.")
+        code = request.query_params.get("code", "")
+        if not code:
+            return _login_page(txn, error="Google did not return an authorization code.")
+
+        redirect_uri = f"{os.environ['OAUTH_PUBLIC_URL'].rstrip('/')}/oauth/login/google/callback"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                tok = await client.post(GOOGLE_TOKEN_URL, data={
+                    "client_id": os.environ["PLATFORM_GOOGLE_CLIENT_ID"],
+                    "client_secret": os.environ["PLATFORM_GOOGLE_CLIENT_SECRET"],
+                    "redirect_uri": redirect_uri, "grant_type": "authorization_code", "code": code,
+                })
+                tok.raise_for_status()
+                access_token = tok.json()["access_token"]
+                info = await client.get(GOOGLE_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"})
+                info.raise_for_status()
+                userinfo = info.json()
+        except Exception:
+            logger.exception("OAuth-bridge Google login exchange failed")
+            return _login_page(txn, error="Could not complete Google sign-in — please try again.")
+
+        sub = userinfo.get("sub")
+        if not sub:
+            return _login_page(txn, error="Google did not return an account identifier.")
+        return await _complete_with_identity(request, txn, "google", sub)
+
+    # ── Facebook identity sign-in ───────────────────────────────────────
+    @mcp.custom_route("/oauth/login/facebook/start", methods=["GET"])
+    async def oauth_login_facebook_start(request: Request):
+        import os
+        from mcp_common.onboarding.login_flow import FACEBOOK_DIALOG_URL, FACEBOOK_LOGIN_SCOPES
+
+        txn = request.query_params.get("txn", "")
+        if provider.peek_pending(txn) is None or not _facebook_login_configured():
+            return _login_page(txn, error="Facebook sign-in is unavailable right now.")
+        nonce = _secrets.token_urlsafe(16)
+        redirect_uri = f"{os.environ['OAUTH_PUBLIC_URL'].rstrip('/')}/oauth/login/facebook/callback"
+        params = httpx.QueryParams({
+            "client_id": os.environ["PLATFORM_META_APP_ID"],
+            "redirect_uri": redirect_uri, "scope": FACEBOOK_LOGIN_SCOPES,
+            "response_type": "code", "state": f"{txn}.{nonce}",
+        })
+        resp = RedirectResponse(f"{FACEBOOK_DIALOG_URL}?{params}", status_code=302)
+        resp.set_cookie(OAUTH_LOGIN_NONCE_COOKIE, nonce, httponly=True, samesite="lax",
+                        secure=request.url.scheme == "https", max_age=600)
+        return resp
+
+    @mcp.custom_route("/oauth/login/facebook/callback", methods=["GET"])
+    async def oauth_login_facebook_callback(request: Request):
+        import hashlib
+        import hmac
+        import os
+        from mcp_common.onboarding.login_flow import FACEBOOK_GRAPH
+
+        state = str(request.query_params.get("state", ""))
+        txn, _, nonce = state.partition(".")
+        if not nonce or not _secrets.compare_digest(nonce, request.cookies.get(OAUTH_LOGIN_NONCE_COOKIE, "")):
+            return _login_page(txn, error="Sign-in session mismatch — please try again.")
+        if request.query_params.get("error"):
+            return _login_page(txn, error="Facebook sign-in was cancelled or denied.")
+        code = request.query_params.get("code", "")
+        if not code:
+            return _login_page(txn, error="Facebook did not return an authorization code.")
+
+        redirect_uri = f"{os.environ['OAUTH_PUBLIC_URL'].rstrip('/')}/oauth/login/facebook/callback"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                tok = await client.get(f"{FACEBOOK_GRAPH}/oauth/access_token", params={
+                    "client_id": os.environ["PLATFORM_META_APP_ID"],
+                    "client_secret": os.environ["PLATFORM_META_APP_SECRET"],
+                    "redirect_uri": redirect_uri, "code": code,
+                })
+                tok.raise_for_status()
+                access_token = tok.json()["access_token"]
+                proof = hmac.new(os.environ["PLATFORM_META_APP_SECRET"].encode(),
+                                 access_token.encode(), hashlib.sha256).hexdigest()
+                me = await client.get(f"{FACEBOOK_GRAPH}/me", params={
+                    "access_token": access_token, "appsecret_proof": proof, "fields": "id,email",
+                })
+                me.raise_for_status()
+                profile = me.json()
+        except Exception:
+            logger.exception("OAuth-bridge Facebook login exchange failed")
+            return _login_page(txn, error="Could not complete Facebook sign-in — please try again.")
+
+        fb_id = profile.get("id")
+        if not fb_id:
+            return _login_page(txn, error="Facebook did not return an account identifier.")
+        return await _complete_with_identity(request, txn, "facebook", fb_id)

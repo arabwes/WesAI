@@ -17,12 +17,16 @@ from __future__ import annotations
 
 import logging
 import os
+import pathlib
 
 from mcp_common import audit
 from mcp_common.fastmcp_audit import AuditMiddleware
 from mcp_common.middleware import TenancyMiddleware
 
 logger = logging.getLogger("mcp.serverapp")
+
+# cafe-mcp/mcp-common/mcp_common/serverapp.py -> cafe-mcp/CafeMCP.com/
+BRAND_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "CafeMCP.com"
 
 
 def build_app(mcp, server_name: str, mcp_path: str = "/mcp"):
@@ -38,6 +42,12 @@ def build_app(mcp, server_name: str, mcp_path: str = "/mcp"):
         from mcp_common.onboarding.routes import register_onboarding_routes
         register_onboarding_routes(mcp)
         logger.info("Onboarding portal enabled at /onboard")
+
+        from mcp_common.onboarding.login_flow import register_login_page_routes
+        register_login_page_routes(mcp)
+        from mcp_common.portal.routes import register_portal_routes
+        register_portal_routes(mcp)
+        logger.info("Tenant sign-in enabled at /login (portal at /portal)")
 
     oauth_provider = None
     public_url = os.getenv("OAUTH_PUBLIC_URL", "").strip()
@@ -59,6 +69,15 @@ def build_app(mcp, server_name: str, mcp_path: str = "/mcp"):
     if oauth_provider is not None:
         for route in oauth_provider.get_routes(mcp_path=mcp_path):
             app.router.routes.append(route)
+
+    if BRAND_DIR.is_dir():
+        from starlette.routing import Mount
+        from starlette.staticfiles import StaticFiles
+        app.router.routes.append(
+            Mount("/CafeMCP.com", app=StaticFiles(directory=str(BRAND_DIR)), name="brand")
+        )
+    else:
+        logger.warning("CafeMCP.com brand folder not found at %s — pages will render without theme.css", BRAND_DIR)
 
     return TenancyMiddleware(app, oauth_provider=oauth_provider,
                              onboarding_enabled=onboarding_enabled)

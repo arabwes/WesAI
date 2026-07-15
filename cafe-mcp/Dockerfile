@@ -15,5 +15,6 @@ COPY config.py main.py ./
 COPY tools ./tools
 COPY clients ./clients
 COPY utils ./utils
+COPY CafeMCP.com ./CafeMCP.com
 
 CMD ["python", "main.py"]

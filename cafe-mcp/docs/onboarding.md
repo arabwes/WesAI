@@ -35,18 +35,41 @@ python scripts/tenant_admin.py onboard-link acme
 The customer opens the link and, on the portal:
 - **Connect Google** / **Connect Google Ads** — signs into their Google
   account; refresh tokens, and Ads customer ID (auto-discovered, with a
-  picker if they have several) are stored encrypted automatically.
+  picker if they have several) are stored encrypted automatically. This
+  also links their Google identity so they can sign back in later — see
+  below.
 - **Connect Facebook** — signs into Facebook; long-lived token stored,
-  ad account + Instagram business account auto-discovered/picked.
+  ad account + Instagram business account auto-discovered/picked. Links
+  their Facebook identity the same way.
 - **Toast / When I Work** — short forms (Toast credentials are
   live-verified against Toast's auth API before saving).
 - **Business details** — name, invoice inbox, sheet IDs, vendor domains.
-- **Finish setup** — the portal mints their read-scope API key, shows it
-  once with the connector URL and Claude/ChatGPT instructions, and the
-  link permanently expires.
+- **Finish setup** — the portal mints their read-scope API key (for AI
+  assistants that need a manual header key, like ChatGPT), shows it once
+  with the connector URL, and the link permanently expires. Claude and
+  other OAuth-capable assistants don't need this key at all — see below.
 
 Everything the customer submits is Fernet-encrypted at rest and audited
 (`audit_log` rows `onboarding.*`). Secrets are never displayed back.
+
+## The persistent portal (no API keys)
+
+Once a customer has connected at least one Google or Facebook account,
+they can come back anytime at `https://<domain>/login` and sign in with
+that same account — no password, no key. This lands them on `/portal`,
+where they can:
+- See which services are connected.
+- Click **Manage connections** to reconnect/add services or edit business
+  details (mints a fresh short-lived onboarding link behind the scenes and
+  hands them to the same flow above — invisible to them).
+- Generate a new access key on demand, for assistants that require one.
+- Sign out.
+
+**Claude and other OAuth-capable MCP clients use this same sign-in** when
+connecting — when Claude redirects to the authorization page, it offers
+"Continue with Google"/"Continue with Facebook" as the primary option, with
+pasting an access key as a fallback. Nobody needs to see a key to use
+Claude.
 
 ## Verify a new tenant
 
@@ -81,11 +104,14 @@ python scripts/tenant_admin.py mint-key acme --scopes read,mutate --label "acme 
 
 ## Reconnection & key management
 
-- **Meta tokens expire ~60 days**: mint a fresh onboard link
-  (`onboard-link acme`) and send it — the customer clicks Connect Facebook
-  again. Same for any credential change.
-- Keys: `mint-key` / `revoke-key <raw-key>` (revocation effective within
-  the 60s auth cache).
+- **Meta tokens expire ~60 days**: the customer can now self-serve this —
+  sign in at `/login` → `/portal` → **Manage connections** → Connect
+  Facebook again. You only need to mint a fresh onboard link yourself
+  (`onboard-link acme`) for a customer who hasn't linked a sign-in identity
+  yet, or who's lost access to their Google/Facebook account.
+- Keys: customers can generate their own from `/portal`, or you can run
+  `mint-key` / `revoke-key <raw-key>` (revocation effective within the 60s
+  auth cache).
 - Master-key rotation: prepend a new `key_id:fernet_key` to
   `TENANT_MASTER_KEY`, redeploy, run `rotate-master-key`, remove the old
   entry.

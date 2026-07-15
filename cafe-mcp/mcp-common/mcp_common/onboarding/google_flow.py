@@ -1,6 +1,7 @@
 """Hosted Google OAuth consent for the onboarding portal.
 
-Two entry points sharing one callback:
+Two entry points sharing one callback (both also carry the non-sensitive
+identity scopes so we can link a sign-in identity for later portal login):
 - ads=0: gmail.readonly + spreadsheets  -> 'google' credential bundle
 - ads=1: adwords + business.manage      -> 'google_ads' bundle (+ platform
          developer token) and Ads customer-ID discovery/picker
@@ -25,11 +26,20 @@ from mcp_common import store
 
 logger = logging.getLogger("mcp.onboarding.google")
 
-CORE_SCOPES = [
+# Non-sensitive identity scopes, included in every flow (not just /login)
+# so we can always resolve a stable user id (sub) + email — used both for
+# gmail_address autofill and for linking the sign-in identity that lets
+# this tenant log back into the portal later without an API key.
+IDENTITY_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
+]
+CORE_SCOPES = IDENTITY_SCOPES + [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
-ADS_SCOPES = [
+ADS_SCOPES = IDENTITY_SCOPES + [
     "https://www.googleapis.com/auth/adwords",
     "https://www.googleapis.com/auth/business.manage",
 ]
@@ -60,8 +70,9 @@ def _flow(scopes: list[str]):
     )
 
 
-async def _fetch_email(credentials) -> str:
-    """Best-effort userinfo email for gmail_address autofill."""
+async def _fetch_userinfo(credentials) -> dict:
+    """Best-effort OIDC userinfo (sub + email) for gmail_address autofill
+    and identity linking. Empty dict on any failure."""
     import httpx
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -70,10 +81,10 @@ async def _fetch_email(credentials) -> str:
                 headers={"Authorization": f"Bearer {credentials.token}"},
             )
             if r.status_code == 200:
-                return r.json().get("email", "")
+                return r.json()
     except Exception:
         logger.warning("userinfo fetch failed", exc_info=True)
-    return ""
+    return {}
 
 
 async def _discover_ads_customers(refresh_token: str) -> list[str]:
@@ -157,6 +168,15 @@ def register_google_routes(mcp) -> None:
                 "Google did not issue a refresh token. Remove this app's access at "
                 "myaccount.google.com/permissions and try connecting again.", back)
 
+        userinfo = await _fetch_userinfo(creds)
+        if userinfo.get("sub"):
+            # Link this Google identity to the tenant so they can sign back
+            # into the portal later — safe to do here because reaching this
+            # callback already required a valid, token-gated onboarding
+            # session (see links.verify_token above).
+            from mcp_common.identity import link_identity
+            await link_identity(session.tenant_id, "google", userinfo["sub"], userinfo.get("email"))
+
         cipher = CredentialCipher()
         if ads:
             await store.set_credential(session.slug, "google_ads", {
@@ -181,7 +201,7 @@ def register_google_routes(mcp) -> None:
         }
         await store.set_credential(session.slug, "google", bundle, cipher)
         await audit.record("onboarding.set_credential", {"service": "google", "tenant": session.slug}, "ok")
-        email = await _fetch_email(creds)
+        email = userinfo.get("email", "")
         if email:
             existing = await store.get_settings(session.slug)
             if not existing.get("gmail_address"):

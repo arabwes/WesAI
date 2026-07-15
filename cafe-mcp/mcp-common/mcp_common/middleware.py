@@ -76,15 +76,18 @@ class TenancyMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         path = scope.get("path", "")
-        if scope["type"] != "http" or path in HEALTH_PATHS:
+        if scope["type"] != "http" or path in HEALTH_PATHS or path.startswith("/CafeMCP.com/"):
             await self.app(scope, receive, send)
             return
         if self.oauth_provider is not None and _is_oauth_exempt(path):
             await self.app(scope, receive, send)
             return
-        if self.onboarding_enabled and path.startswith("/onboard"):
-            # Keyless public surface: link tokens are the credential; add an
-            # IP-keyed rate limit in front.
+        if self.onboarding_enabled and (
+            path.startswith("/onboard") or path.startswith("/login") or path.startswith("/portal")
+        ):
+            # Keyless public surface: link tokens / session cookies are the
+            # credential (checked inside each route handler, not here), so
+            # just add an IP-keyed rate limit in front.
             client = scope.get("client")
             ip = client[0] if client else "unknown"
             if not self.onboard_bucket.allow(f"ob:{ip}"):
