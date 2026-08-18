@@ -42,6 +42,52 @@ Management account, then either change the `Admin` password by re-running
 have another active Management user (the backend refuses to remove the
 *last* active Management account, so you always keep at least one).
 
+## If the portal freezes or won't load
+
+Two recovery paths, in order of what to try first.
+
+**1. Add `?reset` to the URL:** `https://www.shibamatlanta.com/team/?reset`
+This clears the saved login on that device and stops without redirecting
+anywhere, so it works even when a bad session would otherwise bounce the
+page. Then log in again normally.
+
+**2. Clear the site's data from browser settings.** Needed if the page is
+already looping so fast you can't type a URL into that tab, or if the
+browser cached a broken copy of the portal's JavaScript. Do this from
+browser settings, **not** from the frozen tab:
+
+- **Chrome / Edge:** Settings → Privacy and security → Third-party cookies
+  → See all site data and permissions → search `shibamatlanta.com` → Delete
+- **Firefox:** Settings → Privacy & Security → Cookies and Site Data →
+  Manage Data → search `shibamatlanta.com` → Remove Selected
+- **Safari:** Settings → Privacy → Manage Website Data → search
+  `shibamatlanta` → Remove
+
+This removes both the saved session and any cached scripts, so the next
+load starts completely fresh.
+
+## How Cloudflare Pages serves this (matters more than it sounds)
+
+Two Pages behaviors have already caused real outages here. Both are
+invisible to a plain local static server, which is why `dev-server.js`
+exists — see "Local development" below.
+
+**`.html` is stripped with a 308 redirect.** `/team/dashboard.html`
+permanently redirects to `/team/dashboard`. Always link to the
+extensionless form. Linking to `.html` costs an extra redirect on every
+navigation, and — because `window.location.pathname` then never equals the
+`.html` string the code redirected to — it can defeat loop-detection logic
+that compares the two.
+
+**`/team/*` is served `no-cache`** via the repo-root `_headers` file.
+Pages' default for static assets is `max-age=14400` (4 hours). That once
+left every logged-in browser running a broken `auth.js` for hours after
+the fix had already shipped, with no way for those users to pick it up —
+the page never settled long enough to revalidate. `no-cache` doesn't stop
+the browser from storing the file; it just forces a revalidation request
+(cheap, usually a 304), so a fix reaches people on their very next load.
+**Don't loosen this** without a deliberate reason.
+
 ## Why it's structured this way
 
 - **No blank counts.** Every quantity is required — 0 is a valid answer,
@@ -165,7 +211,15 @@ absolute `/team/...` paths):
 
 ```bash
 cd shibam-coffee-website
-python3 -m http.server 8000
+node dev-server.js          # defaults to port 8000
 ```
 
 Then open `http://localhost:8000/team/`.
+
+**Use `dev-server.js`, not `python3 -m http.server`.** A plain static
+server doesn't strip `.html` and doesn't apply `_headers`, so it serves a
+meaningfully different site than production does. That gap is not
+hypothetical: a redirect loop that froze real browsers passed every local
+test precisely because the local server resolved `/team/dashboard.html`
+directly while Cloudflare 308-redirects it. `dev-server.js` reproduces both
+behaviors so this class of bug fails locally instead of in production.
