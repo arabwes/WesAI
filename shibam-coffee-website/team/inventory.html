@@ -13,10 +13,11 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/team/css/styles.css">
   <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/auth.js" defer></script>
   <script src="/team/js/data.js" defer></script>
   <script src="/team/js/forms.js" defer></script>
 </head>
-<body>
+<body data-page="app" data-require-role="barista">
 
   <header class="portal-header">
     <div class="container portal-header__inner">
@@ -24,7 +25,10 @@
         Shibam Coffee
         <span>Team Forms</span>
       </div>
-      <a class="portal-header__back" href="/team/">&larr; All forms</a>
+      <div class="portal-header__session">
+        <a class="portal-header__back" href="/team/dashboard.html">&larr; All forms</a>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
     </div>
   </header>
 
@@ -36,6 +40,8 @@
         <p>Count what's physically on the shelf right now — not what we've ordered. Sections are grouped by where the items live, so work through the kitchen first, then storage.</p>
       </div>
 
+      <p class="session-banner" id="session-banner"></p>
+
       <div class="portal-callout">
         <strong>Every line needs a number.</strong>
         If we have none of something, enter 0 rather than leaving it blank — a blank tells us nobody checked.
@@ -45,10 +51,6 @@
 
         <fieldset class="portal-fieldset">
           <div class="form-grid form-grid--2">
-            <div class="form-group">
-              <label for="employeeName">Your name <span class="required">*</span></label>
-              <input type="text" id="employeeName" name="employeeName" required autocomplete="name">
-            </div>
             <div class="form-group">
               <label for="weekOf">Week of <span class="required">*</span></label>
               <input type="date" id="weekOf" name="weekOf" required data-today>

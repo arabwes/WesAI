@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Forms — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css">
+  <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/auth.js" defer></script>
+</head>
+<body data-page="app" data-require-role="barista">
+
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">
+        Shibam Coffee
+        <span>Team Forms</span>
+      </div>
+      <div class="portal-header__session">
+        <span>Logged in as <strong data-session-name></strong> <span class="badge" data-session-role></span></span>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container">
+
+      <div class="portal-intro">
+        <h1>Team Forms</h1>
+        <p>Pick the form you need. Every submission records your name and the time it was sent automatically.</p>
+      </div>
+
+      <ul class="form-cards">
+        <li>
+          <a class="form-card-link" href="/team/inventory.html">
+            <span class="badge">Weekly</span>
+            <h2>Inventory Count</h2>
+            <p>Count everything in the kitchen and in storage. Work through it room by room — the sections are grouped by where each item lives.</p>
+          </a>
+        </li>
+        <li>
+          <a class="form-card-link" href="/team/dessert-inventory.html">
+            <span class="badge">Daily</span>
+            <h2>Dessert Inventory</h2>
+            <p>Log how many of each dessert we have on hand and note any new deliveries that arrived today.</p>
+          </a>
+        </li>
+        <li>
+          <a class="form-card-link" href="/team/local-order.html">
+            <span class="badge">As needed</span>
+            <h2>Local Order List</h2>
+            <p>Request a run to the local market. Check every item first so we place one full order instead of several small ones.</p>
+          </a>
+        </li>
+        <li data-role="management">
+          <a class="form-card-link form-card-link--admin" href="/team/admin.html">
+            <span class="badge">Management</span>
+            <h2>Admin Dashboard</h2>
+            <p>View and edit past submissions, manage the item catalog, and add or remove team accounts.</p>
+          </a>
+        </li>
+      </ul>
+
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+
+  <script>document.getElementById('footer-year').textContent = new Date().getFullYear();</script>
+
+</body>
+</html>

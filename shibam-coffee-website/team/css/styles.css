@@ -380,3 +380,188 @@
   font-size: 0.85rem;
   color: var(--color-text-light);
 }
+
+/* ==========================================================================
+   Login page
+   ========================================================================== */
+
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  background-color: var(--color-brown-dark);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6) var(--space-5);
+}
+
+.login-brand {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  text-align: center;
+  margin-bottom: var(--space-5);
+}
+
+.login-brand span {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-light);
+  margin-top: 4px;
+}
+
+.login-help {
+  margin: var(--space-4) 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-light);
+  text-align: center;
+}
+
+/* ==========================================================================
+   Session banner + header session controls
+   ========================================================================== */
+
+.portal-header__session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: var(--color-cream);
+}
+
+.portal-header__session .badge {
+  vertical-align: middle;
+  /* .badge's default brown-on-faint-gold reads fine on the cream page
+     background but is nearly invisible on this header's dark brown —
+     swap to the light variant's palette here specifically. */
+  background-color: rgba(255, 255, 255, 0.18);
+  color: var(--color-cream);
+  border-color: var(--color-cream);
+}
+
+.session-banner {
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+  margin: -12px 0 var(--space-4);
+}
+
+.session-banner strong {
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Role-gated inline actions (flag / discontinue / restore)
+   ========================================================================== */
+
+.count-table__actions {
+  white-space: nowrap;
+}
+
+.btn-inline-action {
+  padding: 6px 12px;
+  margin-right: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-brown-mid);
+}
+
+.btn-inline-action:hover {
+  border-color: var(--color-gold);
+}
+
+.btn-inline-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-inline-action--danger {
+  color: #B3261E;
+  border-color: rgba(179, 38, 30, 0.35);
+}
+
+.btn-inline-action--danger:hover {
+  border-color: #B3261E;
+  background-color: rgba(179, 38, 30, 0.06);
+}
+
+.count-table tbody tr.is-discontinued {
+  opacity: 0.55;
+}
+
+/* ==========================================================================
+   Add-item affordance under a catalog section (Lead+)
+   ========================================================================== */
+
+.add-item-row {
+  margin-top: var(--space-3);
+}
+
+.btn-add-item {
+  font-size: 0.85rem;
+  padding: 8px 16px;
+}
+
+.add-item-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.add-item-form input {
+  flex: 1 1 160px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+}
+
+/* ==========================================================================
+   Admin dashboard
+   ========================================================================== */
+
+.admin-filter {
+  max-width: 320px;
+  margin-bottom: var(--space-4);
+}
+
+.admin-filter select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-btn);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.form-card-link--admin {
+  border-color: var(--color-gold);
+  background-color: rgba(201, 149, 42, 0.06);
+}
+
+#submissions-table textarea,
+#submissions-table input[readonly],
+#users-table input[readonly] {
+  background-color: var(--color-cream);
+  border-color: transparent;
+}
+
+#submissions-table input:not([readonly]),
+#submissions-table textarea:not([readonly]) {
+  background-color: var(--color-surface);
+  border-color: var(--color-gold);
+}

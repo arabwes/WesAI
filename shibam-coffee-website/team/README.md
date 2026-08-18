@@ -1,124 +1,162 @@
-# Team Forms — Shibam Coffee Atlanta
+# Team Portal — Shibam Coffee Atlanta
 
-Internal forms for inventory counts and local order requests, replacing the
-Google Sheets the team was filling out by hand. Lives at
-`https://www.shibamatlanta.com/team/` and ships with the main site — same
-Cloudflare Pages deployment, no separate project.
+Internal forms and admin tools for inventory counts, local order requests,
+and team account management. Lives at `https://www.shibamatlanta.com/team/`
+and ships with the main site — same Cloudflare Pages deployment, no separate
+project.
 
-## The three forms
+## What's here
 
-| Page | Used | Replaces |
+| Page | Who | Purpose |
 |---|---|---|
-| `inventory.html` | Weekly | "Shibam Coffee Atlanta" inventory sheet |
-| `dessert-inventory.html` | Daily (+ vendor order tab) | "Dessert inventory" sheet |
-| `local-order.html` | As needed | "Local order list" sheet |
+| `index.html` | Everyone | Login. The portal's root — this is what `/team/` shows. |
+| `dashboard.html` | Everyone (logged in) | Landing page — links to the three forms, plus an Admin card for Management. |
+| `inventory.html` | Barista+ | Weekly kitchen + storage count. |
+| `dessert-inventory.html` | Barista+ | Daily dessert count/delivery log, plus a vendor-order tab. |
+| `local-order.html` | Barista+ | Consolidated local market order request. |
+| `admin.html` | Management only | View & edit past submissions, manage the item catalog, manage user accounts. |
+
+## Roles
+
+| Role | Can do |
+|---|---|
+| **Barista** | Log in, submit the three forms. |
+| **Lead** | + flag a catalog item for discontinuation, add new items to any of the three lists. |
+| **Management** | + discontinue (archive) or restore items outright, view and edit any past submission, add or remove user accounts. |
+
+Enforcement happens **on the backend**, not just in the page — the Apps
+Script checks the caller's role on every privileged action, so hiding a
+button in the UI is a convenience, not the actual security boundary.
+
+## Bootstrap login
+
+**Username:** `Admin`
+**Password:** `Shibam313!`
+
+This account is seeded automatically the first time the backend's `setup`
+function runs (see below). **Change this password immediately after first
+login** — it's written in plaintext in this file, in `apps-script/Code.gs`,
+and in chat history. Log in as `Admin`, go to Admin → Users, add your real
+Management account, then either change the `Admin` password by re-running
+`setup` with a different value or just remove the `Admin` account once you
+have another active Management user (the backend refuses to remove the
+*last* active Management account, so you always keep at least one).
 
 ## Why it's structured this way
 
-The sheets they replace had no way to enforce a complete entry. These forms do:
-
-- **No blank counts.** Every quantity is required — 0 is a valid answer, blank
-  isn't, because blank can't be told apart from "nobody checked this shelf."
-- **Name and timestamp on every submission.** The payload always carries
-  `employeeName` and an ISO `submittedAt`, so each entry is attributable.
-- **The local order form gates its own submit button.** It stays disabled until
-  the "I went through every item" checkbox is ticked. The whole point of that
-  form is consolidating into one market run, which only works if someone
-  actually reads the full list — so the full list is never filtered down, and
-  the threshold highlighting is a scanning aid on top of it, not a shortcut.
+- **No blank counts.** Every quantity is required — 0 is a valid answer,
+  blank isn't, because blank can't be told apart from "nobody checked this
+  shelf."
+- **Identity comes from login, not a text field.** Every submission's
+  `employeeName` is filled in server-side from the session, not typed —
+  nobody can submit under a coworker's name.
+- **The local order form gates its own submit button** behind an "I went
+  through every item" checkbox. That form's whole point is consolidating
+  into one market run, which only works if someone actually reads the full
+  list — so it's never filtered down, and threshold highlighting is a
+  scanning aid on top of it, not a shortcut.
+- **Discontinuing an item archives it, it doesn't delete it.** A Catalog row
+  set to `discontinued` disappears from the active forms but stays in the
+  sheet, so historical submissions that reference it by name are never
+  orphaned.
 
 ## Access
 
-The portal isn't linked from anywhere on the public site, isn't in
-`sitemap.xml`, and every page carries `noindex, nofollow`. It is deliberately
-**not** listed in `robots.txt` — a `Disallow: /team/` line would publish the
-path to anyone who reads that file.
-
-**This is obscurity, not access control.** Anyone with the URL can submit a
-form; there's no login. If that becomes a problem, Cloudflare Access (free
-tier) can gate `/team/*` behind an email login with no code changes here.
+Still unlisted (no nav link, no `sitemap.xml` entry, `noindex, nofollow` on
+every page, no `robots.txt` mention). Now there's a real login on top of
+that obscurity — a visitor who finds the URL still can't do anything without
+a valid account.
 
 ## Editing the item lists
 
-All three item lists live in `js/data.js` — `INVENTORY_ITEMS`,
-`DESSERT_ITEMS`, `DESSERT_VENDOR_ORDERS`, and `LOCAL_ORDER_SECTIONS`. Add,
-remove, or reorder entries there and the forms pick it up on the next page
-load. Nothing else needs to change.
+Three of the four lists (Inventory, Dessert daily count, Local Order List)
+are no longer static files — they live in the `Catalog` tab of the tracking
+spreadsheet and are fetched live. Add/remove/discontinue through the portal
+itself (Lead can add, Management can discontinue/restore), not by editing a
+file in this repo.
 
-For the local order list, each item's `threshold` is the number it must drop
-below before the row highlights, and `unit` is what shows in the Unit column.
+The one exception is the **dessert vendor order** (Tab B of Dessert
+Inventory) — its Mon/Fri standing-quantity shape doesn't fit the shared
+Catalog schema, so it's still a static list in `js/data.js`
+(`DESSERT_VENDOR_ORDERS`). Edit that file directly if the standing order
+changes.
 
-## Connecting submissions (one-time setup)
+## Backend setup (one-time)
 
-Until this is done, the forms work but submitting shows "This form isn't
-connected yet" instead of failing silently.
+Until this is done, forms are fully functional but nothing is saved and
+login always fails.
 
 **1. Create the tracking spreadsheet.** A new Google Sheet in the shop's
 Drive. The script creates its own tabs, so it can start empty.
 
-**2. Open Extensions → Apps Script** and replace the contents with:
+**2. Open Extensions → Apps Script** and replace the contents with the full
+contents of [`apps-script/Code.gs`](./apps-script/Code.gs) in this
+directory — copy the whole file, paste it in, overwriting the default
+`myFunction() {}` stub.
 
-```js
-function doPost(e) {
-  var payload = JSON.parse(e.postData.contents);
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+**3. Run the one-time setup.** In the function dropdown next to the Debug
+button (▶), select **`setup`**, then click **Run**. The first run will ask
+you to authorize the script (it needs to read/write the spreadsheet) — click
+through Google's "unverified app" warning (Advanced → Go to \[project
+name\] (unsafe)) since this is your own script, not a third party's. This
+seeds the `Admin` bootstrap account and all ~190 catalog items in one shot.
+Safe to run again later — it no-ops if either already has data.
 
-  var tabs = {
-    'inventory': 'Inventory Log',
-    'dessert-daily': 'Dessert Daily Log',
-    'dessert-order': 'Dessert Order Log',
-    'local-order': 'Local Order Log'
-  };
-
-  var sheet = getSheet(ss, tabs[payload.formType] || 'Other');
-  var rows = flatten(payload);
-  if (rows.length) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  }
-
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok: true }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-function getSheet(ss, name) {
-  return ss.getSheetByName(name) || ss.insertSheet(name);
-}
-
-// One row per line item, with who/when repeated on each so the log can be
-// filtered or pivoted without needing to look up a parent record.
-function flatten(payload) {
-  var when = payload.submittedAt;
-  var who = payload.employeeName;
-  var date = payload.weekOf || payload.date || payload.orderDate || '';
-  var rows = [];
-
-  (payload.items || []).forEach(function (item) {
-    rows.push([when, who, date, item.product, JSON.stringify(item)]);
-  });
-
-  (payload.unlistedItems || []).forEach(function (item) {
-    rows.push([when, who, date, item.name + ' (not on list)', JSON.stringify(item)]);
-  });
-
-  return rows;
-}
-```
-
-**3. Deploy → New deployment → Web app.** Execute as **Me**, access
+**4. Deploy → New deployment → Web app.** Execute as **Me**, access
 **Anyone**. Copy the `/exec` URL it gives you.
 
 Access must be "Anyone" because the browser posts directly to it without a
-Google login. The URL is unguessable, but treat it as semi-public: it accepts
-writes from anyone who has it. It only ever appends rows.
+Google login of its own — the portal's *own* login (Users tab, this file's
+bootstrap credentials) is the real gate. Treat the URL as semi-public: it's
+unguessable, but anyone who has it can attempt a login against it.
 
-**4. Paste that URL into `js/config.js`** — all four endpoint values get the
-same URL. The script routes each submission to the right tab using the
-`formType` field in the payload.
+**5. Paste that URL into `js/config.js`** as `CONFIG.API_URL`. Every action —
+login, form submissions, catalog changes, admin actions — goes through this
+one endpoint, routed internally by an `action` field in each request.
 
-The forms post as `Content-Type: text/plain` on purpose. Apps Script rejects
-the CORS preflight that `application/json` triggers; the body is still JSON
-and `JSON.parse` handles it fine.
+**When you change the backend code later:** paste the updated file into the
+same Apps Script project, then **Deploy → Manage deployments → click the
+pencil (Edit) on the existing deployment → Deploy**. This keeps the same
+`/exec` URL — you will *not* need to update `config.js` again unless you
+create a brand new deployment instead of editing the existing one.
+
+### Why POST-only, `text/plain`, and a token-in-body instead of a header
+
+Apps Script Web Apps don't implement the CORS preflight (`OPTIONS`) request
+that a custom `Authorization` header or `Content-Type: application/json`
+would trigger from a browser — the preflight would just fail. Posting as
+`Content-Type: text/plain` sidesteps the preflight entirely (it's a
+"simple request" per the CORS spec), and the body is still valid JSON that
+`JSON.parse` on the Apps Script side handles fine. For the same reason, the
+session token rides inside the JSON body (`token`) rather than an
+`Authorization` header.
+
+## Data model (the tracking spreadsheet's tabs)
+
+The script creates all of these automatically — nothing to set up by hand
+beyond running `setup` once.
+
+| Tab | Columns | Notes |
+|---|---|---|
+| `Users` | username, name, role, passwordHash, passwordSalt, active, createdAt | `role` is `barista`/`lead`/`management`. Removing a user sets `active=false` (soft-delete — preserves their submission history). |
+| `Sessions` | token, username, role, name, createdAt, expiresAt | One row per active login, 12-hour expiry. |
+| `Catalog` | catalogId, formType, group, name, unit, threshold, location, target, status, addedBy, addedAt | `formType` is `inventory` / `dessert` / `local-order`. `status` is `active` / `flagged` / `discontinued`. |
+| `Inventory Log`, `Dessert Daily Log`, `Dessert Order Log`, `Local Order Log` | submittedAt, employeeName, date, product, details, entryId, lastEditedBy, lastEditedAt | One row per line item per submission. `details` is that item's full JSON. `entryId` is what Management's edit action targets. |
+
+## Password & session security — read this before trusting it with more
+
+`Utilities.computeDigest(SHA_256, password + salt)` with a random per-user
+salt — this is **adequate for gating an internal ops tool**, not bcrypt/
+scrypt-grade (no adjustable work factor, no rate-limiting on login
+attempts). Tell staff plainly: don't reuse these passwords anywhere else.
+Session tokens are random UUIDs with a 12-hour expiry, checked against the
+`Sessions` sheet on every privileged request — there's no server-side
+revocation beyond that expiry window (logging out deletes the row, but a
+stolen token is valid until it naturally expires).
+
+If this ever needs to be stronger, layering Cloudflare Access (free tier,
+email-based login) in front of `/team/*` adds a second, better-audited gate
+with zero code changes here.
 
 ## Local development
 
