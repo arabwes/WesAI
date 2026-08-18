@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dessert Inventory — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css">
+  <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/data.js" defer></script>
+  <script src="/team/js/forms.js" defer></script>
+</head>
+<body>
+
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">
+        Shibam Coffee
+        <span>Team Forms</span>
+      </div>
+      <a class="portal-header__back" href="/team/">&larr; All forms</a>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container">
+
+      <div class="portal-intro">
+        <h1>Dessert Inventory</h1>
+        <p>Log today's dessert counts and any deliveries that came in. The standing vendor order is on the second tab, for whoever places the Monday and Friday orders.</p>
+      </div>
+
+      <div class="portal-tabs" role="tablist">
+        <button type="button" class="portal-tab is-active" role="tab" aria-selected="true" data-tab-target="tab-daily">Daily Count</button>
+        <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-order">Standing Vendor Order</button>
+      </div>
+
+      <section id="tab-daily" data-tab-panel role="tabpanel">
+        <div class="portal-callout">
+          <strong>Count first, then log deliveries.</strong>
+          "Count on Hand" is what's in the case before today's delivery. "New Delivery Received" is what arrived today. Enter 0 for anything we don't have.
+        </div>
+
+        <form id="dessert-daily-form" class="portal-form" novalidate>
+          <fieldset class="portal-fieldset">
+            <div class="form-grid form-grid--2">
+              <div class="form-group">
+                <label for="daily-employeeName">Your name <span class="required">*</span></label>
+                <input type="text" id="daily-employeeName" name="employeeName" required autocomplete="name">
+              </div>
+              <div class="form-group">
+                <label for="daily-date">Date <span class="required">*</span></label>
+                <input type="date" id="daily-date" name="date" required data-today>
+              </div>
+            </div>
+          </fieldset>
+
+          <div id="dessert-daily-items"></div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Submit Daily Count</button>
+            <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+
+      <section id="tab-order" data-tab-panel role="tabpanel" hidden>
+        <div class="portal-callout">
+          <strong>Standing quantities are what we normally order.</strong>
+          Change the "New Mon" and "New Fri" numbers only where this week differs. Leave the rest as they are.
+        </div>
+
+        <form id="dessert-order-form" class="portal-form" novalidate>
+          <fieldset class="portal-fieldset">
+            <div class="form-grid form-grid--2">
+              <div class="form-group">
+                <label for="order-employeeName">Your name <span class="required">*</span></label>
+                <input type="text" id="order-employeeName" name="employeeName" required autocomplete="name">
+              </div>
+              <div class="form-group">
+                <label for="order-date">Order date <span class="required">*</span></label>
+                <input type="date" id="order-date" name="orderDate" required data-today>
+              </div>
+            </div>
+          </fieldset>
+
+          <div id="dessert-order-items"></div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Submit Vendor Order</button>
+            <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -17,10 +17,16 @@ shibam-coffee-website/
 ├── js/config.js              All environment-specific URLs & IDs
 ├── js/script.js               Nav toggle, CTA tracking, form handling
 ├── images/                    Photo placeholders (see images/README.md)
+├── team/                      Internal employee forms (see team/README.md)
 ├── robots.txt / sitemap.xml / _redirects
 ├── TEST_PLAN.md               QA checklist — run after every push to main
 └── tracking-notes.md / seo-notes.md
 ```
+
+`team/` is the staff-facing forms portal at `/team/`. It ships with this site
+but is deliberately unlisted — no nav link, no sitemap entry, `noindex` on
+every page, and no `robots.txt` rule (which would only advertise the path).
+Leave it out when adding pages to `sitemap.xml`. See `team/README.md`.
 
 ## 1. Local development
 
