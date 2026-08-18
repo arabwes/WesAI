@@ -114,6 +114,52 @@ def test_toast_save_roundtrip(client, saved):
     assert "✓" in r.text
 
 
+def test_toast_live_verify_skips_localhost(monkeypatch):
+    import asyncio
+    import httpx
+    import mcp_common.onboarding.routes as routes_mod
+
+    called = False
+
+    def fake_post(*args, **kwargs):
+        nonlocal called
+        called = True
+        return type("Response", (), {"status_code": 401})()
+
+    monkeypatch.setenv("OAUTH_PUBLIC_URL", "http://127.0.0.1:8000")
+    monkeypatch.delenv("ONBOARDING_TOAST_LIVE_VERIFY", raising=False)
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    assert asyncio.run(routes_mod._verify_toast({
+        "client_id": "fake",
+        "client_secret": "fake",
+        "restaurant_guid": "fake",
+        "environment": "production",
+    })) is None
+    assert called is False
+
+
+def test_toast_live_verify_override_rejects(monkeypatch):
+    import asyncio
+    import httpx
+    import mcp_common.onboarding.routes as routes_mod
+
+    def fake_post(*args, **kwargs):
+        return type("Response", (), {"status_code": 401})()
+
+    monkeypatch.setenv("OAUTH_PUBLIC_URL", "http://127.0.0.1:8000")
+    monkeypatch.setenv("ONBOARDING_TOAST_LIVE_VERIFY", "true")
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    error = asyncio.run(routes_mod._verify_toast({
+        "client_id": "fake",
+        "client_secret": "fake",
+        "restaurant_guid": "fake",
+        "environment": "production",
+    }))
+    assert "Toast rejected" in error
+
+
 def test_csrf_required(client, saved):
     r = client.post("/onboard/toast", data={
         "t": GOOD, "csrf": "wrong", "client_id": "c", "client_secret": "s",

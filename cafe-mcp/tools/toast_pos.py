@@ -299,7 +299,8 @@ async def toast_top_items(
                 for selection in check.get("selections", []):
                     name = selection.get("displayName", "Unknown")
                     qty = int(selection.get("quantity", 1) or 1)
-                    price = float(selection.get("preDiscountPrice", 0) or 0) * qty
+                    # Toast preDiscountPrice is already the extended line amount.
+                    price = float(selection.get("preDiscountPrice", 0) or 0)
                     item_revenue[name] += price
                     item_qty[name] += qty
 
@@ -517,7 +518,8 @@ async def toast_category_breakdown(
                     # salesCategory is a GUID-only ref in order payloads — resolve the name.
                     category = _category_name(selection)
                     qty = int(selection.get("quantity", 1) or 1)
-                    price = float(selection.get("preDiscountPrice", 0) or 0) * qty
+                    # Toast preDiscountPrice is already the extended line amount.
+                    price = float(selection.get("preDiscountPrice", 0) or 0)
                     cat_revenue[category] += price
                     cat_qty[category] += qty
 

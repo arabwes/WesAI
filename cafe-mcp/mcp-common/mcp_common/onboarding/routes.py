@@ -7,7 +7,9 @@ cookie. Saved secrets are audited (redacted) and never echoed back.
 from __future__ import annotations
 
 import logging
+import os
 import secrets
+from urllib.parse import urlparse
 
 from mcp_common import audit
 from mcp_common.crypto import CredentialCipher
@@ -165,6 +167,10 @@ async def _verify_toast(bundle: dict) -> str | None:
     """Live-check Toast credentials with a token request; returns an error
     message or None. Network failures don't block the save (the operator
     can retry later) — only a definitive auth rejection does."""
+    if not _toast_live_verify_enabled():
+        logger.info("Toast live-verify skipped for local onboarding")
+        return None
+
     import httpx
     host = ("https://ws-api.toasttab.com" if bundle["environment"] == "production"
             else "https://ws-sandbox-api.toasttab.com")
@@ -181,3 +187,15 @@ async def _verify_toast(bundle: dict) -> str | None:
     except Exception:
         logger.warning("Toast live-verify skipped (network error)", exc_info=True)
     return None
+
+
+def _toast_live_verify_enabled() -> bool:
+    override = os.getenv("ONBOARDING_TOAST_LIVE_VERIFY", "").strip().lower()
+    if override:
+        return override in {"1", "true", "yes", "on"}
+
+    public_url = os.getenv("OAUTH_PUBLIC_URL", "").strip()
+    host = (urlparse(public_url).hostname or "").lower()
+    if host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}:
+        return False
+    return True

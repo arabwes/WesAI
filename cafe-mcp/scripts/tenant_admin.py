@@ -25,10 +25,20 @@ import json
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "mcp-common"))
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv(REPO_ROOT / ".env")
+
+sys.path.insert(0, str(REPO_ROOT / "mcp-common"))
 
 from mcp_common.crypto import CredentialCipher, generate_master_key
-from mcp_common.db import get_pool, close_pool
+from mcp_common.db import DatabaseConnectionError, close_pool
 from mcp_common.migrate import migrate
 from mcp_common import store
 
@@ -87,6 +97,9 @@ async def main():
         elif args.cmd == "rotate-master-key":
             n = await store.reencrypt_all(CredentialCipher())
             print(f"Re-encrypted {n} credential rows with primary key")
+    except DatabaseConnectionError as e:
+        print(f"Database connection error: {e}", file=sys.stderr)
+        raise SystemExit(2) from None
     finally:
         await close_pool()
 

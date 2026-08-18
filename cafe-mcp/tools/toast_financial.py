@@ -329,7 +329,8 @@ async def toast_modifier_revenue(start_date: str, end_date: str) -> str:
                     for modifier in selection.get("modifiers", []):
                         mod_name = modifier.get("displayName", "Unknown modifier")
                         qty = int(modifier.get("quantity", 1) or 1)
-                        price = float(modifier.get("preDiscountPrice", 0) or 0) * qty
+                        # Toast preDiscountPrice is already the extended line amount.
+                        price = float(modifier.get("preDiscountPrice", 0) or 0)
                         key = mod_name
                         modifier_data[key]["qty"] += qty
                         modifier_data[key]["revenue"] += price
@@ -985,7 +986,8 @@ async def toast_item_sales_detail(start_date: str, end_date: str, top_n: int = 1
                         continue
                     name = sel.get("displayName", "Unknown")
                     qty = int(sel.get("quantity", 1) or 1)
-                    price = float(sel.get("preDiscountPrice", 0) or 0) * qty
+                    # Toast preDiscountPrice is already the extended line amount.
+                    price = float(sel.get("preDiscountPrice", 0) or 0)
                     rec = items[name]
                     rec["qty"] += qty
                     rec["revenue"] += price
@@ -1061,7 +1063,8 @@ async def toast_waste_by_category(start_date: str, end_date: str, category: str 
                     if cat_filter and cat_filter not in cat.lower():
                         continue
                     qty = int(sel.get("quantity", 1) or 1)
-                    value = float(sel.get("preDiscountPrice", 0) or 0) * qty
+                    # Toast preDiscountPrice is already the extended line amount.
+                    value = float(sel.get("preDiscountPrice", 0) or 0)
                     reason = _void_reason_name(sel.get("voidReason"))
                     st = cat_stats[cat]
                     st["qty"] += qty

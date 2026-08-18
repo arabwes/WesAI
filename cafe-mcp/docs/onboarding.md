@@ -20,6 +20,25 @@ plus `DATABASE_URL` (use the Postgres service's **public** connection URL,
 not the `.railway.internal` one) and the same `TENANT_MASTER_KEY` exported
 in your shell.
 
+PowerShell local setup example:
+
+```powershell
+$env:DATABASE_URL = "postgresql://user:password@127.0.0.1:5432/cafe_mcp_local"
+$env:TENANT_MASTER_KEY = "v1:..."
+$env:MCP_API_KEYS = "local-test-static-key"
+$env:OAUTH_PUBLIC_URL = "http://127.0.0.1:8000"
+python main.py
+```
+
+When `OAUTH_PUBLIC_URL` points at `localhost`, `127.0.0.1`, `::1`, or
+`0.0.0.0`, the Toast onboarding form skips the live Toast auth check so
+fake credentials can be used for local end-to-end testing. Set
+`ONBOARDING_TOAST_LIVE_VERIFY=true` to force the production live check
+locally. On Railway, leave this unset and use the public Railway Postgres
+connection string for local admin CLI commands; PowerShell's `curl` alias
+is `Invoke-WebRequest`, so prefer `Invoke-RestMethod` examples for JSON
+requests.
+
 ## Per-tenant flow
 
 ```bash
@@ -48,6 +67,10 @@ The customer opens the link and, on the portal:
   assistants that need a manual header key, like ChatGPT), shows it once
   with the connector URL, and the link permanently expires. Claude and
   other OAuth-capable assistants don't need this key at all — see below.
+
+Add the MCP server as a Claude connector after this finish step. Claude's
+OAuth connector login wraps an existing `wes_...` key; it cannot create the
+tenant key itself.
 
 Everything the customer submits is Fernet-encrypted at rest and audited
 (`audit_log` rows `onboarding.*`). Secrets are never displayed back.
