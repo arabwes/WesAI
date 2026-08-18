@@ -18,7 +18,8 @@ shibam-coffee-website/
 ├── js/script.js               Nav toggle, CTA tracking, form handling
 ├── images/                    Photo placeholders (see images/README.md)
 ├── team/                      Internal employee forms (see team/README.md)
-├── robots.txt / sitemap.xml / _redirects
+├── dev-server.js              Local server that behaves like Cloudflare Pages
+├── robots.txt / sitemap.xml / _redirects / _headers
 ├── TEST_PLAN.md               QA checklist — run after every push to main
 └── tracking-notes.md / seo-notes.md
 ```
@@ -30,11 +31,19 @@ Leave it out when adding pages to `sitemap.xml`. See `team/README.md`.
 
 ## 1. Local development
 
-No build step, no server required. Just open `index.html` in a browser —
-all CSS and JS load via relative/root-absolute paths.
+```bash
+node dev-server.js          # defaults to port 8000
+```
 
-If you'd rather use a local server (recommended only because `fetch()` in
-some browsers behaves oddly on `file://`), any static server works:
+`dev-server.js` reproduces the two Cloudflare Pages behaviors a generic
+static server doesn't: it strips `.html` with a 308 redirect
+(`/menu.html` → `/menu`) and applies the rules in `_headers`. Testing
+against a server without those has already let a production-only bug
+through, so prefer it over `npx serve` / `python3 -m http.server`,
+especially for anything under `/team/`.
+
+For quick visual tweaks to the public marketing pages you can still just
+open `index.html` directly, or use any static server:
 
 ```bash
 npx serve .

@@ -14,8 +14,48 @@
   var ROLE_RANK = { barista: 1, lead: 2, management: 3 };
   var SESSION_HOURS = 12;
 
+  // Cloudflare Pages serves these without the .html extension and 308s
+  // anything that asks for the extension. Linking to the URL it actually
+  // serves avoids a redirect on every single navigation, and keeps
+  // window.location.pathname comparable to these strings.
+  var ROUTES = {
+    login: '/team/',
+    dashboard: '/team/dashboard'
+  };
+
   function clearSession() {
     localStorage.removeItem(STORAGE_KEY);
+  }
+
+  // ---------------------------------------------------------------------
+  // Escape hatch. Runs before anything else can redirect, so it works even
+  // when a bad session would otherwise bounce the page immediately:
+  // /team/?reset wipes local state and stops, with no navigation at all.
+  // ---------------------------------------------------------------------
+  if (window.location.search.indexOf('reset') !== -1) {
+    try { localStorage.clear(); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
+    // Other scripts on form pages call into Auth on DOMContentLoaded. Give
+    // them inert stubs so a reset never turns into a console full of
+    // "Auth is not defined" on the way to a page that's about to be
+    // replaced anyway.
+    window.Auth = {
+      getSession: function () { return null; },
+      hasRole: function () { return false; },
+      apiCall: function () { return new Promise(function () {}); },
+      logout: function () {},
+      applyRoleVisibility: function () {}
+    };
+    document.addEventListener('DOMContentLoaded', function () {
+      document.title = 'Reset — Shibam Coffee Atlanta';
+      document.body.innerHTML =
+        '<div style="font-family:system-ui,sans-serif;max-width:480px;margin:15vh auto;padding:0 24px;line-height:1.6;color:#1A0F00;">' +
+        '<h1 style="font-size:1.4rem;">Signed out and cleared</h1>' +
+        '<p>Saved login data for this portal has been cleared on this device.</p>' +
+        '<p><a href="/team/">Go to the login page</a></p>' +
+        '</div>';
+    });
+    return;
   }
 
   function getSession() {
@@ -47,20 +87,30 @@
     return !!session && ROLE_RANK[session.role] >= ROLE_RANK[minRole];
   }
 
+  // Compare paths the way the server treats them, not as raw strings.
+  // Cloudflare Pages strips ".html" and normalizes trailing slashes, so
+  // "/team/dashboard.html" and "/team/dashboard" are the SAME page — a
+  // naive string compare misses that and lets a page redirect to itself
+  // forever. Normalizing both sides is what makes the check trustworthy
+  // regardless of how the host rewrites URLs.
+  function normalizePath(p) {
+    p = p.split('?')[0].split('#')[0];
+    p = p.replace(/\.html$/, '');
+    if (p.length > 1) p = p.replace(/\/$/, '');
+    return p === '' ? '/' : p;
+  }
+
   // Every guard redirect goes through here — two independent safety nets:
-  //  1. Never navigate to the page we're already on. A same-page redirect
-  //     reloads, re-runs this exact guard against the same state, and
-  //     redirects again — forever. (This is exactly what froze the page:
-  //     a malformed session made dashboard.html's role check fail, and
-  //     its fallback target was dashboard.html itself.)
-  //  2. A short-lived attempt counter that trips if redirects happen too
-  //     fast for any other reason, so a different future bug can't
-  //     reproduce the same kind of loop.
+  //  1. Never navigate to the page we're already on (see normalizePath).
+  //  2. A short-lived attempt counter, in case redirects start chaining
+  //     between different pages for some reason this code can't foresee.
   function guardedRedirect(url) {
-    var targetPath = url.split('?')[0].split('#')[0];
-    if (targetPath === window.location.pathname) {
-      url = '/team/';
+    if (normalizePath(url) === normalizePath(window.location.pathname)) {
+      // Already here. Navigating again would just re-run this same check
+      // against this same state — the definition of a redirect loop.
       clearSession();
+      showRedirectLoopError();
+      return;
     }
 
     var now = Date.now();
@@ -108,15 +158,15 @@
 
   if (page === 'login') {
     if (currentSession) {
-      guardedRedirect('/team/dashboard.html');
+      guardedRedirect(ROUTES.dashboard);
     } else {
       clearRedirectGuard();
     }
   } else if (requiredRole) {
     if (!currentSession) {
-      guardedRedirect('/team/');
+      guardedRedirect(ROUTES.login);
     } else if (!hasRole(currentSession, requiredRole)) {
-      guardedRedirect('/team/dashboard.html');
+      guardedRedirect(ROUTES.dashboard);
     } else {
       clearRedirectGuard();
     }
@@ -143,7 +193,7 @@
       .then(function (result) {
         if (result && result.ok === false && result.error === 'session_expired') {
           clearSession();
-          guardedRedirect('/team/');
+          guardedRedirect(ROUTES.login);
         }
         return result;
       });
@@ -153,7 +203,7 @@
     var session = getSession();
     clearSession();
     if (session) apiCall('logout', { token: session.token }).catch(function () {});
-    window.location.href = '/team/';
+    window.location.href = ROUTES.login;
   }
 
   // ---------------------------------------------------------------------
@@ -216,7 +266,7 @@
               username: result.username,
               expiresAt: expiresAt
             }));
-            window.location.href = '/team/dashboard.html';
+            window.location.href = ROUTES.dashboard;
           } else if (result.ok) {
             setStatus(status, 'error', 'Login isn’t responding correctly — tell a manager the backend may need to be redeployed.');
             submitBtn.disabled = false;
