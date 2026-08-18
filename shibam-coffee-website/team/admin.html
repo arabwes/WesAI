@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css">
+  <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/auth.js" defer></script>
+  <script src="/team/js/admin.js" defer></script>
+</head>
+<body data-page="app" data-require-role="management">
+
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">
+        Shibam Coffee
+        <span>Team Forms</span>
+      </div>
+      <div class="portal-header__session">
+        <a class="portal-header__back" href="/team/dashboard.html">&larr; All forms</a>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container">
+
+      <div class="portal-intro">
+        <h1>Admin Dashboard</h1>
+        <p>View and edit past submissions, manage the item catalog, and add or remove team accounts. Actions here are enforced by the backend, not just hidden in this UI.</p>
+      </div>
+
+      <p class="session-banner" id="session-banner"></p>
+
+      <div class="portal-tabs" role="tablist">
+        <button type="button" class="portal-tab is-active" role="tab" aria-selected="true" data-tab-target="tab-submissions">Submissions</button>
+        <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-catalog">Catalog</button>
+        <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-users">Users</button>
+      </div>
+
+      <section id="tab-submissions" data-tab-panel role="tabpanel">
+        <div class="form-group admin-filter">
+          <label for="submissions-form-type">Form</label>
+          <select id="submissions-form-type">
+            <option value="inventory">Weekly Inventory Count</option>
+            <option value="dessert-daily">Dessert Inventory — Daily Count</option>
+            <option value="dessert-order">Dessert Inventory — Vendor Order</option>
+            <option value="local-order">Local Order List</option>
+          </select>
+        </div>
+        <div id="submissions-table"></div>
+      </section>
+
+      <section id="tab-catalog" data-tab-panel role="tabpanel" hidden>
+        <div class="form-group admin-filter">
+          <label for="catalog-form-type">List</label>
+          <select id="catalog-form-type">
+            <option value="inventory">Weekly Inventory Count</option>
+            <option value="dessert">Dessert Inventory — Daily List</option>
+            <option value="local-order">Local Order List</option>
+          </select>
+        </div>
+        <p class="count-section__note">Rows highlighted amber were flagged by a Lead for review. Discontinuing an item removes it from the active form immediately but keeps its submission history intact.</p>
+        <div id="catalog-table"></div>
+      </section>
+
+      <section id="tab-users" data-tab-panel role="tabpanel" hidden>
+        <div id="users-table"></div>
+
+        <div class="form-card" style="margin-top: var(--space-5);">
+          <h3 style="margin-top:0;">Add a team member</h3>
+          <form id="add-user-form" class="portal-form" novalidate>
+            <div class="form-grid form-grid--2">
+              <div class="form-group">
+                <label for="new-username">Username</label>
+                <input type="text" id="new-username" name="username" required autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label for="new-name">Display name</label>
+                <input type="text" id="new-name" name="name" required>
+              </div>
+              <div class="form-group">
+                <label for="new-role">Role</label>
+                <select id="new-role" name="role">
+                  <option value="barista">Barista</option>
+                  <option value="lead">Lead</option>
+                  <option value="management">Management</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="new-password">Temporary password</label>
+                <input type="text" id="new-password" name="password" required autocomplete="off">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Add User</button>
+              <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+            </div>
+          </form>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
