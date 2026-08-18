@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Order List — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css">
+  <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/data.js" defer></script>
+  <script src="/team/js/forms.js" defer></script>
+</head>
+<body>
+
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">
+        Shibam Coffee
+        <span>Team Forms</span>
+      </div>
+      <a class="portal-header__back" href="/team/">&larr; All forms</a>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container">
+
+      <div class="portal-intro">
+        <h1>Local Order List</h1>
+        <p>Request a run to the local market. Go through the whole list before submitting — the point is one order that covers everything, not several small trips.</p>
+      </div>
+
+      <div class="portal-callout">
+        <strong>Check every item before you submit.</strong>
+        Enter how many we currently have for each line. Anything below its reorder number is highlighted and flipped to "Yes" automatically — you can change that if you disagree.
+      </div>
+
+      <form id="local-order-form" class="portal-form" novalidate>
+
+        <fieldset class="portal-fieldset">
+          <div class="form-grid form-grid--2">
+            <div class="form-group">
+              <label for="employeeName">Your name <span class="required">*</span></label>
+              <input type="text" id="employeeName" name="employeeName" required autocomplete="name">
+            </div>
+            <div class="form-group">
+              <label for="date">Date <span class="required">*</span></label>
+              <input type="date" id="date" name="date" required data-today>
+            </div>
+          </div>
+        </fieldset>
+
+        <div id="local-order-items"></div>
+
+        <section class="count-section">
+          <div class="count-section__head">
+            <h3 class="count-section__title">Anything Else We Need</h3>
+          </div>
+          <p class="count-section__note">Items that aren't on the list above. Add as many rows as you need.</p>
+          <div id="unlisted-items"></div>
+          <button type="button" id="add-unlisted-item" class="btn btn-outline">+ Add another item</button>
+        </section>
+
+        <label class="review-gate" for="reviewed-full-list">
+          <input type="checkbox" id="reviewed-full-list">
+          <span>I went through every item on this list, not just the ones I already knew were low.</span>
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" disabled>Submit Order Request</button>
+          <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+        </div>
+
+      </form>
+
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
