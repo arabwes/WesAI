@@ -1,13 +1,15 @@
 # Cloudflare Pages response headers.
 #
-# The team portal must never be served from a stale browser cache. Pages
-# defaults static assets to `max-age=14400` (4 hours), which once left every
-# logged-in browser running a broken auth.js for hours after the fix had
-# already shipped — and because the bug was a redirect loop, the page never
-# settled long enough for the browser to revalidate on its own.
+# This rule works for the portal's HTML pages: they come back
+# `no-cache, must-revalidate`, so a browser always re-checks them and picks
+# up a new deploy immediately.
 #
-# `no-cache` does NOT mean "don't store": the browser still keeps the file and
-# still gets a cheap 304 when nothing changed. It only means "always ask
-# first", so a fix reaches people on their next load instead of hours later.
+# It does NOT work for .js/.css. Pages overrides Cache-Control on static
+# assets with its own `max-age=14400` (4 hours) regardless of what is
+# written here — verified against the live site after this file shipped.
+# That is why every portal script and stylesheet is referenced with a
+# `?v=N` version string in the HTML instead (see team/README.md). Since the
+# HTML is always revalidated, bumping N is what actually forces browsers
+# onto new JS. Do not remove the versioning and assume this file covers it.
 /team/*
   Cache-Control: no-cache, must-revalidate

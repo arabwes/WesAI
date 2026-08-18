@@ -79,14 +79,27 @@ navigation, and — because `window.location.pathname` then never equals the
 `.html` string the code redirected to — it can defeat loop-detection logic
 that compares the two.
 
-**`/team/*` is served `no-cache`** via the repo-root `_headers` file.
-Pages' default for static assets is `max-age=14400` (4 hours). That once
-left every logged-in browser running a broken `auth.js` for hours after
-the fix had already shipped, with no way for those users to pick it up —
-the page never settled long enough to revalidate. `no-cache` doesn't stop
-the browser from storing the file; it just forces a revalidation request
-(cheap, usually a 304), so a fix reaches people on their very next load.
-**Don't loosen this** without a deliberate reason.
+**Portal JS and CSS are versioned in the URL — bump `?v=N` whenever you
+change them.** Every reference looks like
+`<script src="/team/js/auth.js?v=2">`. When you edit any file under
+`team/js/` or `team/css/`, increment that number in **all** of the team
+HTML files (they must agree) in the same commit.
+
+This is not optional housekeeping — it is the only thing that actually
+gets people onto new portal code:
+
+- The repo-root `_headers` file sets `no-cache, must-revalidate` for
+  `/team/*`. That **works for the HTML pages** — browsers always re-check
+  them, so a deploy is picked up on the next load.
+- It does **not** work for `.js` / `.css`. Pages overrides `Cache-Control`
+  on static assets with its own `max-age=14400` (4 hours) no matter what
+  `_headers` says. Verified against the live site.
+
+So the HTML is always fresh, and a changed `?v=` makes it point at a URL
+the browser has never cached, which forces a real fetch. Without that,
+a broken script can stay stuck in people's browsers for hours after the
+fix ships — which is exactly what happened here once already, and left
+users unable to load the portal at all.
 
 ## Why it's structured this way
 
