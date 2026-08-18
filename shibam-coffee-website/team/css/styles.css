@@ -1,0 +1,567 @@
+/* ==========================================================================
+   Shibam Coffee Atlanta — Employee Portal
+   Layered on top of the main site's design system (../../css/styles.css),
+   which supplies the color, type, and spacing tokens used here.
+   ========================================================================== */
+
+.portal-header {
+  background-color: var(--color-brown-dark);
+  color: var(--color-cream);
+  padding: var(--space-4) 0;
+}
+
+.portal-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.portal-header__brand {
+  font-family: var(--font-heading);
+  font-size: 1.3rem;
+  color: var(--color-gold-light);
+}
+
+.portal-header__brand span {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-cream);
+  opacity: 0.7;
+}
+
+.portal-header__back {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-gold-light);
+  border-bottom: 1px solid transparent;
+}
+
+.portal-header__back:hover {
+  border-bottom-color: var(--color-gold-light);
+}
+
+.portal-main {
+  padding: var(--space-6) 0 var(--space-8);
+}
+
+.portal-intro {
+  max-width: 680px;
+  margin-bottom: var(--space-6);
+}
+
+.portal-intro h1 {
+  font-family: var(--font-heading);
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  margin: 0 0 var(--space-2);
+}
+
+.portal-intro p {
+  color: var(--color-text-light);
+  margin: 0;
+}
+
+/* ==========================================================================
+   Landing page cards
+   ========================================================================== */
+
+.form-cards {
+  display: grid;
+  gap: var(--space-4);
+  list-style: none;
+}
+
+@media (min-width: 760px) {
+  .form-cards {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.form-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.form-card-link:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card);
+}
+
+.form-card-link h2 {
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.form-card-link p {
+  color: var(--color-text-light);
+  font-size: 0.92rem;
+  margin: 0;
+  flex-grow: 1;
+}
+
+.form-card-link .badge {
+  align-self: flex-start;
+}
+
+/* ==========================================================================
+   Form shell
+   ========================================================================== */
+
+.portal-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.portal-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.portal-callout {
+  padding: var(--space-3) var(--space-4);
+  border-left: 4px solid var(--color-gold);
+  background-color: rgba(201, 149, 42, 0.10);
+  border-radius: var(--radius-btn);
+  font-size: 0.93rem;
+  margin-bottom: var(--space-5);
+}
+
+.portal-callout strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* ==========================================================================
+   Count tables
+   ========================================================================== */
+
+.count-section {
+  margin-bottom: var(--space-5);
+}
+
+.count-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: var(--space-3);
+}
+
+.count-section__title {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.count-section__location {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-brown-mid);
+  background-color: rgba(201, 149, 42, 0.18);
+  border-radius: 999px;
+  padding: 3px 12px;
+}
+
+.count-section__note {
+  margin: 0 0 var(--space-3);
+  font-size: 0.9rem;
+  color: var(--color-text-light);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+}
+
+.count-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.count-table th,
+.count-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.count-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: var(--color-cream);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-brown-mid);
+  white-space: nowrap;
+}
+
+.count-table tbody tr:last-child th,
+.count-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.count-table tbody tr:nth-child(even) {
+  background-color: rgba(232, 220, 200, 0.22);
+}
+
+.count-table__item {
+  font-weight: 600;
+  min-width: 190px;
+}
+
+.count-table__unit,
+.count-table__threshold,
+.count-table__standing {
+  color: var(--color-text-light);
+  white-space: nowrap;
+}
+
+.count-table input,
+.count-table select {
+  width: 100%;
+  min-width: 86px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+.count-table input[type="text"] {
+  min-width: 150px;
+}
+
+.count-table input:focus,
+.count-table select:focus {
+  border-color: var(--color-gold);
+}
+
+.count-table input.invalid,
+.portal-form input.invalid {
+  border-color: #B3261E;
+  background-color: rgba(179, 38, 30, 0.06);
+}
+
+/* A row under its reorder threshold — a scanning aid, not a filter. */
+.count-table tbody tr.below-threshold {
+  background-color: rgba(212, 116, 42, 0.12);
+  box-shadow: inset 4px 0 0 var(--color-amber);
+}
+
+/* ==========================================================================
+   Tabs (dessert inventory)
+   ========================================================================== */
+
+.portal-tabs {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.portal-tab {
+  padding: 10px 20px;
+  border: none;
+  background: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-text-light);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.portal-tab.is-active {
+  color: var(--color-text);
+  border-bottom-color: var(--color-gold);
+}
+
+/* ==========================================================================
+   Unlisted item rows
+   ========================================================================== */
+
+.unlisted-row {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.unlisted-row input {
+  flex: 1 1 180px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+}
+
+.unlisted-row input[data-unlisted-qty] {
+  flex: 0 1 120px;
+}
+
+.btn-remove-row {
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: transparent;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-light);
+}
+
+.btn-remove-row:hover {
+  border-color: #B3261E;
+  color: #B3261E;
+}
+
+/* ==========================================================================
+   Review gate + submit
+   ========================================================================== */
+
+.review-gate {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--color-gold);
+  border-radius: var(--radius-card);
+  background-color: rgba(201, 149, 42, 0.08);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.review-gate input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--color-gold);
+}
+
+.portal-form .form-actions {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.portal-form button[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.portal-footer {
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+}
+
+/* ==========================================================================
+   Login page
+   ========================================================================== */
+
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  background-color: var(--color-brown-dark);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6) var(--space-5);
+}
+
+.login-brand {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  text-align: center;
+  margin-bottom: var(--space-5);
+}
+
+.login-brand span {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-light);
+  margin-top: 4px;
+}
+
+.login-help {
+  margin: var(--space-4) 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-light);
+  text-align: center;
+}
+
+/* ==========================================================================
+   Session banner + header session controls
+   ========================================================================== */
+
+.portal-header__session {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  color: var(--color-cream);
+}
+
+.portal-header__session .badge {
+  vertical-align: middle;
+  /* .badge's default brown-on-faint-gold reads fine on the cream page
+     background but is nearly invisible on this header's dark brown —
+     swap to the light variant's palette here specifically. */
+  background-color: rgba(255, 255, 255, 0.18);
+  color: var(--color-cream);
+  border-color: var(--color-cream);
+}
+
+.session-banner {
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+  margin: -12px 0 var(--space-4);
+}
+
+.session-banner strong {
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Role-gated inline actions (flag / discontinue / restore)
+   ========================================================================== */
+
+.count-table__actions {
+  white-space: nowrap;
+}
+
+.btn-inline-action {
+  padding: 6px 12px;
+  margin-right: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-brown-mid);
+}
+
+.btn-inline-action:hover {
+  border-color: var(--color-gold);
+}
+
+.btn-inline-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-inline-action--danger {
+  color: #B3261E;
+  border-color: rgba(179, 38, 30, 0.35);
+}
+
+.btn-inline-action--danger:hover {
+  border-color: #B3261E;
+  background-color: rgba(179, 38, 30, 0.06);
+}
+
+.count-table tbody tr.is-discontinued {
+  opacity: 0.55;
+}
+
+/* ==========================================================================
+   Add-item affordance under a catalog section (Lead+)
+   ========================================================================== */
+
+.add-item-row {
+  margin-top: var(--space-3);
+}
+
+.btn-add-item {
+  font-size: 0.85rem;
+  padding: 8px 16px;
+}
+
+.add-item-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.add-item-form input {
+  flex: 1 1 160px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+}
+
+/* ==========================================================================
+   Admin dashboard
+   ========================================================================== */
+
+.admin-filter {
+  max-width: 320px;
+  margin-bottom: var(--space-4);
+}
+
+.admin-filter select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-btn);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+}
+
+.form-card-link--admin {
+  border-color: var(--color-gold);
+  background-color: rgba(201, 149, 42, 0.06);
+}
+
+#submissions-table textarea,
+#submissions-table input[readonly],
+#users-table input[readonly] {
+  background-color: var(--color-cream);
+  border-color: transparent;
+}
+
+#submissions-table input:not([readonly]),
+#submissions-table textarea:not([readonly]) {
+  background-color: var(--color-surface);
+  border-color: var(--color-gold);
+}

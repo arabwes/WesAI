@@ -11,6 +11,7 @@
     initStickyHeaderShadow();
     initCtaTracking();
     initForms();
+    setFooterYear();
   });
 
   // ---------------------------------------------------------------------
@@ -100,6 +101,16 @@
           cta_text: cta.innerText || cta.getAttribute('aria-label')
         });
       }
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Keeps the footer copyright year current without a yearly hand-edit.
+  // The hardcoded "2025" in the HTML stays as a no-JS fallback.
+  // ---------------------------------------------------------------------
+  function setFooterYear() {
+    document.querySelectorAll('#footer-year').forEach(function (el) {
+      el.textContent = new Date().getFullYear();
     });
   }
 
