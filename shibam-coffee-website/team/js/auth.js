@@ -8,27 +8,93 @@
   'use strict';
 
   var STORAGE_KEY = 'shibam_team_session';
+  var REDIRECT_GUARD_KEY = 'shibam_team_redirect_guard';
+  var REDIRECT_LIMIT = 4;
+  var REDIRECT_WINDOW_MS = 5000;
   var ROLE_RANK = { barista: 1, lead: 2, management: 3 };
   var SESSION_HOURS = 12;
+
+  function clearSession() {
+    localStorage.removeItem(STORAGE_KEY);
+  }
 
   function getSession() {
     var raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     try {
       var session = JSON.parse(raw);
+      // A session missing its token/role isn't just expired, it's
+      // malformed — treat it as logged-out rather than trusting a
+      // partial object. This is what let a misbehaving backend response
+      // (ok:true with no role) create a session that looked logged-in
+      // but could never pass a role check — see guardedRedirect below.
+      if (!session.token || !ROLE_RANK[session.role]) {
+        clearSession();
+        return null;
+      }
       if (!session.expiresAt || new Date(session.expiresAt).getTime() < Date.now()) {
-        localStorage.removeItem(STORAGE_KEY);
+        clearSession();
         return null;
       }
       return session;
     } catch (e) {
-      localStorage.removeItem(STORAGE_KEY);
+      clearSession();
       return null;
     }
   }
 
   function hasRole(session, minRole) {
     return !!session && ROLE_RANK[session.role] >= ROLE_RANK[minRole];
+  }
+
+  // Every guard redirect goes through here — two independent safety nets:
+  //  1. Never navigate to the page we're already on. A same-page redirect
+  //     reloads, re-runs this exact guard against the same state, and
+  //     redirects again — forever. (This is exactly what froze the page:
+  //     a malformed session made dashboard.html's role check fail, and
+  //     its fallback target was dashboard.html itself.)
+  //  2. A short-lived attempt counter that trips if redirects happen too
+  //     fast for any other reason, so a different future bug can't
+  //     reproduce the same kind of loop.
+  function guardedRedirect(url) {
+    var targetPath = url.split('?')[0].split('#')[0];
+    if (targetPath === window.location.pathname) {
+      url = '/team/';
+      clearSession();
+    }
+
+    var now = Date.now();
+    var raw = sessionStorage.getItem(REDIRECT_GUARD_KEY);
+    var state = null;
+    try { state = raw ? JSON.parse(raw) : null; } catch (e) { state = null; }
+    if (!state || now - state.firstAt > REDIRECT_WINDOW_MS) {
+      state = { count: 0, firstAt: now };
+    }
+    state.count += 1;
+    sessionStorage.setItem(REDIRECT_GUARD_KEY, JSON.stringify(state));
+
+    if (state.count > REDIRECT_LIMIT) {
+      sessionStorage.removeItem(REDIRECT_GUARD_KEY);
+      clearSession();
+      showRedirectLoopError();
+      return;
+    }
+
+    window.location.replace(url);
+  }
+
+  function clearRedirectGuard() {
+    sessionStorage.removeItem(REDIRECT_GUARD_KEY);
+  }
+
+  function showRedirectLoopError() {
+    document.title = 'Login problem — Shibam Coffee Atlanta';
+    document.body.innerHTML =
+      '<div style="font-family:system-ui,sans-serif;max-width:480px;margin:15vh auto;padding:0 24px;line-height:1.6;color:#1A0F00;">' +
+      '<h1 style="font-size:1.4rem;">Something went wrong</h1>' +
+      '<p>The team portal hit a login problem and stopped itself instead of reloading forever. You have been logged out.</p>' +
+      '<p><a href="/team/">Try logging in again</a>. If this keeps happening, tell a manager the backend may need to be redeployed.</p>' +
+      '</div>';
   }
 
   // ---------------------------------------------------------------------
@@ -41,13 +107,21 @@
   var currentSession = getSession();
 
   if (page === 'login') {
-    if (currentSession) window.location.replace('/team/dashboard.html');
+    if (currentSession) {
+      guardedRedirect('/team/dashboard.html');
+    } else {
+      clearRedirectGuard();
+    }
   } else if (requiredRole) {
     if (!currentSession) {
-      window.location.replace('/team/');
+      guardedRedirect('/team/');
     } else if (!hasRole(currentSession, requiredRole)) {
-      window.location.replace('/team/dashboard.html');
+      guardedRedirect('/team/dashboard.html');
+    } else {
+      clearRedirectGuard();
     }
+  } else {
+    clearRedirectGuard();
   }
 
   // ---------------------------------------------------------------------
@@ -68,8 +142,8 @@
       .then(function (res) { return res.json(); })
       .then(function (result) {
         if (result && result.ok === false && result.error === 'session_expired') {
-          localStorage.removeItem(STORAGE_KEY);
-          window.location.replace('/team/');
+          clearSession();
+          guardedRedirect('/team/');
         }
         return result;
       });
@@ -77,7 +151,7 @@
 
   function logout() {
     var session = getSession();
-    localStorage.removeItem(STORAGE_KEY);
+    clearSession();
     if (session) apiCall('logout', { token: session.token }).catch(function () {});
     window.location.href = '/team/';
   }
@@ -128,7 +202,12 @@
       })
         .then(function (res) { return res.json(); })
         .then(function (result) {
-          if (result.ok) {
+          // A real login response always has a token and a recognized
+          // role. `ok:true` alone isn't enough to trust — a stale or
+          // misconfigured backend deployment can return `{ok:true}` with
+          // neither, which used to store a broken "logged in" session
+          // that could never pass a role check anywhere in the portal.
+          if (result.ok && result.token && ROLE_RANK[result.role]) {
             var expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
             localStorage.setItem(STORAGE_KEY, JSON.stringify({
               token: result.token,
@@ -138,6 +217,9 @@
               expiresAt: expiresAt
             }));
             window.location.href = '/team/dashboard.html';
+          } else if (result.ok) {
+            setStatus(status, 'error', 'Login isn’t responding correctly — tell a manager the backend may need to be redeployed.');
+            submitBtn.disabled = false;
           } else {
             setStatus(status, 'error', 'Incorrect username or password.');
             submitBtn.disabled = false;
