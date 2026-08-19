@@ -59,6 +59,15 @@
     return node;
   }
 
+  // Labels each cell in a built row to match its column header, so the
+  // mobile card-collapse CSS (styles.css) can show "Label: value" once the
+  // table stops laying out as a table below ~640px.
+  function applyDataLabels(row, headerLabels) {
+    Array.from(row.children).forEach(function (cell, i) {
+      if (headerLabels[i]) cell.setAttribute('data-label', headerLabels[i]);
+    });
+  }
+
   function numberInput(attrs) {
     var input = el('input');
     input.type = 'number';
@@ -245,6 +254,7 @@
 
           if (showActions) appendActionsCell(row, item, renderInventoryForm);
 
+          applyDataLabels(row, headers);
           tbody.appendChild(row);
         });
 
@@ -305,6 +315,7 @@
 
         if (showActions) appendActionsCell(row, item, renderDessertDailyForm);
 
+        applyDataLabels(row, headers);
         tbody.appendChild(row);
       });
 
@@ -337,7 +348,8 @@
       var table = el('table', 'count-table');
       var thead = el('thead');
       var headRow = el('tr');
-      ['Item', 'Standing Mon', 'Standing Fri', 'New Mon', 'New Fri'].forEach(function (label) {
+      var headers = ['Item', 'Standing Mon', 'Standing Fri', 'New Mon', 'New Fri'];
+      headers.forEach(function (label) {
         headRow.appendChild(el('th', null, label));
       });
       thead.appendChild(headRow);
@@ -363,6 +375,7 @@
         newFriCell.appendChild(numberInput({ 'data-new-fri': '', 'required': '', 'value': String(item.fri), 'aria-label': 'New Friday quantity for ' + item.name }));
         row.appendChild(newFriCell);
 
+        applyDataLabels(row, headers);
         tbody.appendChild(row);
       });
 
@@ -440,6 +453,7 @@
 
           if (showActions) appendActionsCell(row, item, renderLocalOrderForm);
 
+          applyDataLabels(row, headers);
           tbody.appendChild(row);
         });
 

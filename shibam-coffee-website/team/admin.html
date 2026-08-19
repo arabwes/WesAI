@@ -11,10 +11,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=2">
-  <script src="/team/js/config.js?v=2" defer></script>
-  <script src="/team/js/auth.js?v=2" defer></script>
-  <script src="/team/js/admin.js?v=2" defer></script>
+  <link rel="stylesheet" href="/team/css/styles.css?v=3">
+  <script src="/team/js/config.js?v=3" defer></script>
+  <script src="/team/js/auth.js?v=3" defer></script>
+  <script src="/team/js/admin.js?v=3" defer></script>
 </head>
 <body data-page="app" data-require-role="management">
 
@@ -45,6 +45,7 @@
         <button type="button" class="portal-tab is-active" role="tab" aria-selected="true" data-tab-target="tab-submissions">Submissions</button>
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-catalog">Catalog</button>
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-users">Users</button>
+        <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-changelog">Changelog</button>
       </div>
 
       <section id="tab-submissions" data-tab-panel role="tabpanel">
@@ -107,6 +108,11 @@
             </div>
           </form>
         </div>
+      </section>
+
+      <section id="tab-changelog" data-tab-panel role="tabpanel" hidden>
+        <p class="count-section__note">Every add, edit, discontinue/restore, and user-management action, newest first. Logins aren't included — this is a record of data changes, not activity.</p>
+        <div id="changelog-table"></div>
       </section>
 
     </div>

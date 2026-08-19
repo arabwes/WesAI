@@ -1,0 +1,11 @@
+{
+  "name": "shibam-coffee-website",
+  "private": true,
+  "description": "Static site + team portal. No build step for the site itself — this package.json exists only to run the Playwright mobile-layout test suite.",
+  "scripts": {
+    "test:mobile": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
