@@ -175,6 +175,37 @@
   }
 
   // ---------------------------------------------------------------------
+  // POSTs to the Apps Script endpoint and parses the JSON response, with a
+  // couple of short-delay retries baked in.
+  //
+  // Apps Script serves the actual response via a redirect to a one-time
+  // "echo" URL, and that URL is occasionally not immediately fetchable —
+  // the browser's automatic redirect-follow can land on it a moment before
+  // its content is ready, which surfaces here as a non-JSON (HTML error
+  // page) body that fails to parse. Retrying is what actually fixes it;
+  // without a retry, a page relying on this could get stuck on "Loading…"
+  // forever, since a rejected promise with no .catch() anywhere never
+  // reached the caller's error handling. Only a real, persistent failure
+  // reaches the network_error fallback below.
+  // ---------------------------------------------------------------------
+  function postToApi(payload, retriesLeft) {
+    if (retriesLeft === undefined) retriesLeft = 2;
+    return fetch(CONFIG.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    })
+      .then(function (res) { return res.json(); })
+      .catch(function (err) {
+        if (retriesLeft > 0) {
+          return new Promise(function (resolve) { setTimeout(resolve, 600); })
+            .then(function () { return postToApi(payload, retriesLeft - 1); });
+        }
+        return { ok: false, error: 'network_error', message: String(err) };
+      });
+  }
+
+  // ---------------------------------------------------------------------
   // Backend calls — every action goes through the same Apps Script POST
   // endpoint; the session token rides in the JSON body (not a header,
   // to avoid triggering a CORS preflight Apps Script can't answer).
@@ -184,19 +215,13 @@
     var payload = Object.assign({ action: action }, body || {});
     if (session) payload.token = session.token;
 
-    return fetch(CONFIG.API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    })
-      .then(function (res) { return res.json(); })
-      .then(function (result) {
-        if (result && result.ok === false && result.error === 'session_expired') {
-          clearSession();
-          guardedRedirect(ROUTES.login);
-        }
-        return result;
-      });
+    return postToApi(payload).then(function (result) {
+      if (result && result.ok === false && result.error === 'session_expired') {
+        clearSession();
+        guardedRedirect(ROUTES.login);
+      }
+      return result;
+    });
   }
 
   function logout() {
@@ -245,12 +270,7 @@
       submitBtn.disabled = true;
       setStatus(status, null, 'Logging in…');
 
-      fetch(CONFIG.API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'login', username: username, password: password })
-      })
-        .then(function (res) { return res.json(); })
+      postToApi({ action: 'login', username: username, password: password })
         .then(function (result) {
           // A real login response always has a token and a recognized
           // role. `ok:true` alone isn't enough to trust — a stale or
@@ -267,6 +287,9 @@
               expiresAt: expiresAt
             }));
             window.location.href = ROUTES.dashboard;
+          } else if (result.error === 'network_error') {
+            setStatus(status, 'error', 'Could not reach the server — check your connection and try again.');
+            submitBtn.disabled = false;
           } else if (result.ok) {
             setStatus(status, 'error', 'Login isn’t responding correctly — tell a manager the backend may need to be redeployed.');
             submitBtn.disabled = false;
@@ -274,10 +297,6 @@
             setStatus(status, 'error', 'Incorrect username or password.');
             submitBtn.disabled = false;
           }
-        })
-        .catch(function () {
-          setStatus(status, 'error', 'Could not reach the server — check your connection and try again.');
-          submitBtn.disabled = false;
         });
     });
   }
