@@ -604,7 +604,7 @@
     row.appendChild(el('td', null, user.statusLabel));
 
     var actionCell = el('td', 'count-table__actions');
-    var isSelf = user.username.toLowerCase() === session.username.toLowerCase();
+    var isSelf = !!session && user.username.toLowerCase() === session.username.toLowerCase();
 
     if (user.active) {
       var resetBtn = el('button', 'btn-inline-action', 'Reset password');
