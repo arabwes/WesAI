@@ -11,10 +11,18 @@ project.
 |---|---|---|
 | `index.html` | Everyone | Login. The portal's root — this is what `/team/` shows. |
 | `dashboard.html` | Everyone (logged in) | Landing page — links to the three forms, plus an Admin card for Management. |
-| `inventory.html` | Barista+ | Weekly kitchen + storage count. |
+| `inventory.html` | Barista+ | Weekly kitchen + storage count — desserts aren't on this list, see below. |
 | `dessert-inventory.html` | Barista+ | Daily dessert count/delivery log, plus a vendor-order tab. |
 | `local-order.html` | Barista+ | Consolidated local market order request. |
-| `admin.html` | Management only | View & edit past submissions, manage the item catalog, manage user accounts. |
+| `admin.html` | Management only | Submissions, Catalog (search/sort/multiselect/edit), Users, Changelog. |
+
+Weekly Inventory intentionally does **not** include desserts (Honeycomb,
+Dubai Chocolate, the milk cakes/cheesecakes, etc.) — those are tracked once,
+daily, on the Dessert Inventory form. Counting them on both forms was
+redundant, so they were removed from Weekly Inventory's catalog list; see
+"Backend setup" below if you're bringing up a **new** deployment (they're
+excluded from the seed data automatically) versus cleaning up an **existing**
+one that already seeded them before this change (a one-time manual step).
 
 ## Roles
 
@@ -22,11 +30,42 @@ project.
 |---|---|
 | **Barista** | Log in, submit the three forms. |
 | **Lead** | + flag a catalog item for discontinuation, add new items to any of the three lists. |
-| **Management** | + discontinue (archive) or restore items outright, view and edit any past submission, add or remove user accounts. |
+| **Management** | + discontinue (archive) or restore items outright (individually or in bulk), edit an existing item's name/unit/group, view and edit any past submission, add/remove user accounts, reset a user's password, read the Changelog. |
+
+Usernames are matched case-insensitively everywhere (login, adding a user,
+removing a user) — `Admin`, `admin`, and `ADMIN` are the same account.
+Whatever case was typed when the account was created is what's stored and
+shown; only the *comparison* ignores case.
 
 Enforcement happens **on the backend**, not just in the page — the Apps
 Script checks the caller's role on every privileged action, so hiding a
 button in the UI is a convenience, not the actual security boundary.
+
+## Admin dashboard features
+
+- **Search + sort** on Submissions, Catalog, Users, and Changelog — click a
+  column header to sort by it (click again to reverse), or type in the
+  search box to filter. Both run against the already-fetched rows, so
+  they're instant and don't hit the backend again.
+- **Multiselect on the Catalog tab** — check a row's box (or the header
+  checkbox to select every currently-visible row), then use the bulk
+  Discontinue/Restore buttons that appear. One backend call handles the
+  whole batch.
+- **Edit an item's name/unit/group** — "Edit" on a Catalog row unlocks those
+  three fields, "Save" commits. Renaming into a name that already exists in
+  that list (case-insensitive) is rejected rather than silently creating a
+  duplicate.
+- **Changelog tab** (Management only) — every add/edit/discontinue/restore
+  and every user-management action, newest first, with who did it and when.
+  Logins aren't included — this tracks data changes, not activity.
+- **Reset password** — on the Users tab, next to Remove, for any active
+  account. Prompts for a new temporary password and applies it immediately;
+  share it with that person directly, there's no email/notification step.
+- **Export CSV** — on Submissions, Catalog, and Changelog, exports whatever
+  rows are currently visible (i.e. respects your search filter).
+- Destructive actions (bulk discontinue/restore, remove user) confirm
+  through an in-page dialog rather than the browser's native `confirm()`
+  popup.
 
 ## Bootstrap login
 
@@ -179,6 +218,14 @@ pencil (Edit) on the existing deployment → Deploy**. This keeps the same
 `/exec` URL — you will *not* need to update `config.js` again unless you
 create a brand new deployment instead of editing the existing one.
 
+**If your Catalog sheet was already seeded before the dessert-item cleanup
+above:** the seed data only affects a fresh, empty sheet — `setup()` no-ops
+if `Catalog` already has rows, so removing those items from the seed array
+doesn't touch data that's already there. Clean it up once, manually: log in
+as Management, open Catalog → Weekly Inventory Count, search "Kitchen —
+Pastries" to find them, select them all with the header checkbox, and bulk
+Discontinue. That's it — a fresh `setup()` run was never needed for this.
+
 ### Why POST-only, `text/plain`, and a token-in-body instead of a header
 
 Apps Script Web Apps don't implement the CORS preflight (`OPTIONS`) request
@@ -201,6 +248,7 @@ beyond running `setup` once.
 | `Sessions` | token, username, role, name, createdAt, expiresAt | One row per active login, 12-hour expiry. |
 | `Catalog` | catalogId, formType, group, name, unit, threshold, location, target, status, addedBy, addedAt | `formType` is `inventory` / `dessert` / `local-order`. `status` is `active` / `flagged` / `discontinued`. |
 | `Inventory Log`, `Dessert Daily Log`, `Dessert Order Log`, `Local Order Log` | submittedAt, employeeName, date, product, details, entryId, lastEditedBy, lastEditedAt | One row per line item per submission. `details` is that item's full JSON. `entryId` is what Management's edit action targets. |
+| `Changelog` | timestamp, username, role, action, target, details | One row per mutating admin action (add/edit/discontinue/restore an item, edit an entry, add/remove a user, reset a password). Logins/logouts aren't included — `Sessions` already covers those, and they aren't data changes. Read-only from the portal (Changelog tab, Management only). |
 
 ## Password & session security — read this before trusting it with more
 
@@ -236,3 +284,21 @@ hypothetical: a redirect loop that froze real browsers passed every local
 test precisely because the local server resolved `/team/dashboard.html`
 directly while Cloudflare 308-redirects it. `dev-server.js` reproduces both
 behaviors so this class of bug fails locally instead of in production.
+
+## Mobile layout
+
+Every `.count-table` collapses into stacked, labeled rows below ~640px
+instead of relying on horizontal scroll — the CSS is in `css/styles.css`
+under "Mobile card-collapse". Each table cell needs a `data-label`
+attribute matching its column header for this to work; every row-building
+function in `js/admin.js` and `js/forms.js` sets these automatically by
+zipping the row's cells against that table's `headers` array, so a new
+column added to either file gets mobile support for free as long as it's
+added to both the `headRow` loop and the row-building loop in the same
+function.
+
+A Playwright suite checks this holds — `npm install && npx playwright test`
+from `shibam-coffee-website/`. It starts `dev-server.js` itself, mocks the
+backend (no live Apps Script or Sheets access needed), loads every `/team/`
+page at an iPhone-SE-width viewport, and fails if either the whole page or
+any individual table needs horizontal scrolling.

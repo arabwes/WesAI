@@ -44,8 +44,11 @@ function doPost(e) {
       case 'restoreItem': result = handleRestoreItem(payload); break;
       case 'getEntries': result = handleGetEntries(payload); break;
       case 'updateEntry': result = handleUpdateEntry(payload); break;
+      case 'updateItem': result = handleUpdateItem(payload); break;
+      case 'getChangelog': result = handleGetChangelog(payload); break;
       case 'addUser': result = handleAddUser(payload); break;
       case 'removeUser': result = handleRemoveUser(payload); break;
+      case 'resetPassword': result = handleResetPassword(payload); break;
       default: result = { ok: false, error: 'unknown_action' };
     }
   } catch (err) {
@@ -116,6 +119,20 @@ function getCatalogSheet() {
   return getSheet('Catalog', ['catalogId', 'formType', 'group', 'name', 'unit', 'threshold', 'location', 'target', 'status', 'addedBy', 'addedAt']);
 }
 
+function getChangelogSheet() {
+  return getSheet('Changelog', ['timestamp', 'username', 'role', 'action', 'target', 'details']);
+}
+
+// Records who did what, for the admin Changelog tab. Login/logout are
+// deliberately not logged here — Sessions already tracks those, and they
+// aren't data changes, so including them would bury the actual audit signal.
+function logChange(session, action, target, details) {
+  getChangelogSheet().appendRow([
+    new Date().toISOString(), session.username, session.role, action,
+    target, typeof details === 'string' ? details : JSON.stringify(details || {})
+  ]);
+}
+
 // ===========================================================================
 // Auth
 // ===========================================================================
@@ -132,13 +149,15 @@ function handleLogin(payload) {
   var data = getUsersSheet().getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    if (row[0] === username && row[5] === true) {
+    // Usernames are matched case-insensitively; the case originally typed
+    // at account creation is preserved for storage/display.
+    if (String(row[0]).toLowerCase() === username.toLowerCase() && row[5] === true) {
       if (hashPassword(password, row[4]) === row[3]) {
         var token = Utilities.getUuid();
         var now = new Date();
         var expires = new Date(now.getTime() + SESSION_HOURS * 3600 * 1000);
-        getSessionsSheet().appendRow([token, username, row[2], row[1], now.toISOString(), expires.toISOString()]);
-        return { ok: true, token: token, role: row[2], name: row[1], username: username };
+        getSessionsSheet().appendRow([token, row[0], row[2], row[1], now.toISOString(), expires.toISOString()]);
+        return { ok: true, token: token, role: row[2], name: row[1], username: row[0] };
       }
       return { ok: false, error: 'invalid_credentials' };
     }
@@ -240,6 +259,23 @@ function handleGetCatalog(payload) {
   return { ok: true, items: items };
 }
 
+// True if another active-or-flagged row already has this name within this
+// formType (case-insensitive, trimmed). `excludeCatalogId` lets updateItem
+// exclude the row being renamed from colliding with itself.
+function catalogNameTaken(data, formType, name, excludeCatalogId) {
+  var needle = String(name || '').trim().toLowerCase();
+  if (!needle) return false;
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    if (row[0] === excludeCatalogId) continue;
+    if (row[1] === formType && row[8] !== 'discontinued' &&
+        String(row[3]).trim().toLowerCase() === needle) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function handleAddItem(payload) {
   var session = requireRole(payload, 'lead');
   if (session.ok === false) return session;
@@ -247,49 +283,102 @@ function handleAddItem(payload) {
   var item = payload.item || {};
   if (!item.name) return { ok: false, error: 'missing_name' };
 
+  var sheet = getCatalogSheet();
+  var data = sheet.getDataRange().getValues();
+  if (catalogNameTaken(data, payload.formType, item.name)) {
+    return { ok: false, error: 'duplicate_name' };
+  }
+
   var catalogId = Utilities.getUuid();
-  getCatalogSheet().appendRow([
+  sheet.appendRow([
     catalogId, payload.formType, item.group || '', item.name,
     item.unit || '', item.threshold || '', item.location || '', item.target || '',
     'active', session.username, new Date().toISOString()
   ]);
+  logChange(session, 'addItem', catalogId, { formType: payload.formType, name: item.name });
   return { ok: true, catalogId: catalogId };
 }
 
-function setCatalogStatus(catalogId, status) {
+// Accepts either a single catalogId or an array of them (catalogIds) so the
+// admin dashboard's multiselect can discontinue/restore/flag a batch in one
+// request instead of one round-trip per item.
+function setCatalogStatuses(catalogIds, status) {
   var sheet = getCatalogSheet();
   var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === catalogId) {
+  var remaining = {};
+  catalogIds.forEach(function (id) { remaining[id] = true; });
+  var updated = [];
+  for (var i = 1; i < data.length && Object.keys(remaining).length; i++) {
+    if (remaining[data[i][0]]) {
       sheet.getRange(i + 1, 9).setValue(status); // column I = status
-      return true;
+      updated.push(data[i][0]);
+      delete remaining[data[i][0]];
     }
   }
-  return false;
+  return { updated: updated, notFound: Object.keys(remaining) };
+}
+
+function idsFromPayload(payload) {
+  if (Array.isArray(payload.catalogIds)) return payload.catalogIds;
+  return payload.catalogId ? [payload.catalogId] : [];
 }
 
 function handleFlagItem(payload) {
   var session = requireRole(payload, 'lead');
   if (session.ok === false) return session;
-  return setCatalogStatus(payload.catalogId, 'flagged')
-    ? { ok: true }
-    : { ok: false, error: 'not_found' };
+  var ids = idsFromPayload(payload);
+  if (!ids.length) return { ok: false, error: 'not_found' };
+  var result = setCatalogStatuses(ids, 'flagged');
+  if (result.updated.length) logChange(session, 'flagItem', result.updated.join(','), { count: result.updated.length });
+  return { ok: true, updated: result.updated, notFound: result.notFound };
 }
 
 function handleDiscontinueItem(payload) {
   var session = requireRole(payload, 'management');
   if (session.ok === false) return session;
-  return setCatalogStatus(payload.catalogId, 'discontinued')
-    ? { ok: true }
-    : { ok: false, error: 'not_found' };
+  var ids = idsFromPayload(payload);
+  if (!ids.length) return { ok: false, error: 'not_found' };
+  var result = setCatalogStatuses(ids, 'discontinued');
+  if (result.updated.length) logChange(session, 'discontinueItem', result.updated.join(','), { count: result.updated.length });
+  return { ok: true, updated: result.updated, notFound: result.notFound };
 }
 
 function handleRestoreItem(payload) {
   var session = requireRole(payload, 'management');
   if (session.ok === false) return session;
-  return setCatalogStatus(payload.catalogId, 'active')
-    ? { ok: true }
-    : { ok: false, error: 'not_found' };
+  var ids = idsFromPayload(payload);
+  if (!ids.length) return { ok: false, error: 'not_found' };
+  var result = setCatalogStatuses(ids, 'active');
+  if (result.updated.length) logChange(session, 'restoreItem', result.updated.join(','), { count: result.updated.length });
+  return { ok: true, updated: result.updated, notFound: result.notFound };
+}
+
+// Edits an existing catalog item's fields in place (name/unit/group/etc.) —
+// separate from the status-only transitions above. Management only, since
+// renaming a shared list item affects everyone who fills out that form.
+function handleUpdateItem(payload) {
+  var session = requireRole(payload, 'management');
+  if (session.ok === false) return session;
+
+  var sheet = getCatalogSheet();
+  var data = sheet.getDataRange().getValues();
+  var changes = payload.changes || {};
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === payload.catalogId) {
+      var formType = data[i][1];
+      if (changes.name !== undefined && catalogNameTaken(data, formType, changes.name, payload.catalogId)) {
+        return { ok: false, error: 'duplicate_name' };
+      }
+      var COLS = { name: 4, group: 3, unit: 5, threshold: 6, location: 7, target: 8 };
+      Object.keys(COLS).forEach(function (key) {
+        if (changes[key] !== undefined) sheet.getRange(i + 1, COLS[key]).setValue(changes[key]);
+      });
+      logChange(session, 'updateItem', payload.catalogId, changes);
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'not_found' };
 }
 
 // ===========================================================================
@@ -335,10 +424,28 @@ function handleUpdateEntry(payload) {
       if (changes.details !== undefined) sheet.getRange(i + 1, 5).setValue(changes.details);
       sheet.getRange(i + 1, 7).setValue(session.username);
       sheet.getRange(i + 1, 8).setValue(new Date().toISOString());
+      logChange(session, 'updateEntry', payload.entryId, changes);
       return { ok: true };
     }
   }
   return { ok: false, error: 'not_found' };
+}
+
+// ===========================================================================
+// Management — changelog
+// ===========================================================================
+function handleGetChangelog(payload) {
+  var session = requireRole(payload, 'management');
+  if (session.ok === false) return session;
+
+  var data = getChangelogSheet().getDataRange().getValues();
+  var limit = payload.limit || 200;
+  var entries = [];
+  for (var i = data.length - 1; i >= 1 && entries.length < limit; i--) {
+    var row = data[i];
+    entries.push({ timestamp: row[0], username: row[1], role: row[2], action: row[3], target: row[4], details: row[5] });
+  }
+  return { ok: true, entries: entries };
 }
 
 // ===========================================================================
@@ -359,6 +466,17 @@ function handleGetUsers(payload) {
   return { ok: true, users: users };
 }
 
+// Usernames are matched case-insensitively everywhere; whatever case was
+// originally entered at account creation is preserved for storage/display.
+// Returns the row index into `data` (>=1) or -1 if no match.
+function findUserRowIndex(data, username) {
+  var needle = String(username || '').trim().toLowerCase();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toLowerCase() === needle) return i;
+  }
+  return -1;
+}
+
 function handleAddUser(payload) {
   var session = requireRole(payload, 'management');
   if (session.ok === false) return session;
@@ -372,13 +490,12 @@ function handleAddUser(payload) {
 
   var sheet = getUsersSheet();
   var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === username) return { ok: false, error: 'username_taken' };
-  }
+  if (findUserRowIndex(data, username) !== -1) return { ok: false, error: 'username_taken' };
 
   var salt = Utilities.getUuid();
   var hash = hashPassword(newUser.password, salt);
   sheet.appendRow([username, newUser.name || username, role, hash, salt, true, new Date().toISOString()]);
+  logChange(session, 'addUser', username, { role: role });
   return { ok: true };
 }
 
@@ -386,8 +503,10 @@ function handleRemoveUser(payload) {
   var session = requireRole(payload, 'management');
   if (session.ok === false) return session;
 
-  var username = payload.username;
-  if (username === session.username) return { ok: false, error: 'cannot_remove_self' };
+  var username = String(payload.username || '').trim();
+  if (username.toLowerCase() === String(session.username).toLowerCase()) {
+    return { ok: false, error: 'cannot_remove_self' };
+  }
 
   var sheet = getUsersSheet();
   var data = sheet.getDataRange().getValues();
@@ -397,16 +516,35 @@ function handleRemoveUser(payload) {
     if (data[i][2] === 'management' && data[i][5] === true) activeManagers++;
   }
 
-  for (var j = 1; j < data.length; j++) {
-    if (data[j][0] === username) {
-      if (data[j][2] === 'management' && data[j][5] === true && activeManagers <= 1) {
-        return { ok: false, error: 'cannot_remove_last_management' };
-      }
-      sheet.getRange(j + 1, 6).setValue(false);
-      return { ok: true };
-    }
+  var j = findUserRowIndex(data, username);
+  if (j === -1) return { ok: false, error: 'not_found' };
+  if (data[j][2] === 'management' && data[j][5] === true && activeManagers <= 1) {
+    return { ok: false, error: 'cannot_remove_last_management' };
   }
-  return { ok: false, error: 'not_found' };
+  sheet.getRange(j + 1, 6).setValue(false);
+  logChange(session, 'removeUser', data[j][0], {});
+  return { ok: true };
+}
+
+function handleResetPassword(payload) {
+  var session = requireRole(payload, 'management');
+  if (session.ok === false) return session;
+
+  var username = String(payload.username || '').trim();
+  var newPassword = String(payload.newPassword || '');
+  if (!username || !newPassword) return { ok: false, error: 'invalid_request' };
+
+  var sheet = getUsersSheet();
+  var data = sheet.getDataRange().getValues();
+  var i = findUserRowIndex(data, username);
+  if (i === -1) return { ok: false, error: 'not_found' };
+
+  var salt = Utilities.getUuid();
+  var hash = hashPassword(newPassword, salt);
+  sheet.getRange(i + 1, 4).setValue(hash); // passwordHash
+  sheet.getRange(i + 1, 5).setValue(salt); // passwordSalt
+  logChange(session, 'resetPassword', data[i][0], {});
+  return { ok: true };
 }
 
 var SEED_CATALOG = [
@@ -431,19 +569,11 @@ var SEED_CATALOG = [
   {formType:"inventory", group:"Coffee / Tea Mix", location:"Kitchen", name:"Rad'ai", unit:"lb", threshold:'', target:''},
   {formType:"inventory", group:"Coffee / Tea Mix", location:"Kitchen", name:"Qishr / Coffee Husks", unit:"lb", threshold:'', target:''},
   {formType:"inventory", group:"Coffee / Tea Mix", location:"Kitchen", name:"Qishr Spices", unit:"lb", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Honeycomb 16\"", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Sabaya 16\"", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Large Dubai Chocolate", unit:"Piece", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Small Dubai Chocolate", unit:"Bar", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Lotus Cheesecake", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Lotus Milk Cake", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Saffron Pastry", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Date Cake", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Pistachio Basbousa", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Pistachio Bites", unit:"24 Count", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Pistachio Cheesecake", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Pistachio Milk Cake", unit:"Tray", threshold:'', target:''},
-  {formType:"inventory", group:"Kitchen — Pastries & Food", location:"Kitchen", name:"Caramel Milk Cake", unit:"Tray", threshold:'', target:''},
+  // Note: the "Kitchen — Pastries & Food" dessert items (Honeycomb, Dubai
+  // Chocolate, Lotus/Pistachio/Caramel cakes, etc.) are deliberately not
+  // seeded here — they're already tracked daily under formType:"dessert"
+  // below, and Weekly Inventory shouldn't duplicate the Dessert Inventory
+  // form's list.
   {formType:"inventory", group:"Sauce / Syrup", location:"Storage", name:"1883 Blackberry", unit:"Bottle", threshold:'', target:''},
   {formType:"inventory", group:"Sauce / Syrup", location:"Storage", name:"1883 Blueberry", unit:"Bottle", threshold:'', target:''},
   {formType:"inventory", group:"Sauce / Syrup", location:"Storage", name:"Brown Sugar Sauce", unit:"Bottle", threshold:'', target:''},
