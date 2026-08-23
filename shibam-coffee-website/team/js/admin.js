@@ -71,6 +71,53 @@
     return isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
   }
 
+  // A single form submit can produce several rows (one per catalog item
+  // ordered, plus one per free-text "unlisted" item on the local order
+  // form) — without this they read as disconnected entries that happen to
+  // share a timestamp. Tags each entry with a short, stable badge so rows
+  // from the same submit are visibly grouped no matter how the table is
+  // currently sorted or searched. Uses the real submissionId when present
+  // (current backend); falls back to matching submittedAt+employeeName+date
+  // for rows written before that column existed.
+  function assignSubmissionBadges(entries) {
+    var seen = new Map();
+    var counter = 0;
+    entries.forEach(function (entry) {
+      var key = entry.submissionId || (entry.submittedAt + '|' + entry.employeeName + '|' + entry.date);
+      if (!seen.has(key)) { counter++; seen.set(key, counter); }
+      entry._submissionBadge = '#' + seen.get(key);
+    });
+  }
+
+  // Renders entry.details (raw JSON) as short labelled text instead of a
+  // JSON blob, branching on which keys are present to cover every form's
+  // shape. Falls back to a generic key: value join for anything else, and
+  // to the raw string if it isn't parseable JSON at all — never throws.
+  function formatDetails(entry) {
+    var parsed;
+    try { parsed = JSON.parse(entry.details); } catch (e) { return entry.details; }
+    if (!parsed || typeof parsed !== 'object') return entry.details;
+
+    if ('qtyOnHand' in parsed) {
+      return 'Category: ' + (parsed.category || '—') + ' · Qty on hand: ' + parsed.qtyOnHand +
+        (parsed.notes ? ' · Notes: ' + parsed.notes : '');
+    }
+    if ('countOnHand' in parsed) {
+      return 'Count on hand: ' + parsed.countOnHand + ' · New delivery: ' + parsed.deliveryReceived;
+    }
+    if ('standingMon' in parsed) {
+      return 'Vendor: ' + (parsed.vendor || '—') + ' · New Mon: ' + parsed.newMon + ' · New Fri: ' + parsed.newFri;
+    }
+    if ('currentStock' in parsed) {
+      return 'Unit: ' + (parsed.unit || '—') + ' · Order below: ' + parsed.threshold +
+        ' · Have: ' + parsed.currentStock + ' · Order? ' + parsed.order;
+    }
+    if ('qty' in parsed && 'name' in parsed) {
+      return 'Not on list · Qty needed: ' + parsed.qty;
+    }
+    return Object.keys(parsed).map(function (k) { return k + ': ' + parsed[k]; }).join(' · ');
+  }
+
   // =========================================================================
   // Confirmation modal — replaces window.confirm() for destructive actions.
   // Returns a Promise<boolean>; resolves false on Cancel, backdrop click, or Esc.
@@ -246,6 +293,7 @@
       searchPlaceholder: 'Search by employee or product…',
       emptyMessage: 'No submissions yet for this form.',
       columns: [
+        { label: 'Submission' },
         { label: 'Submitted', key: 'submittedAt' },
         { label: 'Employee', key: 'employeeName' },
         { label: 'Date', key: 'date' },
@@ -261,8 +309,8 @@
       buildRow: function (entry) { return buildSubmissionRow(entry, select.value, function () { loadSubmissions(select.value, controls); }); },
       csv: {
         filename: 'submissions.csv',
-        headers: ['Submitted', 'Employee', 'Date', 'Product', 'Details', 'Last Edited By', 'Last Edited At'],
-        row: function (e) { return [formatDateTime(e.submittedAt), e.employeeName, e.date, e.product, e.details, e.lastEditedBy, formatDateTime(e.lastEditedAt)]; }
+        headers: ['Submission', 'Submitted', 'Employee', 'Date', 'Product', 'Details', 'Last Edited By', 'Last Edited At'],
+        row: function (e) { return [e._submissionBadge || '', formatDateTime(e.submittedAt), e.employeeName, e.date, e.product, e.details, e.lastEditedBy, formatDateTime(e.lastEditedAt)]; }
       }
     });
 
@@ -273,12 +321,14 @@
   function loadSubmissions(formType, controls) {
     Auth.apiCall('getEntries', { formType: formType, limit: 200 }).then(function (result) {
       if (!result.ok) { controls.setData([]); return; }
+      assignSubmissionBadges(result.entries);
       controls.setData(result.entries);
     });
   }
 
   function buildSubmissionRow(entry, formType, refresh) {
     var row = el('tr');
+    row.appendChild(el('td', 'count-table__unit', entry._submissionBadge || ''));
     row.appendChild(el('td', 'count-table__unit', formatDateTime(entry.submittedAt)));
     row.appendChild(el('td', null, entry.employeeName));
 
@@ -288,12 +338,12 @@
     var productInput = el('input'); productInput.type = 'text'; productInput.value = entry.product; productInput.readOnly = true;
     var productCell = el('td'); productCell.appendChild(productInput); row.appendChild(productCell);
 
-    var detailsInput = el('textarea'); detailsInput.value = entry.details; detailsInput.readOnly = true; detailsInput.rows = 2;
+    var detailsInput = el('textarea'); detailsInput.value = formatDetails(entry); detailsInput.readOnly = true; detailsInput.rows = 2;
     var detailsCell = el('td'); detailsCell.appendChild(detailsInput); row.appendChild(detailsCell);
 
     row.appendChild(el('td', 'count-table__unit', entry.lastEditedBy
       ? entry.lastEditedBy + ' — ' + formatDateTime(entry.lastEditedAt)
-      : '—'));
+      : 'Not edited yet'));
 
     var actionCell = el('td');
     var editBtn = el('button', 'btn-inline-action', 'Edit');
@@ -305,6 +355,7 @@
     editBtn.addEventListener('click', function () {
       dateInput.readOnly = false;
       productInput.readOnly = false;
+      detailsInput.value = entry.details; // switch from the formatted display to raw JSON to actually edit it
       detailsInput.readOnly = false;
       editBtn.hidden = true;
       saveBtn.hidden = false;

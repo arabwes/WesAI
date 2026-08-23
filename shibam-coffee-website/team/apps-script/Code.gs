@@ -103,6 +103,15 @@ function getSheet(name, headers) {
   if (!sheet) {
     sheet = ss.insertSheet(name);
     sheet.appendRow(headers);
+    return sheet;
+  }
+  // Auto-heals an existing sheet whose header row predates a newly added
+  // column (e.g. submissionId) — appends just the missing header cells,
+  // no need to hand-edit the sheet after a redeploy. A no-op for any sheet
+  // whose headers array hasn't grown.
+  var lastCol = sheet.getLastColumn();
+  if (headers.length > lastCol) {
+    sheet.getRange(1, lastCol + 1, 1, headers.length - lastCol).setValues([headers.slice(lastCol)]);
   }
   return sheet;
 }
@@ -207,7 +216,7 @@ function handleSubmitForm(payload) {
   if (session.ok === false) return session;
 
   var sheetName = LOG_TABS[payload.formType] || 'Other';
-  var sheet = getSheet(sheetName, ['submittedAt', 'employeeName', 'date', 'product', 'details', 'entryId', 'lastEditedBy', 'lastEditedAt']);
+  var sheet = getSheet(sheetName, ['submittedAt', 'employeeName', 'date', 'product', 'details', 'entryId', 'lastEditedBy', 'lastEditedAt', 'submissionId']);
 
   var rows = flattenSubmission(payload, session);
   if (rows.length) {
@@ -219,17 +228,22 @@ function handleSubmitForm(payload) {
 // One row per line item — who/when/date repeated on each row so the sheet
 // can be filtered or pivoted without a lookup, and each row gets its own
 // entryId so Management can edit exactly one item from a submission.
+// Every row from one submit also shares a single submissionId, distinct
+// from entryId, so the admin dashboard can show that a Local Order List
+// submission's catalog-item row and unlisted-item row are one event
+// rather than two disconnected entries.
 function flattenSubmission(payload, session) {
   var when = payload.submittedAt || new Date().toISOString();
   var who = session.name;
   var date = payload.weekOf || payload.date || payload.orderDate || '';
+  var submissionId = Utilities.getUuid();
   var rows = [];
 
   (payload.items || []).forEach(function (item) {
-    rows.push([when, who, date, item.product, JSON.stringify(item), Utilities.getUuid(), '', '']);
+    rows.push([when, who, date, item.product, JSON.stringify(item), Utilities.getUuid(), '', '', submissionId]);
   });
   (payload.unlistedItems || []).forEach(function (item) {
-    rows.push([when, who, date, item.name + ' (not on list)', JSON.stringify(item), Utilities.getUuid(), '', '']);
+    rows.push([when, who, date, item.name + ' (not on list)', JSON.stringify(item), Utilities.getUuid(), '', '', submissionId]);
   });
   return rows;
 }
@@ -401,7 +415,8 @@ function handleGetEntries(payload) {
     var row = data[i];
     entries.push({
       submittedAt: row[0], employeeName: row[1], date: row[2], product: row[3],
-      details: row[4], entryId: row[5], lastEditedBy: row[6], lastEditedAt: row[7]
+      details: row[4], entryId: row[5], lastEditedBy: row[6], lastEditedAt: row[7],
+      submissionId: row[8] || ''
     });
   }
   return { ok: true, entries: entries };
@@ -422,7 +437,10 @@ function handleUpdateEntry(payload) {
       if (changes.date !== undefined) sheet.getRange(i + 1, 3).setValue(changes.date);
       if (changes.product !== undefined) sheet.getRange(i + 1, 4).setValue(changes.product);
       if (changes.details !== undefined) sheet.getRange(i + 1, 5).setValue(changes.details);
-      sheet.getRange(i + 1, 7).setValue(session.username);
+      // Display name, not login handle, so this matches the Employee
+      // column's format (who submitted vs. who last edited should read
+      // the same way).
+      sheet.getRange(i + 1, 7).setValue(session.name);
       sheet.getRange(i + 1, 8).setValue(new Date().toISOString());
       logChange(session, 'updateEntry', payload.entryId, changes);
       return { ok: true };
