@@ -15,6 +15,7 @@
     initCatalogTab();
     initUsersTab();
     initChangelogTab();
+    initDocumentsTab();
   });
 
   function el(tag, className, text) {
@@ -89,33 +90,14 @@
     });
   }
 
-  // Renders entry.details (raw JSON) as short labelled text instead of a
-  // JSON blob, branching on which keys are present to cover every form's
-  // shape. Falls back to a generic key: value join for anything else, and
-  // to the raw string if it isn't parseable JSON at all — never throws.
-  function formatDetails(entry) {
-    var parsed;
-    try { parsed = JSON.parse(entry.details); } catch (e) { return entry.details; }
-    if (!parsed || typeof parsed !== 'object') return entry.details;
-
-    if ('qtyOnHand' in parsed) {
-      return 'Category: ' + (parsed.category || '—') + ' · Qty on hand: ' + parsed.qtyOnHand +
-        (parsed.notes ? ' · Notes: ' + parsed.notes : '');
-    }
-    if ('countOnHand' in parsed) {
-      return 'Count on hand: ' + parsed.countOnHand + ' · New delivery: ' + parsed.deliveryReceived;
-    }
-    if ('standingMon' in parsed) {
-      return 'Vendor: ' + (parsed.vendor || '—') + ' · New Mon: ' + parsed.newMon + ' · New Fri: ' + parsed.newFri;
-    }
-    if ('currentStock' in parsed) {
-      return 'Unit: ' + (parsed.unit || '—') + ' · Order below: ' + parsed.threshold +
-        ' · Have: ' + parsed.currentStock + ' · Order? ' + parsed.order;
-    }
-    if ('qty' in parsed && 'name' in parsed) {
-      return 'Not on list · Qty needed: ' + parsed.qty;
-    }
-    return Object.keys(parsed).map(function (k) { return k + ': ' + parsed[k]; }).join(' · ');
+  // A line item's details JSON is {removed:true} once it's been dropped by
+  // a same-day recall/edit (see getMyEntries/updateMyEntries in Code.gs) —
+  // the underlying sheet row is kept for audit but has nothing to show here.
+  function isRemovedEntry(entry) {
+    try {
+      var parsed = JSON.parse(entry.details);
+      return !!parsed && parsed.removed === true;
+    } catch (e) { return false; }
   }
 
   // =========================================================================
@@ -202,7 +184,14 @@
       var exportBtn = el('button', 'btn-outline btn-export-csv', 'Export CSV');
       exportBtn.type = 'button';
       exportBtn.addEventListener('click', function () {
-        downloadCsv(opts.csv.filename, opts.csv.headers, lastFiltered.map(opts.csv.row));
+        // csv.row normally returns one CSV row per item. Submissions'
+        // csv.row returns an array of rows instead (one per line item
+        // inside that submission) — flatten one level either way.
+        var rows = [];
+        lastFiltered.map(opts.csv.row).forEach(function (r) {
+          if (Array.isArray(r[0])) rows = rows.concat(r); else rows.push(r);
+        });
+        downloadCsv(opts.csv.filename, opts.csv.headers, rows);
       });
       controlsRow.appendChild(exportBtn);
     }
@@ -263,9 +252,17 @@
 
       var tbody = el('tbody');
       filtered.forEach(function (item) {
-        var row = opts.buildRow(item);
-        applyDataLabels(row, headerLabels);
-        tbody.appendChild(row);
+        // buildRow normally returns one <tr>. A row that expands into
+        // child content (Submissions' per-item detail) returns an array
+        // instead — only the first (the always-visible summary row) gets
+        // the mobile data-label treatment; an expanded detail row carries
+        // its own inner table with its own headers.
+        var built = opts.buildRow(item);
+        var rows = Array.isArray(built) ? built : [built];
+        rows.forEach(function (row, i) {
+          if (i === 0) applyDataLabels(row, headerLabels);
+          tbody.appendChild(row);
+        });
       });
       table.appendChild(tbody);
       scroll.appendChild(table);
@@ -282,70 +279,233 @@
   }
 
   // =========================================================================
-  // Submissions — view + inline edit any field on a past entry
+  // Submissions — select a submission to expand it into its line items.
+  // Keeps the table one row per submission instead of one row per product,
+  // and gives each form type its own real Details columns instead of a
+  // single JSON-blob column.
   // =========================================================================
+  var LINE_ITEM_COLUMNS = {
+    'inventory': ['Item', 'Category', 'Qty on Hand', 'Notes', 'Last Edited', 'Actions'],
+    'dessert-daily': ['Item', 'Count on Hand', 'New Delivery', 'Last Edited', 'Actions'],
+    'dessert-order': ['Item', 'Vendor', 'New Mon', 'New Fri', 'Last Edited', 'Actions'],
+    'local-order': ['Item', 'Unit', 'Order Below', 'Have / Qty Needed', 'Order?', 'Last Edited', 'Actions']
+  };
+
   function initSubmissionsTab() {
     var select = document.getElementById('submissions-form-type');
     var mount = document.getElementById('submissions-table');
+    var expanded = new Set(); // submission keys currently expanded, survives re-render
 
     var controls = attachTableControls({
       mount: mount,
       searchPlaceholder: 'Search by employee or product…',
       emptyMessage: 'No submissions yet for this form.',
       columns: [
+        { label: '' },
         { label: 'Submission' },
         { label: 'Submitted', key: 'submittedAt' },
         { label: 'Employee', key: 'employeeName' },
         { label: 'Date', key: 'date' },
-        { label: 'Product', key: 'product' },
-        { label: 'Details' },
-        { label: 'Last Edited', key: 'lastEditedAt' },
-        { label: 'Actions' }
+        { label: 'Items', key: 'itemCount' },
+        { label: 'Last Edited' }
       ],
-      searchPredicate: function (entry, q) {
-        return (entry.employeeName || '').toLowerCase().indexOf(q) !== -1 ||
-          (entry.product || '').toLowerCase().indexOf(q) !== -1;
+      searchPredicate: function (group, q) {
+        if ((group.employeeName || '').toLowerCase().indexOf(q) !== -1) return true;
+        return group.entries.some(function (e) { return (e.product || '').toLowerCase().indexOf(q) !== -1; });
       },
-      buildRow: function (entry) { return buildSubmissionRow(entry, select.value, function () { loadSubmissions(select.value, controls); }); },
+      buildRow: function (group) {
+        return buildSubmissionGroupRow(group, select.value, expanded, function () { loadSubmissions(select.value, controls, expanded); });
+      },
       csv: {
         filename: 'submissions.csv',
         headers: ['Submission', 'Submitted', 'Employee', 'Date', 'Product', 'Details', 'Last Edited By', 'Last Edited At'],
-        row: function (e) { return [e._submissionBadge || '', formatDateTime(e.submittedAt), e.employeeName, e.date, e.product, e.details, e.lastEditedBy, formatDateTime(e.lastEditedAt)]; }
+        row: function (group) {
+          return group.entries.map(function (e) {
+            return [group.badge || '', formatDateTime(e.submittedAt), e.employeeName, e.date, e.product, e.details, e.lastEditedBy, formatDateTime(e.lastEditedAt)];
+          });
+        }
       }
     });
 
-    select.addEventListener('change', function () { controls.reset(); loadSubmissions(select.value, controls); });
-    loadSubmissions(select.value, controls);
+    select.addEventListener('change', function () {
+      expanded.clear();
+      controls.reset();
+      loadSubmissions(select.value, controls, expanded);
+    });
+    loadSubmissions(select.value, controls, expanded);
   }
 
-  function loadSubmissions(formType, controls) {
+  function loadSubmissions(formType, controls, expanded) {
     Auth.apiCall('getEntries', { formType: formType, limit: 200 }).then(function (result) {
       if (!result.ok) { controls.setData([]); return; }
       assignSubmissionBadges(result.entries);
-      controls.setData(result.entries);
+      controls.setData(groupSubmissions(result.entries));
     });
   }
 
-  function buildSubmissionRow(entry, formType, refresh) {
+  // Collapses the flat entries array into one row per submission (same
+  // grouping key as assignSubmissionBadges), dropping any line item an
+  // edit later removed and any submission left with nothing to show.
+  function groupSubmissions(entries) {
+    var byKey = new Map();
+    var order = [];
+    entries.forEach(function (entry) {
+      var key = entry.submissionId || (entry.submittedAt + '|' + entry.employeeName + '|' + entry.date);
+      var group = byKey.get(key);
+      if (!group) {
+        group = { key: key, badge: entry._submissionBadge, submittedAt: entry.submittedAt, employeeName: entry.employeeName, date: entry.date, entries: [] };
+        byKey.set(key, group);
+        order.push(group);
+      }
+      if (!isRemovedEntry(entry)) group.entries.push(entry);
+    });
+
+    order.forEach(function (group) {
+      group.itemCount = group.entries.length;
+      var edited = group.entries.filter(function (e) { return e.lastEditedAt; })
+        .sort(function (a, b) { return new Date(b.lastEditedAt) - new Date(a.lastEditedAt); });
+      group.lastEditedBy = edited.length ? edited[0].lastEditedBy : '';
+      group.lastEditedAt = edited.length ? edited[0].lastEditedAt : '';
+    });
+
+    return order.filter(function (group) { return group.entries.length > 0; });
+  }
+
+  function buildSubmissionGroupRow(group, formType, expanded, refresh) {
+    var isOpen = expanded.has(group.key);
+
+    var row = el('tr', 'submission-row');
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+
+    var toggleCell = el('td');
+    toggleCell.appendChild(el('span', 'submission-row__toggle', isOpen ? '−' : '+'));
+    row.appendChild(toggleCell);
+
+    row.appendChild(el('td', 'count-table__unit', group.badge || ''));
+    row.appendChild(el('td', 'count-table__unit', formatDateTime(group.submittedAt)));
+    row.appendChild(el('td', null, group.employeeName));
+    row.appendChild(el('td', null, group.date));
+    row.appendChild(el('td', 'count-table__unit', group.itemCount + (group.itemCount === 1 ? ' item' : ' items')));
+    row.appendChild(el('td', 'count-table__unit', group.lastEditedBy
+      ? group.lastEditedBy + ' — ' + formatDateTime(group.lastEditedAt)
+      : 'Not edited yet'));
+
+    function toggle() {
+      if (expanded.has(group.key)) expanded.delete(group.key); else expanded.add(group.key);
+      refresh();
+    }
+    row.addEventListener('click', toggle);
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+
+    if (!isOpen) return row;
+
+    var detailRow = el('tr');
+    var detailCell = el('td', 'submission-detail-cell');
+    detailCell.colSpan = 7;
+    detailCell.appendChild(buildLineItemsTable(group, formType, refresh));
+    detailRow.appendChild(detailCell);
+
+    return [row, detailRow];
+  }
+
+  function buildLineItemsTable(group, formType, refresh) {
+    var wrap = el('div', 'table-scroll');
+    var table = el('table', 'count-table');
+    var thead = el('thead');
+    var headRow = el('tr');
+    var headers = LINE_ITEM_COLUMNS[formType] || LINE_ITEM_COLUMNS['inventory'];
+    headers.forEach(function (label) { headRow.appendChild(el('th', null, label)); });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    group.entries.forEach(function (entry) {
+      var lineRow = buildLineItemRow(entry, formType, refresh);
+      applyDataLabels(lineRow, headers);
+      tbody.appendChild(lineRow);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  // Coerces a saved field back to a number when it looks like one — details
+  // JSON stores quantities as numbers, and saving a bare string there would
+  // silently change the value's type on every future read of this row.
+  function coerceValue(raw) {
+    if (raw === '') return raw;
+    var num = Number(raw);
+    return isNaN(num) ? raw : num;
+  }
+
+  // One line item within an expanded submission — real per-field columns
+  // matching that form's shape (see LINE_ITEM_COLUMNS), with the number
+  // that was actually entered visually emphasized via .count-table__qty-value.
+  // Edit unlocks every field shown; Save reconstructs the details JSON from
+  // just those fields, preserving any key this view doesn't surface.
+  function buildLineItemRow(entry, formType, refresh) {
+    var parsed;
+    try { parsed = JSON.parse(entry.details); } catch (e) { parsed = null; }
+    if (!parsed || typeof parsed !== 'object') parsed = {};
+
     var row = el('tr');
-    row.appendChild(el('td', 'count-table__unit', entry._submissionBadge || ''));
-    row.appendChild(el('td', 'count-table__unit', formatDateTime(entry.submittedAt)));
-    row.appendChild(el('td', null, entry.employeeName));
+    var editableInputs = [];
 
-    var dateInput = el('input'); dateInput.type = 'text'; dateInput.value = entry.date; dateInput.readOnly = true;
-    var dateCell = el('td'); dateCell.appendChild(dateInput); row.appendChild(dateCell);
+    var itemInput = el('input'); itemInput.type = 'text'; itemInput.value = entry.product; itemInput.readOnly = true;
+    var itemCell = el('th', 'count-table__item'); itemCell.appendChild(itemInput); row.appendChild(itemCell);
+    editableInputs.push(itemInput);
 
-    var productInput = el('input'); productInput.type = 'text'; productInput.value = entry.product; productInput.readOnly = true;
-    var productCell = el('td'); productCell.appendChild(productInput); row.appendChild(productCell);
+    var fields = []; // { input, key } — read back into details JSON on Save
+    function addField(key, value, emphasize) {
+      var input = el('input');
+      input.type = 'text';
+      input.value = value === undefined || value === null ? '' : String(value);
+      input.readOnly = true;
+      if (emphasize) input.classList.add('count-table__qty-value');
+      var cell = el('td'); cell.appendChild(input); row.appendChild(cell);
+      fields.push({ input: input, key: key });
+      editableInputs.push(input);
+    }
+    function addStaticCell(text) {
+      row.appendChild(el('td', 'count-table__unit', text));
+    }
 
-    var detailsInput = el('textarea'); detailsInput.value = formatDetails(entry); detailsInput.readOnly = true; detailsInput.rows = 2;
-    var detailsCell = el('td'); detailsCell.appendChild(detailsInput); row.appendChild(detailsCell);
+    var isUnlisted = formType === 'local-order' && 'qty' in parsed && 'name' in parsed && !('currentStock' in parsed);
+
+    if (formType === 'inventory') {
+      addField('category', parsed.category, false);
+      addField('qtyOnHand', parsed.qtyOnHand, true);
+      addField('notes', parsed.notes, false);
+    } else if (formType === 'dessert-daily') {
+      addField('countOnHand', parsed.countOnHand, true);
+      addField('deliveryReceived', parsed.deliveryReceived, true);
+    } else if (formType === 'dessert-order') {
+      addField('vendor', parsed.vendor, false);
+      addField('newMon', parsed.newMon, true);
+      addField('newFri', parsed.newFri, true);
+    } else if (formType === 'local-order' && isUnlisted) {
+      addStaticCell('Not on list');
+      addStaticCell('—');
+      addField('qty', parsed.qty, true);
+      addStaticCell('—');
+    } else if (formType === 'local-order') {
+      addField('unit', parsed.unit, false);
+      addField('threshold', parsed.threshold, false);
+      addField('currentStock', parsed.currentStock, true);
+      addField('order', parsed.order, false);
+    } else {
+      addField('_raw', entry.details, false);
+    }
 
     row.appendChild(el('td', 'count-table__unit', entry.lastEditedBy
       ? entry.lastEditedBy + ' — ' + formatDateTime(entry.lastEditedAt)
       : 'Not edited yet'));
 
-    var actionCell = el('td');
+    var actionCell = el('td', 'count-table__actions');
     var editBtn = el('button', 'btn-inline-action', 'Edit');
     editBtn.type = 'button';
     var saveBtn = el('button', 'btn-inline-action', 'Save');
@@ -353,21 +513,21 @@
     saveBtn.hidden = true;
 
     editBtn.addEventListener('click', function () {
-      dateInput.readOnly = false;
-      productInput.readOnly = false;
-      detailsInput.value = entry.details; // switch from the formatted display to raw JSON to actually edit it
-      detailsInput.readOnly = false;
+      editableInputs.forEach(function (input) { input.readOnly = false; });
       editBtn.hidden = true;
       saveBtn.hidden = false;
-      productInput.focus();
+      itemInput.focus();
     });
 
     saveBtn.addEventListener('click', function () {
       saveBtn.disabled = true;
+      var newDetails = Object.assign({}, parsed);
+      fields.forEach(function (f) { newDetails[f.key] = coerceValue(f.input.value); });
+
       Auth.apiCall('updateEntry', {
         formType: formType,
         entryId: entry.entryId,
-        changes: { date: dateInput.value, product: productInput.value, details: detailsInput.value }
+        changes: { product: itemInput.value, details: JSON.stringify(newDetails) }
       }).then(function (result) {
         if (result.ok) refresh();
         else saveBtn.disabled = false;
@@ -753,6 +913,153 @@
     row.appendChild(el('td', null, entry.action));
     row.appendChild(el('td', 'count-table__unit', entry.target));
     row.appendChild(el('td', null, entry.details));
+    return row;
+  }
+
+  // =========================================================================
+  // Documents — add/edit/discontinue/restore the docs shown on /team/documents.
+  // Same CRUD shape as Catalog: soft-delete via status, no hard removal.
+  // =========================================================================
+  function initDocumentsTab() {
+    var mount = document.getElementById('documents-table');
+    if (!mount) return;
+
+    var controls = attachTableControls({
+      mount: mount,
+      searchPlaceholder: 'Search by title or category…',
+      emptyMessage: 'No documents added yet.',
+      columns: [
+        { label: 'Title', key: 'title' },
+        { label: 'Category', key: 'category' },
+        { label: 'Description', key: 'description' },
+        { label: 'Status', key: 'status' },
+        { label: 'Added By', key: 'addedBy' },
+        { label: 'Actions' }
+      ],
+      searchPredicate: function (doc, q) {
+        return (doc.title || '').toLowerCase().indexOf(q) !== -1 ||
+          (doc.category || '').toLowerCase().indexOf(q) !== -1;
+      },
+      buildRow: function (doc) { return buildDocumentRow(doc, function () { loadDocuments(controls); }); },
+      csv: {
+        filename: 'documents.csv',
+        headers: ['Title', 'Category', 'Description', 'Status', 'Added By'],
+        row: function (d) { return [d.title, d.category, d.description, d.status, d.addedBy]; }
+      }
+    });
+    loadDocuments(controls);
+
+    var form = document.getElementById('add-document-form');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var status = form.querySelector('[data-form-status]');
+
+      var document_ = {
+        title: form.title.value.trim(),
+        category: form.category.value.trim(),
+        description: form.description.value.trim(),
+        driveFileId: form.driveFileId.value.trim()
+      };
+      if (!document_.title) {
+        setStatus(status, 'error', 'Title is required.');
+        return;
+      }
+
+      var btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      Auth.apiCall('addDocument', { document: document_ }).then(function (result) {
+        btn.disabled = false;
+        if (result.ok) {
+          setStatus(status, 'success', 'Document added.');
+          form.reset();
+          loadDocuments(controls);
+        } else {
+          setStatus(status, 'error', 'Could not add that document.');
+        }
+      });
+    });
+  }
+
+  function loadDocuments(controls) {
+    Auth.apiCall('getDocuments', { includeAll: true }).then(function (result) {
+      if (!result.ok) { controls.setData([]); return; }
+      controls.setData(result.documents);
+    });
+  }
+
+  function buildDocumentRow(doc, refresh) {
+    var row = el('tr');
+    if (doc.status === 'discontinued') row.classList.add('is-discontinued');
+
+    var titleInput = el('input'); titleInput.type = 'text'; titleInput.value = doc.title; titleInput.readOnly = true;
+    var titleCell = el('th', 'count-table__item'); titleCell.appendChild(titleInput); row.appendChild(titleCell);
+
+    var categoryInput = el('input'); categoryInput.type = 'text'; categoryInput.value = doc.category || ''; categoryInput.readOnly = true;
+    var categoryCell = el('td'); categoryCell.appendChild(categoryInput); row.appendChild(categoryCell);
+
+    var descInput = el('input'); descInput.type = 'text'; descInput.value = doc.description || ''; descInput.readOnly = true;
+    var descCell = el('td'); descCell.appendChild(descInput); row.appendChild(descCell);
+
+    row.appendChild(el('td', null, doc.status));
+    row.appendChild(el('td', 'count-table__unit', doc.addedBy));
+
+    var actionCell = el('td', 'count-table__actions');
+
+    var editBtn = el('button', 'btn-inline-action', 'Edit');
+    editBtn.type = 'button';
+    var saveBtn = el('button', 'btn-inline-action', 'Save');
+    saveBtn.type = 'button';
+    saveBtn.hidden = true;
+
+    editBtn.addEventListener('click', function () {
+      titleInput.readOnly = false;
+      categoryInput.readOnly = false;
+      descInput.readOnly = false;
+      editBtn.hidden = true;
+      saveBtn.hidden = false;
+      titleInput.focus();
+    });
+
+    saveBtn.addEventListener('click', function () {
+      saveBtn.disabled = true;
+      Auth.apiCall('updateDocument', {
+        documentId: doc.documentId,
+        changes: { title: titleInput.value.trim(), category: categoryInput.value.trim(), description: descInput.value.trim() }
+      }).then(function (result) {
+        if (result.ok) refresh();
+        else saveBtn.disabled = false;
+      });
+    });
+
+    actionCell.appendChild(editBtn);
+    actionCell.appendChild(saveBtn);
+
+    if (doc.status === 'discontinued') {
+      var restoreBtn = el('button', 'btn-inline-action', 'Restore');
+      restoreBtn.type = 'button';
+      restoreBtn.addEventListener('click', function () {
+        restoreBtn.disabled = true;
+        Auth.apiCall('restoreDocument', { documentId: doc.documentId }).then(function (r) {
+          if (r.ok) refresh(); else restoreBtn.disabled = false;
+        });
+      });
+      actionCell.appendChild(restoreBtn);
+    } else {
+      var discBtn = el('button', 'btn-inline-action btn-inline-action--danger', 'Remove');
+      discBtn.type = 'button';
+      discBtn.addEventListener('click', function () {
+        confirmAction('Remove "' + doc.title + '" from the Documents page?').then(function (ok) {
+          if (!ok) return;
+          discBtn.disabled = true;
+          Auth.apiCall('discontinueDocument', { documentId: doc.documentId }).then(function (r) {
+            if (r.ok) refresh(); else discBtn.disabled = false;
+          });
+        });
+      });
+      actionCell.appendChild(discBtn);
+    }
+    row.appendChild(actionCell);
+
     return row;
   }
 })();

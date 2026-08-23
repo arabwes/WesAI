@@ -11,10 +11,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=5">
-  <script src="/team/js/config.js?v=5" defer></script>
-  <script src="/team/js/auth.js?v=5" defer></script>
-  <script src="/team/js/admin.js?v=5" defer></script>
+  <link rel="stylesheet" href="/team/css/styles.css?v=6">
+  <script src="/team/js/config.js?v=6" defer></script>
+  <script src="/team/js/auth.js?v=6" defer></script>
+  <script src="/team/js/admin.js?v=6" defer></script>
 </head>
 <body data-page="app" data-require-role="management">
 
@@ -46,6 +46,7 @@
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-catalog">Catalog</button>
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-users">Users</button>
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-changelog">Changelog</button>
+        <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-documents">Documents</button>
       </div>
 
       <section id="tab-submissions" data-tab-panel role="tabpanel">
@@ -113,6 +114,39 @@
       <section id="tab-changelog" data-tab-panel role="tabpanel" hidden>
         <p class="count-section__note">Every add, edit, discontinue/restore, and user-management action, newest first. Logins aren't included — this is a record of data changes, not activity.</p>
         <div id="changelog-table"></div>
+      </section>
+
+      <section id="tab-documents" data-tab-panel role="tabpanel" hidden>
+        <p class="count-section__note">Documents shown here appear on the Documents page for every logged-in team member. Each Drive file's sharing must be set to "Anyone with the link can view" for the embed and "Open in Drive" link to work.</p>
+        <div id="documents-table"></div>
+
+        <div class="form-card" style="margin-top: var(--space-5);">
+          <h3 style="margin-top:0;">Add a document</h3>
+          <form id="add-document-form" class="portal-form" novalidate>
+            <div class="form-grid form-grid--2">
+              <div class="form-group">
+                <label for="new-document-title">Title</label>
+                <input type="text" id="new-document-title" name="title" required>
+              </div>
+              <div class="form-group">
+                <label for="new-document-category">Category</label>
+                <input type="text" id="new-document-category" name="category" placeholder="e.g. Handbook">
+              </div>
+              <div class="form-group">
+                <label for="new-document-description">Description</label>
+                <input type="text" id="new-document-description" name="description">
+              </div>
+              <div class="form-group">
+                <label for="new-document-drive-id">Google Drive file ID</label>
+                <input type="text" id="new-document-drive-id" name="driveFileId" placeholder="from the Drive share link">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Add Document</button>
+              <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+            </div>
+          </form>
+        </div>
       </section>
 
     </div>

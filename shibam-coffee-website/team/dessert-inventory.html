@@ -11,11 +11,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=5">
-  <script src="/team/js/config.js?v=5" defer></script>
-  <script src="/team/js/auth.js?v=5" defer></script>
-  <script src="/team/js/data.js?v=5" defer></script>
-  <script src="/team/js/forms.js?v=5" defer></script>
+  <link rel="stylesheet" href="/team/css/styles.css?v=6">
+  <script src="/team/js/config.js?v=6" defer></script>
+  <script src="/team/js/auth.js?v=6" defer></script>
+  <script src="/team/js/data.js?v=6" defer></script>
+  <script src="/team/js/forms.js?v=6" defer></script>
 </head>
 <body data-page="app" data-require-role="barista">
 
@@ -37,15 +37,20 @@
 
       <div class="portal-intro">
         <h1>Dessert Inventory</h1>
-        <p>Log today's dessert counts and any deliveries that came in. The standing vendor order is on the second tab, for whoever places the Monday and Friday orders.</p>
+        <p>Log today's dessert counts and any deliveries that came in.</p>
       </div>
 
       <p class="session-banner" id="session-banner"></p>
 
+      <!-- HIDDEN: Standing Vendor Order tab — the tab switcher + second
+           panel are commented out below. To re-enable, restore this block
+           (the "Two tabs" version) and the .portal-tabs row above it, and
+           put back the "second tab" sentence in the intro <p> above.
       <div class="portal-tabs" role="tablist">
         <button type="button" class="portal-tab is-active" role="tab" aria-selected="true" data-tab-target="tab-daily">Daily Count</button>
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-order">Standing Vendor Order</button>
       </div>
+      -->
 
       <section id="tab-daily" data-tab-panel role="tabpanel">
         <div class="portal-callout">
@@ -72,6 +77,8 @@
         </form>
       </section>
 
+      <!-- HIDDEN: Standing Vendor Order panel — see the note above the
+           tab switcher for how to bring this back.
       <section id="tab-order" data-tab-panel role="tabpanel" hidden>
         <div class="portal-callout">
           <strong>Standing quantities are what we normally order.</strong>
@@ -96,6 +103,7 @@
           </div>
         </form>
       </section>
+      -->
 
     </div>
   </main>

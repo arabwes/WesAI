@@ -12,10 +12,17 @@ project.
 | `index.html` | Everyone | Login. The portal's root — this is what `/team/` shows. |
 | `dashboard.html` | Everyone (logged in) | Landing page — links to the three forms, plus an Admin card for Management. |
 | `inventory.html` | Barista+ | Weekly kitchen + storage count — desserts aren't on this list, see below. |
-| `dessert-inventory.html` | Barista+ | Daily dessert count/delivery log, plus a vendor-order tab. |
+| `dessert-inventory.html` | Barista+ | Daily dessert count/delivery log. The Standing Vendor Order tab is currently hidden — see below. |
 | `local-order.html` | Barista+ | Consolidated local market order request. |
-| `documents.html` | Barista+ | Employee handbook and other guidelines, embedded live from Google Drive. |
-| `admin.html` | Management only | Submissions, Catalog (search/sort/multiselect/edit), Users, Changelog. |
+| `documents.html` | Barista+ | List of company documents, managed by Management from the admin Documents tab. |
+| `document.html` | Barista+ | One document's own page (`?id=...`) — embed + "Open in Drive" link. |
+| `admin.html` | Management only | Submissions, Catalog (search/sort/multiselect/edit), Users, Changelog, Documents. |
+
+Standing Vendor Order (the second Dessert Inventory tab) is hidden, not
+deleted — the tab button and its `<section>` are commented out in
+`dessert-inventory.html` with a note on exactly how to bring them back. Its
+JS (`renderDessertOrderForm`, `DESSERT_VENDOR_ORDERS` in `js/data.js`) is
+untouched and just no-ops today since its mount element isn't in the DOM.
 
 Weekly Inventory intentionally does **not** include desserts (Honeycomb,
 Dubai Chocolate, the milk cakes/cheesecakes, etc.) — those are tracked once,
@@ -31,7 +38,7 @@ one that already seeded them before this change (a one-time manual step).
 |---|---|
 | **Barista** | Log in, submit the three forms. |
 | **Lead** | + flag a catalog item for discontinuation, add new items to any of the three lists. |
-| **Management** | + discontinue (archive) or restore items outright (individually or in bulk), edit an existing item's name/unit/group, view and edit any past submission, add/remove user accounts, reset a user's password, read the Changelog. |
+| **Management** | + discontinue (archive) or restore items outright (individually or in bulk), edit an existing item's name/unit/group, view and edit any past submission, add/remove user accounts, reset a user's password, read the Changelog, add/edit/remove documents. |
 
 Usernames are matched case-insensitively everywhere (login, adding a user,
 removing a user) — `Admin`, `admin`, and `ADMIN` are the same account.
@@ -60,6 +67,17 @@ scoped to your own login — if a shop tablet is shared between people,
 nobody sees anyone else's in-progress draft. Drafts live only in that
 browser (`localStorage`), so they don't survive switching devices.
 
+**Made a mistake on something you already submitted today?** Every form has
+a "Recall today's submission" button. It lists whatever you've submitted on
+*that form* so far today (same calendar day, checked against the
+spreadsheet's own timezone — not your device's), and loading one reopens
+the whole form pre-filled with what you sent. Submitting again **overwrites
+that same submission** instead of creating a new one — a banner at the top
+says so, with a "Cancel edit" option that drops back to a normal blank
+submission. This only reaches submissions from earlier today and only your
+own; anything older, or anyone else's, only Management can edit (via the
+Submissions tab below).
+
 ## Admin dashboard features
 
 - **Search + sort** on Submissions, Catalog, Users, and Changelog — click a
@@ -77,19 +95,29 @@ browser (`localStorage`), so they don't survive switching devices.
 - **Changelog tab** (Management only) — every add/edit/discontinue/restore
   and every user-management action, newest first, with who did it and when.
   Logins aren't included — this tracks data changes, not activity.
-- **Submissions tab shows readable details, and groups multi-row
-  submissions.** The Details column renders labelled text (e.g. "Unit: lb
-  · Order below: 5 · Have: 2 · Order? Yes") instead of raw JSON — "Edit"
-  still switches it to the real JSON to actually change it. A single form
-  submit can produce more than one row (Local Order List's free-text
-  "unlisted item" rows are separate from its catalog-item rows) — a
-  `#N` badge in the Submission column ties rows from the same submit
-  together no matter how the table is currently sorted or searched. Rows
-  written before this feature shipped fall back to grouping by matching
-  timestamp/employee/date instead of the badge. A never-edited entry now
-  reads "Not edited yet" instead of a bare dash, and Last Edited shows a
-  display name (matching the Employee column's format) rather than a login
-  handle.
+- **Submissions tab: select a submission to expand it.** The table shows one
+  row per submission (not one row per line item) — employee, submitted
+  time, date, item count, last edited. Click a row (or press Enter/Space)
+  to expand it into its line items in a nested table underneath; click
+  again to collapse. This replaces the old flat table where every line item
+  from every submission was interleaved in one long list. A `#N` badge
+  still ties a submission's rows together (falls back to matching
+  timestamp/employee/date for rows written before `submissionId` existed).
+  A never-edited submission reads "Not edited yet" instead of a bare dash.
+  - **Real columns instead of one Details blob.** Each form type gets its
+    own column set in the expanded view — e.g. Inventory shows Item /
+    Category / Qty on Hand / Notes; Local Order shows Item / Unit / Order
+    Below / Have (or Qty Needed for an unlisted item) / Order?. Whatever
+    number was actually entered (Qty on Hand, Count on Hand, Current Stock,
+    etc.) is visually emphasized — larger, bold, gold-tinted — so it's
+    immediately obvious at a glance, not just another cell in the row.
+  - **Edit** on a line item unlocks its specific fields (not raw JSON) and
+    "Save" writes them back, reconstructing that item's details JSON from
+    just the fields shown.
+  - A line item an employee later removed via "Recall today's submission"
+    (see above) shows `{"removed":true}` in the raw sheet but never appears
+    here — the row is kept for audit, not deleted, but the admin view only
+    shows what's still part of the submission.
 - **Reset password** — on the Users tab, next to Remove, for any active
   account. Prompts for a new temporary password and applies it immediately;
   share it with that person directly, there's no email/notification step.
@@ -211,29 +239,33 @@ Catalog schema, so it's still a static list in `js/data.js`
 (`DESSERT_VENDOR_ORDERS`). Edit that file directly if the standing order
 changes.
 
-## Documents portal setup (one-time per document)
+## Documents portal (admin-managed, no code changes needed)
 
-`documents.html` lists company documents (currently an Employee Handbook
-and an "Other Guidelines" category) and embeds each one live from Google
-Drive — there's no copy or sync, the page always shows the current file.
+`documents.html` lists company documents grouped by category; each one
+opens its own page (`document.html?id=...`) with a live Google Drive embed
+plus an "Open in Drive" link — no copy or sync, it always shows the current
+file. Management adds, edits, and removes documents entirely from the
+**Documents tab in the admin dashboard** — there's no file in this repo to
+edit anymore, add/edit/remove work exactly like the Catalog tab (removing
+a document archives it rather than deleting its row, same as everywhere
+else in this portal).
 
-**1. In Google Drive, set each document's sharing to "Anyone with the link
-can view."** The embed can't render a file it doesn't have access to, and
-this page has no login of its own beyond the portal's — it relies on the
-Drive link itself being viewable.
+**To add a document:**
+
+**1. In Google Drive, set the file's sharing to "Anyone with the link can
+view."** The embed can't render a file it doesn't have access to, and this
+page has no login of its own beyond the portal's — it relies on the Drive
+link itself being viewable.
 
 **2. Get that file's ID** from its share link
 (`https://drive.google.com/file/d/`**`THIS_PART`**`/view`).
 
-**3. Add it to `js/documents.js`** — each document is one entry in the
-`DOCUMENTS` array at the top of the file:
-```js
-{ title: 'Employee Handbook', description: '…', category: 'Handbook', driveFileId: 'THIS_PART' }
-```
-Leaving `driveFileId` empty shows a "Link coming soon" placeholder instead
-of a broken embed — that's what ships until real IDs are added. `category`
-groups related documents on the page; adding a new category (e.g. a future
-"Recipe Book") is the same one-line addition, no other code changes.
+**3. Admin dashboard → Documents tab → "Add a document"** — Title,
+Category, Description, and that Drive file ID. It appears on `/team/documents`
+immediately, no redeploy needed (Documents is a normal Catalog-style
+backend action, already live). Leaving the Drive file ID blank shows "This
+document has no file linked yet" on its page instead of a broken embed, so
+a document can be added as a placeholder before its file exists.
 
 ## Backend setup (one-time)
 
@@ -303,8 +335,9 @@ beyond running `setup` once.
 | `Users` | username, name, role, passwordHash, passwordSalt, active, createdAt | `role` is `barista`/`lead`/`management`. Removing a user sets `active=false` (soft-delete — preserves their submission history). |
 | `Sessions` | token, username, role, name, createdAt, expiresAt | One row per active login, 12-hour expiry. |
 | `Catalog` | catalogId, formType, group, name, unit, threshold, location, target, status, addedBy, addedAt | `formType` is `inventory` / `dessert` / `local-order`. `status` is `active` / `flagged` / `discontinued`. |
-| `Inventory Log`, `Dessert Daily Log`, `Dessert Order Log`, `Local Order Log` | submittedAt, employeeName, date, product, details, entryId, lastEditedBy, lastEditedAt, submissionId | One row per line item per submission. `details` is that item's full JSON. `entryId` is what Management's edit action targets. `submissionId` is shared by every row from the same submit (distinct from each row's own `entryId`) — added automatically to existing sheets the next time the backend redeploys, via `getSheet()`'s header auto-migration; rows written before that carry a blank `submissionId`. |
-| `Changelog` | timestamp, username, role, action, target, details | One row per mutating admin action (add/edit/discontinue/restore an item, edit an entry, add/remove a user, reset a password). Logins/logouts aren't included — `Sessions` already covers those, and they aren't data changes. Read-only from the portal (Changelog tab, Management only). |
+| `Inventory Log`, `Dessert Daily Log`, `Dessert Order Log`, `Local Order Log` | submittedAt, employeeName, date, product, details, entryId, lastEditedBy, lastEditedAt, submissionId, submittedByUsername | One row per line item per submission. `details` is that item's full JSON — a row an employee later removed via same-day recall/edit is marked `{"removed":true}` here rather than deleted. `entryId` is what Management's edit action targets. `submissionId` is shared by every row from the same submit (distinct from each row's own `entryId`). `submittedByUsername` is the literal login handle (not the display name in `employeeName`) — what "recall today's submission" filters by, since display names aren't reliably unique. Both columns are added automatically to existing sheets the next time the backend redeploys, via `getSheet()`'s header auto-migration; rows written before that carry blank values for whichever is missing. |
+| `Documents` | documentId, title, description, category, driveFileId, status, addedBy, addedAt | Backs the `/team/documents` page. `status` is `active` / `discontinued` (same archive-not-delete pattern as `Catalog`). Managed entirely from the admin Documents tab. |
+| `Changelog` | timestamp, username, role, action, target, details | One row per mutating admin action (add/edit/discontinue/restore an item or document, edit an entry, add/remove a user, reset a password). Logins/logouts aren't included — `Sessions` already covers those, and they aren't data changes. Read-only from the portal (Changelog tab, Management only). |
 
 ## Password & session security — read this before trusting it with more
 
