@@ -64,6 +64,15 @@ async function mockBackend(page) {
           { timestamp: new Date().toISOString(), username: 'TestManager', role: 'management', action: 'discontinueItem', target: 'abc-123', details: '{"count":1}' },
         ],
       };
+    } else if (action === 'getDocuments') {
+      payload = {
+        ok: true,
+        documents: [
+          { documentId: 'doc-1', title: 'Employee Handbook With A Fairly Long Title', description: 'Company policies and conduct.', category: 'Handbook', driveFileId: '', status: 'active', addedBy: 'TestManager', addedAt: new Date().toISOString() },
+        ],
+      };
+    } else if (action === 'getMyEntries') {
+      payload = { ok: true, submissions: [] };
     }
 
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
@@ -117,6 +126,7 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     '/team/local-order',
     '/team/admin',
     '/team/documents',
+    '/team/document?id=doc-1',
   ];
 
   for (const path of protectedPages) {
@@ -130,16 +140,26 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     });
   }
 
-  test('admin dashboard — all four tabs stay within viewport', async ({ page }) => {
+  test('admin dashboard — all five tabs stay within viewport', async ({ page }) => {
     await mockBackend(page);
     await seedSession(page);
     await page.goto('/team/admin');
     await page.waitForTimeout(300);
 
-    for (const tabId of ['tab-submissions', 'tab-catalog', 'tab-users', 'tab-changelog']) {
+    for (const tabId of ['tab-submissions', 'tab-catalog', 'tab-users', 'tab-changelog', 'tab-documents']) {
       await page.click('[data-tab-target="' + tabId + '"]');
       await page.waitForTimeout(150);
       await assertNoHorizontalScroll(page, '/team/admin#' + tabId);
     }
+  });
+
+  test('admin Submissions tab — an expanded submission stays within viewport', async ({ page }) => {
+    await mockBackend(page);
+    await seedSession(page);
+    await page.goto('/team/admin');
+    await page.waitForTimeout(300);
+    await page.click('.submission-row');
+    await page.waitForTimeout(150);
+    await assertNoHorizontalScroll(page, '/team/admin#tab-submissions (expanded)');
   });
 });

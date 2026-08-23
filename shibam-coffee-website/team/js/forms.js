@@ -187,6 +187,90 @@
     return applied;
   }
 
+  // =========================================================================
+  // Recall — reopen a submission from earlier today (same calendar day, per
+  // the backend's own check) to fix a mistake. Resubmitting overwrites that
+  // submission via updateMyEntries instead of creating a new one.
+  // =========================================================================
+  var editingSubmissionId = {}; // formType -> submissionId currently being edited, or null
+
+  function formatRecallTime(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function showEditingBanner(form, formType, onCancel) {
+    clearEditingBanner(form);
+    var banner = el('div', 'editing-banner');
+    banner.appendChild(el('span', 'editing-banner__text', 'Editing a submission from earlier today — submitting will update it, not add a new one.'));
+    var cancelBtn = el('button', 'btn-remove-row', 'Cancel edit');
+    cancelBtn.type = 'button';
+    cancelBtn.addEventListener('click', onCancel);
+    banner.appendChild(cancelBtn);
+    form.insertBefore(banner, form.firstChild);
+  }
+
+  function clearEditingBanner(form) {
+    var existing = form.querySelector('.editing-banner');
+    if (existing) existing.remove();
+  }
+
+  // Builds the "Recall today's submission" toggle + picker, and wires
+  // `applyItems(submission)` to actually populate the form once one is
+  // chosen. Appended near the top of `mount` (the item table's container),
+  // right before its rows — this is called once per form, right after that
+  // form's rows exist, same timing as initAutosave.
+  function initRecall(formType, form, mount, applyItems) {
+    var bar = el('div', 'recall-bar');
+    var toggle = el('button', 'btn-outline', 'Recall today’s submission');
+    toggle.type = 'button';
+    bar.appendChild(toggle);
+
+    var panel = el('div', 'recall-panel');
+    panel.hidden = true;
+    bar.appendChild(panel);
+
+    toggle.addEventListener('click', function () {
+      if (!panel.hidden) { panel.hidden = true; return; }
+      panel.hidden = false;
+      panel.innerHTML = 'Loading…';
+
+      Auth.apiCall('getMyEntries', { formType: formType }).then(function (result) {
+        panel.innerHTML = '';
+        if (!result.ok || !Array.isArray(result.submissions) || !result.submissions.length) {
+          panel.appendChild(el('span', null, 'No submissions from earlier today yet.'));
+          return;
+        }
+
+        var select = el('select');
+        select.setAttribute('aria-label', 'Choose a submission from today to edit');
+        result.submissions.forEach(function (sub, i) {
+          var label = formatRecallTime(sub.submittedAt) + ' — ' + sub.items.length + (sub.items.length === 1 ? ' item' : ' items');
+          var option = el('option', null, label);
+          option.value = String(i);
+          select.appendChild(option);
+        });
+        panel.appendChild(select);
+
+        var loadBtn = el('button', 'btn btn-primary', 'Load');
+        loadBtn.type = 'button';
+        loadBtn.addEventListener('click', function () {
+          var sub = result.submissions[Number(select.value)];
+          applyItems(sub);
+          editingSubmissionId[formType] = sub.submissionId;
+          showEditingBanner(form, formType, function () {
+            editingSubmissionId[formType] = null;
+            clearEditingBanner(form);
+          });
+          panel.hidden = true;
+        });
+        panel.appendChild(loadBtn);
+      });
+    });
+
+    mount.insertBefore(bar, mount.firstChild);
+  }
+
   function showDraftBanner(form, formType, savedAt) {
     if (DRAFT_BANNER_SHOWN[formType]) return;
     DRAFT_BANNER_SHOWN[formType] = true;
@@ -424,6 +508,16 @@
             if (draft.weekOf) form.querySelector('[name="weekOf"]').value = draft.weekOf;
             return applyRowFields(mount, ['catalogId'], { qty: '[data-qty]', note: '[data-note]' }, draft.items);
           });
+
+        initRecall('inventory', form, mount, function applyItems(sub) {
+          form.querySelector('[name="weekOf"]').value = sub.date;
+          var byProduct = {};
+          sub.items.forEach(function (item) {
+            var parsed = JSON.parse(item.details);
+            byProduct[item.product] = { qty: parsed.qtyOnHand, note: parsed.notes || '' };
+          });
+          applyRowFields(mount, ['product'], { qty: '[data-qty]', note: '[data-note]' }, byProduct);
+        });
       }
     });
   }
@@ -498,6 +592,16 @@
             if (draft.date) form.querySelector('[name="date"]').value = draft.date;
             return applyRowFields(mount, ['catalogId'], { count: '[data-count]', delivery: '[data-delivery]' }, draft.items);
           });
+
+        initRecall('dessert-daily', form, mount, function applyItems(sub) {
+          form.querySelector('[name="date"]').value = sub.date;
+          var byProduct = {};
+          sub.items.forEach(function (item) {
+            var parsed = JSON.parse(item.details);
+            byProduct[item.product] = { count: parsed.countOnHand, delivery: parsed.deliveryReceived };
+          });
+          applyRowFields(mount, ['product'], { count: '[data-count]', delivery: '[data-delivery]' }, byProduct);
+        });
       }
     });
   }
@@ -574,6 +678,16 @@
           if (draft.orderDate) form.querySelector('[name="orderDate"]').value = draft.orderDate;
           return applyRowFields(mount, ['product', 'vendor'], { newMon: '[data-new-mon]', newFri: '[data-new-fri]' }, draft.items);
         });
+
+      initRecall('dessert-order', form, mount, function applyItems(sub) {
+        form.querySelector('[name="orderDate"]').value = sub.date;
+        var byId = {};
+        sub.items.forEach(function (item) {
+          var parsed = JSON.parse(item.details);
+          byId[item.product + '|' + (parsed.vendor || '')] = { newMon: parsed.newMon, newFri: parsed.newFri };
+        });
+        applyRowFields(mount, ['product', 'vendor'], { newMon: '[data-new-mon]', newFri: '[data-new-fri]' }, byId);
+      });
     }
   }
 
@@ -707,6 +821,43 @@
             }
             return applied;
           });
+
+        initRecall('local-order', form, mount, function applyItems(sub) {
+          form.querySelector('[name="date"]').value = sub.date;
+
+          var byProduct = {};
+          var unlisted = [];
+          sub.items.forEach(function (item) {
+            var parsed = JSON.parse(item.details);
+            if ('qty' in parsed && 'name' in parsed && !('currentStock' in parsed)) {
+              unlisted.push({ name: parsed.name, qty: parsed.qty });
+            } else {
+              byProduct[item.product] = { stock: parsed.currentStock, order: parsed.order };
+            }
+          });
+          applyRowFields(mount, ['product'], { stock: '[data-stock]', order: '[data-order]' }, byProduct);
+
+          // Setting .value programmatically doesn't fire an input event, so
+          // the threshold-highlight listener never sees these — nudge it.
+          mount.querySelectorAll('[data-stock]').forEach(function (input) {
+            if (input.value !== '') input.dispatchEvent(new Event('input', { bubbles: true }));
+          });
+
+          var unlistedMount = document.getElementById('unlisted-items');
+          if (unlistedMount) {
+            unlistedMount.innerHTML = '';
+            if (unlisted.length) {
+              unlisted.forEach(function (item) {
+                var row = buildUnlistedRow();
+                row.querySelector('[data-unlisted-name]').value = item.name || '';
+                row.querySelector('[data-unlisted-qty]').value = item.qty || '';
+                unlistedMount.appendChild(row);
+              });
+            } else {
+              unlistedMount.appendChild(buildUnlistedRow());
+            }
+          }
+        });
       }
     });
   }
@@ -920,26 +1071,34 @@
         return;
       }
 
+      var editingId = editingSubmissionId[formType];
       var payload = Object.assign({
         formType: formType,
         store: (typeof CONFIG !== 'undefined' && CONFIG.STORE_NAME) || '',
         submittedAt: new Date().toISOString()
       }, buildPayload(form));
+      if (editingId) payload.submissionId = editingId;
 
       var submitBtn = form.querySelector('button[type="submit"]');
       if (submitBtn) submitBtn.disabled = true;
-      setStatus(status, null, 'Submitting…');
+      setStatus(status, null, editingId ? 'Saving…' : 'Submitting…');
 
-      Auth.apiCall('submitForm', payload)
+      Auth.apiCall(editingId ? 'updateMyEntries' : 'submitForm', payload)
         .then(function (result) {
           if (result.ok) {
             var session = Auth.getSession();
-            setStatus(status, 'success', 'Submitted — thanks, ' + (session ? session.name : 'you') + '. Your entry has been logged.');
+            setStatus(status, 'success', editingId
+              ? 'Updated — thanks, ' + (session ? session.name : 'you') + '. Your changes have been saved.'
+              : 'Submitted — thanks, ' + (session ? session.name : 'you') + '. Your entry has been logged.');
             clearDraft(formType);
+            editingSubmissionId[formType] = null;
+            clearEditingBanner(form);
             form.reset();
             resetFormState(form);
           } else {
-            setStatus(status, 'error', 'Something went wrong submitting that. Try again, or let a manager know.');
+            setStatus(status, 'error', editingId
+              ? 'Could not save your changes. Try again, or let a manager know.'
+              : 'Something went wrong submitting that. Try again, or let a manager know.');
           }
         })
         .catch(function () {

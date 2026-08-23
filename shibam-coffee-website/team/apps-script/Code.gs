@@ -49,6 +49,13 @@ function doPost(e) {
       case 'addUser': result = handleAddUser(payload); break;
       case 'removeUser': result = handleRemoveUser(payload); break;
       case 'resetPassword': result = handleResetPassword(payload); break;
+      case 'getDocuments': result = handleGetDocuments(payload); break;
+      case 'addDocument': result = handleAddDocument(payload); break;
+      case 'updateDocument': result = handleUpdateDocument(payload); break;
+      case 'discontinueDocument': result = handleDiscontinueDocument(payload); break;
+      case 'restoreDocument': result = handleRestoreDocument(payload); break;
+      case 'getMyEntries': result = handleGetMyEntries(payload); break;
+      case 'updateMyEntries': result = handleUpdateMyEntries(payload); break;
       default: result = { ok: false, error: 'unknown_action' };
     }
   } catch (err) {
@@ -131,6 +138,16 @@ function getCatalogSheet() {
 function getChangelogSheet() {
   return getSheet('Changelog', ['timestamp', 'username', 'role', 'action', 'target', 'details']);
 }
+
+function getDocumentsSheet() {
+  return getSheet('Documents', ['documentId', 'title', 'description', 'category', 'driveFileId', 'status', 'addedBy', 'addedAt']);
+}
+
+// Shared by every Log tab (Inventory/Dessert Daily/Dessert Order/Local
+// Order). submittedByUsername is what lets a barista's own recall/edit
+// (getMyEntries/updateMyEntries) find only their own rows — employeeName
+// alone is a display name, not a reliable per-account identifier.
+var LOG_HEADERS = ['submittedAt', 'employeeName', 'date', 'product', 'details', 'entryId', 'lastEditedBy', 'lastEditedAt', 'submissionId', 'submittedByUsername'];
 
 // Records who did what, for the admin Changelog tab. Login/logout are
 // deliberately not logged here — Sessions already tracks those, and they
@@ -216,7 +233,7 @@ function handleSubmitForm(payload) {
   if (session.ok === false) return session;
 
   var sheetName = LOG_TABS[payload.formType] || 'Other';
-  var sheet = getSheet(sheetName, ['submittedAt', 'employeeName', 'date', 'product', 'details', 'entryId', 'lastEditedBy', 'lastEditedAt', 'submissionId']);
+  var sheet = getSheet(sheetName, LOG_HEADERS);
 
   var rows = flattenSubmission(payload, session);
   if (rows.length) {
@@ -231,21 +248,154 @@ function handleSubmitForm(payload) {
 // Every row from one submit also shares a single submissionId, distinct
 // from entryId, so the admin dashboard can show that a Local Order List
 // submission's catalog-item row and unlisted-item row are one event
-// rather than two disconnected entries.
-function flattenSubmission(payload, session) {
+// rather than two disconnected entries. `submissionIdOverride` lets a
+// barista's same-day recall/edit (updateMyEntries) reuse the original
+// submission's id for freshly-appended rows instead of minting a new one.
+function flattenSubmission(payload, session, submissionIdOverride) {
   var when = payload.submittedAt || new Date().toISOString();
   var who = session.name;
   var date = payload.weekOf || payload.date || payload.orderDate || '';
-  var submissionId = Utilities.getUuid();
+  var submissionId = submissionIdOverride || Utilities.getUuid();
   var rows = [];
 
   (payload.items || []).forEach(function (item) {
-    rows.push([when, who, date, item.product, JSON.stringify(item), Utilities.getUuid(), '', '', submissionId]);
+    rows.push([when, who, date, item.product, JSON.stringify(item), Utilities.getUuid(), '', '', submissionId, session.username]);
   });
   (payload.unlistedItems || []).forEach(function (item) {
-    rows.push([when, who, date, item.name + ' (not on list)', JSON.stringify(item), Utilities.getUuid(), '', '', submissionId]);
+    rows.push([when, who, date, item.name + ' (not on list)', JSON.stringify(item), Utilities.getUuid(), '', '', submissionId, session.username]);
   });
   return rows;
+}
+
+// ===========================================================================
+// Barista — recall and edit a submission from earlier TODAY
+// ===========================================================================
+// Returns the caller's own submissions from today only, grouped so the
+// frontend doesn't have to re-derive which rows belong together. "Today"
+// is computed against the spreadsheet's own timezone, not the browser's —
+// a shop tablet and the Sheet's configured timezone won't always agree.
+function handleGetMyEntries(payload) {
+  var session = requireRole(payload, 'barista');
+  if (session.ok === false) return session;
+
+  var sheetName = LOG_TABS[payload.formType];
+  if (!sheetName) return { ok: false, error: 'invalid_formType' };
+  var sheet = getSheet(sheetName, LOG_HEADERS);
+
+  var timeZone = getSS().getSpreadsheetTimeZone();
+  var todayStr = Utilities.formatDate(new Date(), timeZone, 'yyyy-MM-dd');
+  var data = sheet.getDataRange().getValues();
+
+  var bySubmission = {};
+  var order = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    var rowUsername = row[9];
+    if (String(rowUsername || '').toLowerCase() !== session.username.toLowerCase()) continue;
+
+    var rowDateStr = Utilities.formatDate(new Date(row[0]), timeZone, 'yyyy-MM-dd');
+    if (rowDateStr !== todayStr) continue;
+
+    var submissionId = row[8];
+    if (!submissionId) continue; // rows from before this feature shipped aren't recallable
+    if (row[4] === '{"removed":true}') continue; // already-removed line items don't need to show up
+
+    if (!bySubmission[submissionId]) {
+      bySubmission[submissionId] = { submissionId: submissionId, submittedAt: row[0], date: row[2], items: [] };
+      order.push(submissionId);
+    }
+    bySubmission[submissionId].items.push({ entryId: row[5], product: row[3], details: row[4] });
+  }
+
+  var submissions = order.map(function (id) { return bySubmission[id]; }).reverse(); // newest first
+  return { ok: true, submissions: submissions };
+}
+
+// Replaces a same-day submission's line items in one call — unlike
+// Management's updateEntry (one field on one row), this is scoped to a
+// whole submissionId at once, since that's how the count forms actually
+// work (many rows per submit, refilled as one form on recall).
+//
+// Security: every existing row under this submissionId must belong to the
+// caller AND be from today, re-checked here at write time (never trusting
+// an earlier getMyEntries snapshot) — both a foreign submissionId and a
+// stale one from before midnight fail with the same generic "not_found",
+// so neither leaks whether the id exists at all.
+function handleUpdateMyEntries(payload) {
+  var session = requireRole(payload, 'barista');
+  if (session.ok === false) return session;
+
+  var sheetName = LOG_TABS[payload.formType];
+  if (!sheetName) return { ok: false, error: 'invalid_formType' };
+  var sheet = getSheet(sheetName, LOG_HEADERS);
+
+  var submissionId = payload.submissionId;
+  if (!submissionId) return { ok: false, error: 'missing_submissionId' };
+
+  var data = sheet.getDataRange().getValues();
+  var existingRows = [];
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][8] === submissionId) existingRows.push(i);
+  }
+  if (!existingRows.length) return { ok: false, error: 'not_found' };
+
+  var timeZone = getSS().getSpreadsheetTimeZone();
+  var todayStr = Utilities.formatDate(new Date(), timeZone, 'yyyy-MM-dd');
+  for (var j = 0; j < existingRows.length; j++) {
+    var existingRow = data[existingRows[j]];
+    if (String(existingRow[9] || '').toLowerCase() !== session.username.toLowerCase()) {
+      return { ok: false, error: 'not_found' };
+    }
+    var rowDateStr = Utilities.formatDate(new Date(existingRow[0]), timeZone, 'yyyy-MM-dd');
+    if (rowDateStr !== todayStr) {
+      return { ok: false, error: 'not_found' };
+    }
+  }
+
+  // Reuse the same row-shaping a fresh submit uses, keyed to this same
+  // submissionId, then reconcile against what's already on the sheet
+  // instead of blindly appending.
+  var newRows = flattenSubmission(payload, session, submissionId);
+  var now = new Date().toISOString();
+  var matchedRowIndexes = {};
+
+  newRows.forEach(function (newRow) {
+    var product = newRow[3], details = newRow[4];
+    var matchIndex = -1;
+    for (var k = 0; k < existingRows.length; k++) {
+      var idx = existingRows[k];
+      if (matchedRowIndexes[idx]) continue;
+      if (data[idx][3] === product) { matchIndex = idx; break; }
+    }
+    if (matchIndex !== -1) {
+      matchedRowIndexes[matchIndex] = true;
+      sheet.getRange(matchIndex + 1, 3).setValue(newRow[2]); // date
+      sheet.getRange(matchIndex + 1, 5).setValue(details); // details
+      sheet.getRange(matchIndex + 1, 7).setValue(session.name); // lastEditedBy
+      sheet.getRange(matchIndex + 1, 8).setValue(now); // lastEditedAt
+    } else {
+      // A line item introduced during the edit that wasn't in the original
+      // submission — append, still sharing this submissionId.
+      var appendRow = newRow.slice();
+      appendRow[6] = session.name; // lastEditedBy
+      appendRow[7] = now; // lastEditedAt
+      sheet.appendRow(appendRow);
+    }
+  });
+
+  // Anything from the original submission not present in the new set was
+  // removed during the edit. Marked, not deleted — deleting mid-sheet is
+  // fragile in Apps Script and could orphan an entryId Management may
+  // already reference elsewhere (e.g. the Changelog).
+  existingRows.forEach(function (idx) {
+    if (matchedRowIndexes[idx]) return;
+    sheet.getRange(idx + 1, 5).setValue(JSON.stringify({ removed: true }));
+    sheet.getRange(idx + 1, 7).setValue(session.name);
+    sheet.getRange(idx + 1, 8).setValue(now);
+  });
+
+  logChange(session, 'updateMyEntries', submissionId, { formType: payload.formType });
+  return { ok: true };
 }
 
 // ===========================================================================
@@ -315,21 +465,25 @@ function handleAddItem(payload) {
 
 // Accepts either a single catalogId or an array of them (catalogIds) so the
 // admin dashboard's multiselect can discontinue/restore/flag a batch in one
-// request instead of one round-trip per item.
-function setCatalogStatuses(catalogIds, status) {
-  var sheet = getCatalogSheet();
+// request instead of one round-trip per item. Shared by Catalog and
+// Documents (each just points it at its own sheet + status column).
+function setSheetStatuses(sheet, ids, statusCol, status) {
   var data = sheet.getDataRange().getValues();
   var remaining = {};
-  catalogIds.forEach(function (id) { remaining[id] = true; });
+  ids.forEach(function (id) { remaining[id] = true; });
   var updated = [];
   for (var i = 1; i < data.length && Object.keys(remaining).length; i++) {
     if (remaining[data[i][0]]) {
-      sheet.getRange(i + 1, 9).setValue(status); // column I = status
+      sheet.getRange(i + 1, statusCol).setValue(status);
       updated.push(data[i][0]);
       delete remaining[data[i][0]];
     }
   }
   return { updated: updated, notFound: Object.keys(remaining) };
+}
+
+function setCatalogStatuses(catalogIds, status) {
+  return setSheetStatuses(getCatalogSheet(), catalogIds, 9, status);
 }
 
 function idsFromPayload(payload) {
@@ -393,6 +547,96 @@ function handleUpdateItem(payload) {
     }
   }
   return { ok: false, error: 'not_found' };
+}
+
+// ===========================================================================
+// Documents — the /team/documents portal (add / edit / discontinue / restore)
+// ===========================================================================
+function handleGetDocuments(payload) {
+  var session = requireRole(payload, 'barista');
+  if (session.ok === false) return session;
+
+  // Management browsing the admin Documents tab needs discontinued
+  // documents too (to restore them); everyone else only sees active ones.
+  var includeAll = payload.includeAll && ROLE_RANK[session.role] >= ROLE_RANK.management;
+
+  var data = getDocumentsSheet().getDataRange().getValues();
+  var documents = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    if (includeAll || row[5] !== 'discontinued') {
+      documents.push({
+        documentId: row[0], title: row[1], description: row[2], category: row[3],
+        driveFileId: row[4], status: row[5], addedBy: row[6], addedAt: row[7]
+      });
+    }
+  }
+  return { ok: true, documents: documents };
+}
+
+// Management-only to add — stricter than Catalog's Lead-level add, since
+// this is company-official content (handbook, policies) rather than an
+// operational count list anyone on shift should be able to extend.
+function handleAddDocument(payload) {
+  var session = requireRole(payload, 'management');
+  if (session.ok === false) return session;
+
+  var doc = payload.document || {};
+  if (!doc.title) return { ok: false, error: 'missing_title' };
+
+  var documentId = Utilities.getUuid();
+  getDocumentsSheet().appendRow([
+    documentId, doc.title, doc.description || '', doc.category || '', doc.driveFileId || '',
+    'active', session.username, new Date().toISOString()
+  ]);
+  logChange(session, 'addDocument', documentId, { title: doc.title });
+  return { ok: true, documentId: documentId };
+}
+
+function handleUpdateDocument(payload) {
+  var session = requireRole(payload, 'management');
+  if (session.ok === false) return session;
+
+  var sheet = getDocumentsSheet();
+  var data = sheet.getDataRange().getValues();
+  var changes = payload.changes || {};
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === payload.documentId) {
+      var COLS = { title: 2, description: 3, category: 4, driveFileId: 5 };
+      Object.keys(COLS).forEach(function (key) {
+        if (changes[key] !== undefined) sheet.getRange(i + 1, COLS[key]).setValue(changes[key]);
+      });
+      logChange(session, 'updateDocument', payload.documentId, changes);
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'not_found' };
+}
+
+function documentIdsFromPayload(payload) {
+  if (Array.isArray(payload.documentIds)) return payload.documentIds;
+  return payload.documentId ? [payload.documentId] : [];
+}
+
+function handleDiscontinueDocument(payload) {
+  var session = requireRole(payload, 'management');
+  if (session.ok === false) return session;
+  var ids = documentIdsFromPayload(payload);
+  if (!ids.length) return { ok: false, error: 'not_found' };
+  var result = setSheetStatuses(getDocumentsSheet(), ids, 6, 'discontinued');
+  if (result.updated.length) logChange(session, 'discontinueDocument', result.updated.join(','), { count: result.updated.length });
+  return { ok: true, updated: result.updated, notFound: result.notFound };
+}
+
+function handleRestoreDocument(payload) {
+  var session = requireRole(payload, 'management');
+  if (session.ok === false) return session;
+  var ids = documentIdsFromPayload(payload);
+  if (!ids.length) return { ok: false, error: 'not_found' };
+  var result = setSheetStatuses(getDocumentsSheet(), ids, 6, 'active');
+  if (result.updated.length) logChange(session, 'restoreDocument', result.updated.join(','), { count: result.updated.length });
+  return { ok: true, updated: result.updated, notFound: result.notFound };
 }
 
 // ===========================================================================
