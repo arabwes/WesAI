@@ -14,6 +14,7 @@ project.
 | `inventory.html` | Barista+ | Weekly kitchen + storage count — desserts aren't on this list, see below. |
 | `dessert-inventory.html` | Barista+ | Daily dessert count/delivery log, plus a vendor-order tab. |
 | `local-order.html` | Barista+ | Consolidated local market order request. |
+| `documents.html` | Barista+ | Employee handbook and other guidelines, embedded live from Google Drive. |
 | `admin.html` | Management only | Submissions, Catalog (search/sort/multiselect/edit), Users, Changelog. |
 
 Weekly Inventory intentionally does **not** include desserts (Honeycomb,
@@ -41,6 +42,24 @@ Enforcement happens **on the backend**, not just in the page — the Apps
 Script checks the caller's role on every privileged action, so hiding a
 button in the UI is a convenience, not the actual security boundary.
 
+## Filling out a form — sorting and autosave
+
+Every count table (Weekly Inventory, Dessert Inventory's daily count and
+vendor order, Local Order List) has a clickable Item column — click to sort
+alphabetically, click again to reverse. Sorting reorders the rows in place
+without touching whatever you've already typed into other rows, so it's
+safe to use mid-count.
+
+**In-progress entries save themselves.** Anything typed into a form is
+autosaved to that browser roughly half a second after you stop typing —
+if you get pulled away mid-count, coming back to the same form on the same
+device restores it, with a small banner confirming what was restored and a
+"Discard draft" option if you'd rather start over. A draft is submitted
+away automatically the moment the form is actually submitted, and it's
+scoped to your own login — if a shop tablet is shared between people,
+nobody sees anyone else's in-progress draft. Drafts live only in that
+browser (`localStorage`), so they don't survive switching devices.
+
 ## Admin dashboard features
 
 - **Search + sort** on Submissions, Catalog, Users, and Changelog — click a
@@ -58,6 +77,19 @@ button in the UI is a convenience, not the actual security boundary.
 - **Changelog tab** (Management only) — every add/edit/discontinue/restore
   and every user-management action, newest first, with who did it and when.
   Logins aren't included — this tracks data changes, not activity.
+- **Submissions tab shows readable details, and groups multi-row
+  submissions.** The Details column renders labelled text (e.g. "Unit: lb
+  · Order below: 5 · Have: 2 · Order? Yes") instead of raw JSON — "Edit"
+  still switches it to the real JSON to actually change it. A single form
+  submit can produce more than one row (Local Order List's free-text
+  "unlisted item" rows are separate from its catalog-item rows) — a
+  `#N` badge in the Submission column ties rows from the same submit
+  together no matter how the table is currently sorted or searched. Rows
+  written before this feature shipped fall back to grouping by matching
+  timestamp/employee/date instead of the badge. A never-edited entry now
+  reads "Not edited yet" instead of a bare dash, and Last Edited shows a
+  display name (matching the Employee column's format) rather than a login
+  handle.
 - **Reset password** — on the Users tab, next to Remove, for any active
   account. Prompts for a new temporary password and applies it immediately;
   share it with that person directly, there's no email/notification step.
@@ -179,6 +211,30 @@ Catalog schema, so it's still a static list in `js/data.js`
 (`DESSERT_VENDOR_ORDERS`). Edit that file directly if the standing order
 changes.
 
+## Documents portal setup (one-time per document)
+
+`documents.html` lists company documents (currently an Employee Handbook
+and an "Other Guidelines" category) and embeds each one live from Google
+Drive — there's no copy or sync, the page always shows the current file.
+
+**1. In Google Drive, set each document's sharing to "Anyone with the link
+can view."** The embed can't render a file it doesn't have access to, and
+this page has no login of its own beyond the portal's — it relies on the
+Drive link itself being viewable.
+
+**2. Get that file's ID** from its share link
+(`https://drive.google.com/file/d/`**`THIS_PART`**`/view`).
+
+**3. Add it to `js/documents.js`** — each document is one entry in the
+`DOCUMENTS` array at the top of the file:
+```js
+{ title: 'Employee Handbook', description: '…', category: 'Handbook', driveFileId: 'THIS_PART' }
+```
+Leaving `driveFileId` empty shows a "Link coming soon" placeholder instead
+of a broken embed — that's what ships until real IDs are added. `category`
+groups related documents on the page; adding a new category (e.g. a future
+"Recipe Book") is the same one-line addition, no other code changes.
+
 ## Backend setup (one-time)
 
 Until this is done, forms are fully functional but nothing is saved and
@@ -247,7 +303,7 @@ beyond running `setup` once.
 | `Users` | username, name, role, passwordHash, passwordSalt, active, createdAt | `role` is `barista`/`lead`/`management`. Removing a user sets `active=false` (soft-delete — preserves their submission history). |
 | `Sessions` | token, username, role, name, createdAt, expiresAt | One row per active login, 12-hour expiry. |
 | `Catalog` | catalogId, formType, group, name, unit, threshold, location, target, status, addedBy, addedAt | `formType` is `inventory` / `dessert` / `local-order`. `status` is `active` / `flagged` / `discontinued`. |
-| `Inventory Log`, `Dessert Daily Log`, `Dessert Order Log`, `Local Order Log` | submittedAt, employeeName, date, product, details, entryId, lastEditedBy, lastEditedAt | One row per line item per submission. `details` is that item's full JSON. `entryId` is what Management's edit action targets. |
+| `Inventory Log`, `Dessert Daily Log`, `Dessert Order Log`, `Local Order Log` | submittedAt, employeeName, date, product, details, entryId, lastEditedBy, lastEditedAt, submissionId | One row per line item per submission. `details` is that item's full JSON. `entryId` is what Management's edit action targets. `submissionId` is shared by every row from the same submit (distinct from each row's own `entryId`) — added automatically to existing sheets the next time the backend redeploys, via `getSheet()`'s header auto-migration; rows written before that carry a blank `submissionId`. |
 | `Changelog` | timestamp, username, role, action, target, details | One row per mutating admin action (add/edit/discontinue/restore an item, edit an entry, add/remove a user, reset a password). Logins/logouts aren't included — `Sessions` already covers those, and they aren't data changes. Read-only from the portal (Changelog tab, Management only). |
 
 ## Password & session security — read this before trusting it with more

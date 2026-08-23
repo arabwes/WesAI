@@ -782,3 +782,100 @@
     align-items: stretch;
   }
 }
+
+/* ==========================================================================
+   Draft-restore banner (autosave)
+   ========================================================================== */
+
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-card);
+  background-color: rgba(201, 149, 42, 0.10);
+}
+
+.draft-banner__text {
+  flex: 1 1 auto;
+  font-size: 0.92rem;
+}
+
+.draft-banner__dismiss {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 4px 8px;
+  color: var(--color-text-light);
+}
+
+.draft-banner__dismiss:hover {
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Documents portal
+   ========================================================================== */
+
+.document-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 900px) {
+  .document-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.document-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.document-card__title {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.document-card__description {
+  color: var(--color-text-light);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.document-card__placeholder {
+  color: var(--color-text-light);
+  font-style: italic;
+  margin: 0;
+}
+
+.document-card__link {
+  align-self: flex-start;
+}
+
+.document-embed {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.document-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: var(--radius-btn);
+}

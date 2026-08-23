@@ -116,6 +116,7 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     '/team/dessert-inventory',
     '/team/local-order',
     '/team/admin',
+    '/team/documents',
   ];
 
   for (const path of protectedPages) {

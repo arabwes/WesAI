@@ -68,6 +68,29 @@
     });
   }
 
+  // Sorts a table's rows in place by a string read off each row — the
+  // opposite of the admin dashboard's sort (which rebuilds rows from a
+  // data array; safe there since those tables show read-only data). Here
+  // the values that matter live only in each row's live input elements, so
+  // sorting must reorder the existing <tr> nodes (appendChild on an
+  // existing child MOVES it, it doesn't clone) rather than rebuild them —
+  // rebuilding would silently wipe whatever the user just typed.
+  function initSortableColumn(theadRow, tbody, thIndex, getValue) {
+    var th = theadRow.children[thIndex];
+    if (!th) return;
+    th.classList.add('is-sortable');
+    var dir = 1;
+    th.addEventListener('click', function () {
+      var rows = Array.from(tbody.children).sort(function (a, b) {
+        return getValue(a).localeCompare(getValue(b)) * dir;
+      });
+      rows.forEach(function (row) { tbody.appendChild(row); });
+      th.classList.toggle('is-sorted-asc', dir === 1);
+      th.classList.toggle('is-sorted-desc', dir === -1);
+      dir = -dir;
+    });
+  }
+
   function numberInput(attrs) {
     var input = el('input');
     input.type = 'number';
@@ -90,6 +113,122 @@
       groups.get(k).push(item);
     });
     return groups;
+  }
+
+  // =========================================================================
+  // Autosave — in-progress entries survive a refresh or interruption until
+  // the user submits. Scoped per form type AND per logged-in username, so
+  // one person's draft never surfaces for the next person on a shared
+  // device (e.g. a shop tablet).
+  // =========================================================================
+  var DRAFT_BANNER_SHOWN = {};
+  var autosaveTimers = {};
+
+  function draftKey(formType) {
+    var session = window.Auth && Auth.getSession();
+    return 'shibam_team_draft_' + formType + '_' + (session ? session.username : 'anon');
+  }
+
+  function loadDraft(formType) {
+    try {
+      var raw = localStorage.getItem(draftKey(formType));
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  function saveDraft(formType, data) {
+    try {
+      data.savedAt = new Date().toISOString();
+      localStorage.setItem(draftKey(formType), JSON.stringify(data));
+    } catch (e) { /* storage full/unavailable — autosave just no-ops */ }
+  }
+
+  function clearDraft(formType) {
+    try { localStorage.removeItem(draftKey(formType)); } catch (e) {}
+  }
+
+  function formatDraftTime(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleString();
+  }
+
+  // Reads every tracked field inside `mount`'s rows into a plain object
+  // keyed by each row's id (its dataset attributes in `idAttrs`, joined —
+  // e.g. catalogId, or product+vendor for the one form with no catalogId).
+  // `fields` maps a short key to the CSS selector for that input in a row.
+  function collectRowFields(mount, idAttrs, fields) {
+    var byId = {};
+    mount.querySelectorAll('tbody tr').forEach(function (row) {
+      var id = idAttrs.map(function (a) { return row.dataset[a] || ''; }).join('|');
+      if (!id.trim()) return;
+      var values = {};
+      Object.keys(fields).forEach(function (key) {
+        var input = row.querySelector(fields[key]);
+        if (input) values[key] = input.value;
+      });
+      byId[id] = values;
+    });
+    return byId;
+  }
+
+  function applyRowFields(mount, idAttrs, fields, byId) {
+    if (!byId) return false;
+    var applied = false;
+    mount.querySelectorAll('tbody tr').forEach(function (row) {
+      var id = idAttrs.map(function (a) { return row.dataset[a] || ''; }).join('|');
+      var saved = byId[id];
+      if (!saved) return;
+      Object.keys(fields).forEach(function (key) {
+        if (saved[key] === undefined) return;
+        var input = row.querySelector(fields[key]);
+        if (input) { input.value = saved[key]; applied = true; }
+      });
+    });
+    return applied;
+  }
+
+  function showDraftBanner(form, formType, savedAt) {
+    if (DRAFT_BANNER_SHOWN[formType]) return;
+    DRAFT_BANNER_SHOWN[formType] = true;
+
+    var banner = el('div', 'draft-banner');
+    banner.appendChild(el('span', 'draft-banner__text', 'Restored a saved draft from ' + formatDraftTime(savedAt) + '.'));
+
+    var discardBtn = el('button', 'btn-remove-row', 'Discard draft');
+    discardBtn.type = 'button';
+    discardBtn.addEventListener('click', function () {
+      clearDraft(formType);
+      // A full reload is the simplest reliable way back to a genuinely
+      // blank form across all four forms' different rendering paths,
+      // and discarding is a rare, deliberate action.
+      window.location.reload();
+    });
+
+    var dismissBtn = el('button', 'draft-banner__dismiss', '×');
+    dismissBtn.type = 'button';
+    dismissBtn.setAttribute('aria-label', 'Dismiss this message');
+    dismissBtn.addEventListener('click', function () { banner.remove(); });
+
+    banner.appendChild(discardBtn);
+    banner.appendChild(dismissBtn);
+    form.insertBefore(banner, form.firstChild);
+  }
+
+  // Wires up debounced autosave (any input inside `form` triggers a save
+  // ~500ms after the last keystroke) and, if a draft already exists for
+  // this form+user, applies it via `restore(draft)` and shows the banner.
+  function initAutosave(formType, form, collect, restore) {
+    var draft = loadDraft(formType);
+    if (draft && restore(draft)) {
+      showDraftBanner(form, formType, draft.savedAt);
+    }
+
+    form.addEventListener('input', function () {
+      clearTimeout(autosaveTimers[formType]);
+      autosaveTimers[formType] = setTimeout(function () {
+        saveDraft(formType, collect());
+      }, 500);
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -258,6 +397,8 @@
           tbody.appendChild(row);
         });
 
+        initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+
         table.appendChild(tbody);
         wrap.appendChild(table);
         section.appendChild(wrap);
@@ -269,6 +410,21 @@
 
         mount.appendChild(section);
       });
+
+      var form = mount.closest('form');
+      if (form) {
+        initAutosave('inventory', form,
+          function collect() {
+            return {
+              weekOf: form.querySelector('[name="weekOf"]').value,
+              items: collectRowFields(mount, ['catalogId'], { qty: '[data-qty]', note: '[data-note]' })
+            };
+          },
+          function restore(draft) {
+            if (draft.weekOf) form.querySelector('[name="weekOf"]').value = draft.weekOf;
+            return applyRowFields(mount, ['catalogId'], { qty: '[data-qty]', note: '[data-note]' }, draft.items);
+          });
+      }
     });
   }
 
@@ -319,6 +475,8 @@
         tbody.appendChild(row);
       });
 
+      initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+
       table.appendChild(tbody);
       wrap.appendChild(table);
       mount.appendChild(wrap);
@@ -326,6 +484,21 @@
       appendAddItemRow(mount, 'dessert', { group: '', location: '' },
         [{ key: 'name', label: 'Dessert name' }],
         renderDessertDailyForm);
+
+      var form = mount.closest('form');
+      if (form) {
+        initAutosave('dessert-daily', form,
+          function collect() {
+            return {
+              date: form.querySelector('[name="date"]').value,
+              items: collectRowFields(mount, ['catalogId'], { count: '[data-count]', delivery: '[data-delivery]' })
+            };
+          },
+          function restore(draft) {
+            if (draft.date) form.querySelector('[name="date"]').value = draft.date;
+            return applyRowFields(mount, ['catalogId'], { count: '[data-count]', delivery: '[data-delivery]' }, draft.items);
+          });
+      }
     });
   }
 
@@ -337,6 +510,7 @@
   function renderDessertOrderForm() {
     var mount = document.getElementById('dessert-order-items');
     if (!mount || typeof DESSERT_VENDOR_ORDERS === 'undefined') return;
+    mount.innerHTML = ''; // defensive: this form has no re-render trigger of its own today, but a draft Discard reloads the page rather than calling this again, so this guards against any future double-call.
 
     DESSERT_VENDOR_ORDERS.forEach(function (group) {
       var section = el('section', 'count-section');
@@ -379,11 +553,28 @@
         tbody.appendChild(row);
       });
 
+      initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+
       table.appendChild(tbody);
       wrap.appendChild(table);
       section.appendChild(wrap);
       mount.appendChild(section);
     });
+
+    var form = mount.closest('form');
+    if (form) {
+      initAutosave('dessert-order', form,
+        function collect() {
+          return {
+            orderDate: form.querySelector('[name="orderDate"]').value,
+            items: collectRowFields(mount, ['product', 'vendor'], { newMon: '[data-new-mon]', newFri: '[data-new-fri]' })
+          };
+        },
+        function restore(draft) {
+          if (draft.orderDate) form.querySelector('[name="orderDate"]').value = draft.orderDate;
+          return applyRowFields(mount, ['product', 'vendor'], { newMon: '[data-new-mon]', newFri: '[data-new-fri]' }, draft.items);
+        });
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -457,6 +648,8 @@
           tbody.appendChild(row);
         });
 
+        initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+
         table.appendChild(tbody);
         wrap.appendChild(table);
         section.appendChild(wrap);
@@ -470,6 +663,51 @@
       });
 
       initThresholdLogic(mount);
+
+      var form = mount.closest('form');
+      if (form) {
+        initAutosave('local-order', form,
+          function collect() {
+            var unlistedMount = document.getElementById('unlisted-items');
+            var unlisted = unlistedMount
+              ? Array.from(unlistedMount.querySelectorAll('.unlisted-row')).map(function (row) {
+                return {
+                  name: row.querySelector('[data-unlisted-name]').value,
+                  qty: row.querySelector('[data-unlisted-qty]').value
+                };
+              })
+              : [];
+            return {
+              date: form.querySelector('[name="date"]').value,
+              items: collectRowFields(mount, ['catalogId'], { stock: '[data-stock]', order: '[data-order]' }),
+              unlisted: unlisted
+            };
+          },
+          function restore(draft) {
+            if (draft.date) form.querySelector('[name="date"]').value = draft.date;
+            var applied = applyRowFields(mount, ['catalogId'], { stock: '[data-stock]', order: '[data-order]' }, draft.items);
+
+            // Setting .value programmatically doesn't fire an input event,
+            // so the threshold-highlight listener (initThresholdLogic)
+            // never sees these restored values — nudge it explicitly.
+            mount.querySelectorAll('[data-stock]').forEach(function (input) {
+              if (input.value !== '') input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+
+            var unlistedMount = document.getElementById('unlisted-items');
+            if (unlistedMount && Array.isArray(draft.unlisted) && draft.unlisted.length) {
+              unlistedMount.innerHTML = '';
+              draft.unlisted.forEach(function (item) {
+                var row = buildUnlistedRow();
+                row.querySelector('[data-unlisted-name]').value = item.name || '';
+                row.querySelector('[data-unlisted-qty]').value = item.qty || '';
+                unlistedMount.appendChild(row);
+              });
+              applied = true;
+            }
+            return applied;
+          });
+      }
     });
   }
 
@@ -697,6 +935,7 @@
           if (result.ok) {
             var session = Auth.getSession();
             setStatus(status, 'success', 'Submitted — thanks, ' + (session ? session.name : 'you') + '. Your entry has been logged.');
+            clearDraft(formType);
             form.reset();
             resetFormState(form);
           } else {
