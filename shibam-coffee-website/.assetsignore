@@ -1,0 +1,13 @@
+.dev.vars*
+.wrangler/
+.wrangler-validation/
+node_modules/
+functions/
+migrations/
+scripts/
+tests/
+workers/
+**/*.md
+package.json
+package-lock.json
+wrangler.jsonc

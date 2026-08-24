@@ -10,3 +10,4 @@ node_modules/
 .dev.vars
 legacy-export/
 legacy-import.sql
+dist/

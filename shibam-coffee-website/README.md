@@ -54,15 +54,14 @@ This site lives in the `shibam-coffee-website/` directory of the
    **Pages** → **Connect to Git** → select this repository.
 2. Build settings:
    - **Framework preset:** None
-   - **Build command:** *(leave empty)*
-   - **Build output directory:** `shibam-coffee-website` *(set this to the
-     subdirectory, since the repo root also contains the MCP server
-     folders)*
-   - **Root directory (advanced):** if Cloudflare Pages asks for a root
-     directory instead of an output directory, set it to
-     `shibam-coffee-website` and leave the output directory as `/`.
-3. Deploy. No environment variables are required — every runtime value
-   lives in `js/config.js` (see below).
+   - **Root directory:** `shibam-coffee-website`
+   - **Build command:** `npm run build`
+   - **Build output directory:** `dist`
+3. Deploy. The public build is allowlisted so backend source, migrations,
+   documentation, tests, and local secrets are not uploaded as website assets.
+4. Configure the D1, Queue, and secret bindings described in
+   `CLOUDFLARE_SETUP.md`; public marketing-page values still live in
+   `js/config.js` (see below).
 
 ## 3. Custom domain setup
 

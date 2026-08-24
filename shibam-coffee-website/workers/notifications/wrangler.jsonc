@@ -3,11 +3,12 @@
   "name": "shibam-team-notifications",
   "main": "src/index.js",
   "compatibility_date": "2026-08-24",
+  "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
     {
       "binding": "TEAM_DB",
       "database_name": "shibam-team",
-      "database_id": "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID"
+      "database_id": "51e7afb0-7d0c-4899-8e06-0db68bf7b16e"
     }
   ],
   "queues": {

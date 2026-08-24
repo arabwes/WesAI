@@ -5,6 +5,14 @@ const COOKIE_NAME = 'shibam_team_session';
 const PBKDF2_ITERATIONS = 120_000;
 const encoder = new TextEncoder();
 
+async function timingSafeTextEqual(left, right) {
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(String(left))),
+    crypto.subtle.digest('SHA-256', encoder.encode(String(right)))
+  ]);
+  return crypto.subtle.timingSafeEqual(leftHash, rightHash);
+}
+
 function randomHex(bytes = 16) {
   const data = crypto.getRandomValues(new Uint8Array(bytes));
   return Array.from(data, (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -32,7 +40,7 @@ async function verifyPassword(password, user) {
   const actual = algorithm === 'legacy-sha256'
     ? await sha256Hex(String(password) + user.password_salt)
     : await pbkdf2(String(password), user.password_salt);
-  return actual === user.password_hash;
+  return timingSafeTextEqual(actual, user.password_hash);
 }
 
 function cookieValue(token, env, maxAge) {
@@ -140,7 +148,7 @@ export function hasRole(user, minRole) {
 }
 
 export async function bootstrap(payload, env) {
-  if (!env.BOOTSTRAP_SECRET || payload.bootstrapSecret !== env.BOOTSTRAP_SECRET) {
+  if (!env.BOOTSTRAP_SECRET || !(await timingSafeTextEqual(payload.bootstrapSecret || '', env.BOOTSTRAP_SECRET))) {
     throw new ApiError('forbidden', 403);
   }
   const count = await env.TEAM_DB.prepare('SELECT COUNT(*) AS total FROM users').first();

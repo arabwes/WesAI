@@ -1,8 +1,8 @@
 # Cloudflare team portal setup
 
 This guide deploys the employee portal and scheduling application to Cloudflare.
-It assumes the existing public website is already a Cloudflare Pages project named
-`shibam-coffee-website`.
+The existing public website is the Cloudflare Pages project named
+`yemenicoffeeco`; its custom domain is `shibamatlanta.com`.
 
 The application uses four Cloudflare pieces:
 
@@ -16,8 +16,8 @@ This distinction matters when configuring secrets:
 
 | Secret | Cloudflare resource | Purpose |
 | --- | --- | --- |
-| `BOOTSTRAP_SECRET` | Pages project `shibam-coffee-website` | Creates the first management account |
-| `TURNSTILE_SECRET` | Pages project `shibam-coffee-website` | Optional login bot protection |
+| `BOOTSTRAP_SECRET` | Pages project `yemenicoffeeco` | Creates the first management account |
+| `TURNSTILE_SECRET` | Pages project `yemenicoffeeco` | Optional login bot protection |
 | `RESEND_API_KEY` | Worker `shibam-team-notifications` | Sends schedule notification email |
 
 ### Fast path: set only the notification Worker secret
@@ -101,7 +101,7 @@ npx wrangler whoami
 ~~~
 
 Confirm that the output includes the account that owns the
-`shibam-coffee-website` Pages project. If you are not signed in:
+`yemenicoffeeco` Pages project. If you are not signed in:
 
 ~~~powershell
 npx wrangler login
@@ -269,7 +269,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'
 Copy the output into a password manager. Then run:
 
 ~~~powershell
-npx wrangler pages secret put BOOTSTRAP_SECRET --project-name shibam-coffee-website
+npx wrangler pages secret put BOOTSTRAP_SECRET --project-name yemenicoffeeco
 ~~~
 
 At the `Enter a secret value` prompt, paste the generated value and press Enter.
@@ -278,7 +278,7 @@ The terminal may not display characters while you paste; that is expected.
 Verify the secret name exists:
 
 ~~~powershell
-npx wrangler pages secret list --project-name shibam-coffee-website
+npx wrangler pages secret list --project-name yemenicoffeeco
 ~~~
 
 Cloudflare lists the name but never displays the stored value.
@@ -302,13 +302,13 @@ Create a Turnstile widget restricted to the production hostname:
 2. Add the private key to the Pages project:
 
 ~~~powershell
-npx wrangler pages secret put TURNSTILE_SECRET --project-name shibam-coffee-website
+npx wrangler pages secret put TURNSTILE_SECRET --project-name yemenicoffeeco
 ~~~
 
 3. Verify both Pages secret names:
 
 ~~~powershell
-npx wrangler pages secret list --project-name shibam-coffee-website
+npx wrangler pages secret list --project-name yemenicoffeeco
 ~~~
 
 Turnstile remains optional until both the public sitekey and private secret are
@@ -400,7 +400,7 @@ You can set the exact same Worker secret without Wrangler:
 1. Sign in to the Cloudflare dashboard.
 2. Open **Workers & Pages**.
 3. Select the Worker named **shibam-team-notifications**. Do not select the
-   `shibam-coffee-website` Pages project.
+   `yemenicoffeeco` Pages project.
 4. Open **Settings**.
 5. Under **Variables and Secrets**, select **Add**.
 6. Choose type **Secret**.
@@ -456,7 +456,7 @@ After the first management account exists, remove the production bootstrap
 secret:
 
 ~~~powershell
-npx wrangler pages secret delete BOOTSTRAP_SECRET --project-name shibam-coffee-website
+npx wrangler pages secret delete BOOTSTRAP_SECRET --project-name yemenicoffeeco
 ~~~
 
 Further employees are added in Team Portal → Admin → Users.
@@ -545,8 +545,8 @@ For the existing Cloudflare Pages project:
 
 - Repository root: the existing WesAI repository
 - Pages root directory: `shibam-coffee-website`
-- Build command: leave empty
-- Build output directory: `.`
+- Build command: `npm run build`
+- Build output directory: `dist`
 - Production branch: keep the existing production branch
 
 Pages discovers `functions/` automatically. Push this feature branch to create a
@@ -556,7 +556,8 @@ preview is approved.
 For a manual preview deploy instead of Git integration:
 
 ~~~powershell
-npx wrangler pages deploy . --project-name shibam-coffee-website --branch feature/team-scheduling-cloudflare
+npm run build
+npx wrangler pages deploy dist --project-name yemenicoffeeco --branch feature/team-scheduling-cloudflare
 ~~~
 
 Before a production deployment:
@@ -624,7 +625,7 @@ if necessary.
 Compare both lists:
 
 ~~~powershell
-npx wrangler pages secret list --project-name shibam-coffee-website
+npx wrangler pages secret list --project-name yemenicoffeeco
 npx wrangler secret list --config workers/notifications/wrangler.jsonc
 ~~~
 

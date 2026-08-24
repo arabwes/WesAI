@@ -1,13 +1,14 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "shibam-coffee-website",
+  "name": "yemenicoffeeco",
   "compatibility_date": "2026-08-24",
-  "pages_build_output_dir": ".",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": "dist",
   "d1_databases": [
     {
       "binding": "TEAM_DB",
       "database_name": "shibam-team",
-      "database_id": "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID",
+      "database_id": "51e7afb0-7d0c-4899-8e06-0db68bf7b16e",
       "migrations_dir": "migrations"
     }
   ],
@@ -34,7 +35,7 @@
         {
           "binding": "TEAM_DB",
           "database_name": "shibam-team-preview",
-          "database_id": "REPLACE_WITH_PREVIEW_D1_DATABASE_ID",
+          "database_id": "b9c76734-9237-411d-8a8c-55388b16109b",
           "migrations_dir": "migrations"
         }
       ],

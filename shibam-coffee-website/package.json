@@ -6,13 +6,15 @@
     "node": ">=22"
   },
   "scripts": {
+    "build": "node scripts/build-pages.mjs",
     "dev": "wrangler pages dev .",
     "db:migrate:local": "wrangler d1 migrations apply shibam-team --local",
-    "db:migrate:preview": "wrangler d1 migrations apply shibam-team --remote --env preview",
+    "db:migrate:preview": "wrangler d1 migrations apply shibam-team-preview --remote --env preview",
     "db:migrate:production": "wrangler d1 migrations apply shibam-team --remote",
     "legacy:build-import": "node scripts/build-legacy-import.mjs",
     "notifications:set-secret": "wrangler secret put RESEND_API_KEY --config workers/notifications/wrangler.jsonc",
     "notifications:deploy": "wrangler deploy --config workers/notifications/wrangler.jsonc",
+    "pages:preview": "npm run build && wrangler pages deploy dist --project-name yemenicoffeeco --branch feature/team-scheduling-cloudflare",
     "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
