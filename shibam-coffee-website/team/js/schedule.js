@@ -2,16 +2,21 @@
 (function () {
   'use strict';
 
-  var state = { weekStart: mondayFor(new Date()), data: null };
+  var today = new Date();
+  var state = {
+    weekStart: mondayFor(today),
+    data: null,
+    availabilityDraft: null,
+    availabilityMonth: new Date(today.getFullYear(), today.getMonth(), 1)
+  };
   var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('footer-year').textContent = new Date().getFullYear();
     bindWeekControls();
-    bindAvailabilityForm();
+    bindAvailabilityEditor();
     bindTimeOffForm();
     bindNotificationButton();
-    populateDays();
     setDateDefaults();
     loadSchedule();
   });
@@ -165,57 +170,340 @@
     return wrap;
   }
 
-  function populateDays() {
-    var select = document.getElementById('availability-day');
-    [1, 2, 3, 4, 5, 6, 0].forEach(function (day) {
-      var option = el('option', null, DAYS[day]);
-      option.value = String(day);
-      select.appendChild(option);
+  function bindAvailabilityEditor() {
+    document.querySelectorAll('[data-availability-tab]').forEach(function (button) {
+      button.addEventListener('click', function () { selectAvailabilityTab(button.dataset.availabilityTab); });
     });
+    document.getElementById('save-weekly-availability').addEventListener('click', saveWeeklyAvailability);
+    document.getElementById('copy-monday-weekdays').addEventListener('click', copyMondayToWeekdays);
+    document.getElementById('previous-availability-month').addEventListener('click', function () { changeAvailabilityMonth(-1); });
+    document.getElementById('next-availability-month').addEventListener('click', function () { changeAvailabilityMonth(1); });
+    document.getElementById('current-availability-month').addEventListener('click', function () {
+      var current = new Date();
+      state.availabilityMonth = new Date(current.getFullYear(), current.getMonth(), 1);
+      renderAvailabilityCalendar();
+    });
+
+    var dialog = document.getElementById('availability-exception-dialog');
+    var form = document.getElementById('availability-exception-form');
+    document.getElementById('close-availability-exception').addEventListener('click', function () { dialog.close(); });
+    document.getElementById('cancel-availability-exception').addEventListener('click', function () { dialog.close(); });
+    form.allDay.addEventListener('change', updateExceptionTimeVisibility);
+    form.date.addEventListener('change', function () { populateExceptionForm(form.date.value); });
+    form.addEventListener('submit', saveAvailabilityException);
+    document.getElementById('delete-availability-exception').addEventListener('click', deleteAvailabilityException);
   }
 
-  function bindAvailabilityForm() {
-    var form = document.getElementById('availability-form');
-    form.addEventListener('submit', function (event) {
-      event.preventDefault();
-      var status = form.querySelector('[data-form-status]');
-      var button = form.querySelector('button[type="submit"]');
-      button.disabled = true;
-      setStatus(status, null, 'Saving…');
-      Auth.apiCall('saveAvailability', { availability: {
-        weekday: Number(form.weekday.value),
-        preference: form.preference.value,
-        startTime: form.startTime.value,
-        endTime: form.endTime.value
-      } }).then(function (result) {
-        button.disabled = false;
-        if (result.ok) { form.reset(); setStatus(status, 'success', 'Availability saved.'); loadSchedule(); }
-        else setStatus(status, 'error', Auth.errorMessage(result, 'Could not save availability.'));
-      });
+  function selectAvailabilityTab(name) {
+    document.querySelectorAll('[data-availability-tab]').forEach(function (button) {
+      var active = button.dataset.availabilityTab === name;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    document.getElementById('regular-availability-panel').hidden = name !== 'regular';
+    document.getElementById('exceptions-availability-panel').hidden = name !== 'exceptions';
+    if (name === 'exceptions') renderAvailabilityCalendar();
+  }
+
+  function availabilityDraft(rules) {
+    return [1, 2, 3, 4, 5, 6, 0].map(function (weekday) {
+      var dayRules = rules.filter(function (rule) { return rule.weekday === weekday; });
+      return {
+        weekday: weekday,
+        mode: dayRules.length ? dayRules[0].preference : 'available',
+        windows: dayRules.map(function (rule) { return { startTime: rule.startTime, endTime: rule.endTime }; })
+      };
     });
   }
 
   function renderAvailability() {
-    var mount = document.getElementById('availability-list');
+    state.availabilityDraft = availabilityDraft(state.data.availability || []);
+    renderWeeklyAvailability();
+    renderAvailabilityCalendar();
+    renderAvailabilitySummary();
+  }
+
+  function renderWeeklyAvailability() {
+    var mount = document.getElementById('weekly-availability-editor');
     mount.innerHTML = '';
-    var rules = state.data.availability || [];
-    if (!rules.length) { mount.appendChild(emptyState('No availability saved', 'Add the times you prefer to work or cannot work.')); return; }
-    rules.forEach(function (rule) {
-      var item = el('div', 'request-item');
-      var copy = el('div');
-      copy.appendChild(el('strong', null, DAYS[rule.weekday]));
-      copy.appendChild(el('p', null, (rule.preference === 'unavailable' ? 'Unavailable' : 'Prefer to work') + ' · ' + formatTime(rule.startTime) + '–' + formatTime(rule.endTime)));
-      item.appendChild(copy);
-      var remove = el('button', 'btn-remove-row', 'Remove');
-      remove.type = 'button';
-      remove.addEventListener('click', function () {
-        remove.disabled = true;
-        Auth.apiCall('deleteAvailability', { availabilityId: rule.id }).then(function (result) {
-          if (result.ok) loadSchedule(); else remove.disabled = false;
+    state.availabilityDraft.forEach(function (day) {
+      var card = el('article', 'availability-day availability-day--' + day.mode);
+      var heading = el('div', 'availability-day__heading');
+      var title = el('div');
+      title.appendChild(el('h3', null, DAYS[day.weekday]));
+      title.appendChild(el('span', 'availability-day__caption', day.mode === 'available' ? 'No restrictions' : day.windows.length + ' time window' + (day.windows.length === 1 ? '' : 's')));
+      heading.appendChild(title);
+
+      var mode = document.createElement('select');
+      mode.className = 'availability-mode';
+      mode.setAttribute('aria-label', DAYS[day.weekday] + ' availability status');
+      [['available', 'Available'], ['preferred', 'Prefer to work'], ['unavailable', 'Unavailable']].forEach(function (choice) {
+        var option = el('option', null, choice[1]);
+        option.value = choice[0];
+        option.selected = day.mode === choice[0];
+        mode.appendChild(option);
+      });
+      mode.addEventListener('change', function () {
+        day.mode = mode.value;
+        if (day.mode === 'available') day.windows = [];
+        else if (!day.windows.length) day.windows = [{ startTime: '09:00', endTime: '17:00' }];
+        renderWeeklyAvailability();
+        renderAvailabilitySummary();
+      });
+      heading.appendChild(mode);
+      card.appendChild(heading);
+
+      if (day.mode === 'available') {
+        card.appendChild(el('p', 'availability-day__available', '✓ Available all day unless a date exception says otherwise.'));
+      } else {
+        var windows = el('div', 'availability-windows');
+        day.windows.forEach(function (windowValue, index) {
+          windows.appendChild(buildAvailabilityWindow(day, windowValue, index));
+        });
+        card.appendChild(windows);
+        var windowActions = el('div', 'availability-window-actions');
+        var addWindow = el('button', 'availability-add-window', '+ Add time window');
+        addWindow.type = 'button';
+        addWindow.disabled = day.windows.length >= 5;
+        addWindow.addEventListener('click', function () {
+          day.windows.push({ startTime: '09:00', endTime: '17:00' });
+          renderWeeklyAvailability();
+        });
+        windowActions.appendChild(addWindow);
+        var allDay = el('button', 'availability-add-window', 'Set all day');
+        allDay.type = 'button';
+        allDay.addEventListener('click', function () {
+          day.windows = [{ startTime: '00:00', endTime: '23:59' }];
+          renderWeeklyAvailability();
+        });
+        windowActions.appendChild(allDay);
+        card.appendChild(windowActions);
+      }
+      mount.appendChild(card);
+    });
+  }
+
+  function buildAvailabilityWindow(day, windowValue, index) {
+    var row = el('div', 'availability-window');
+    var startLabel = el('label', null, 'From');
+    var start = document.createElement('input');
+    start.type = 'time';
+    start.value = windowValue.startTime;
+    start.setAttribute('aria-label', DAYS[day.weekday] + ' window ' + (index + 1) + ' start time');
+    start.addEventListener('change', function () { windowValue.startTime = start.value; });
+    startLabel.appendChild(start);
+    row.appendChild(startLabel);
+    row.appendChild(el('span', 'availability-window__dash', '—'));
+    var endLabel = el('label', null, 'To');
+    var end = document.createElement('input');
+    end.type = 'time';
+    end.value = windowValue.endTime;
+    end.setAttribute('aria-label', DAYS[day.weekday] + ' window ' + (index + 1) + ' end time');
+    end.addEventListener('change', function () { windowValue.endTime = end.value; });
+    endLabel.appendChild(end);
+    row.appendChild(endLabel);
+    var remove = el('button', 'availability-remove-window', '×');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', 'Remove ' + DAYS[day.weekday] + ' time window ' + (index + 1));
+    remove.addEventListener('click', function () {
+      day.windows.splice(index, 1);
+      if (!day.windows.length) day.mode = 'available';
+      renderWeeklyAvailability();
+      renderAvailabilitySummary();
+    });
+    row.appendChild(remove);
+    return row;
+  }
+
+  function copyMondayToWeekdays() {
+    var monday = state.availabilityDraft.find(function (day) { return day.weekday === 1; });
+    state.availabilityDraft.forEach(function (day) {
+      if (day.weekday >= 2 && day.weekday <= 5) {
+        day.mode = monday.mode;
+        day.windows = monday.windows.map(function (windowValue) { return { ...windowValue }; });
+      }
+    });
+    renderWeeklyAvailability();
+    renderAvailabilitySummary();
+    setStatus(document.getElementById('availability-status'), 'success', 'Monday was copied to Tuesday through Friday. Save to apply.');
+  }
+
+  function weeklyAvailabilityPayload() {
+    var rules = [];
+    state.availabilityDraft.forEach(function (day) {
+      if (day.mode === 'available') return;
+      var sorted = day.windows.slice().sort(function (left, right) { return left.startTime.localeCompare(right.startTime); });
+      sorted.forEach(function (windowValue, index) {
+        if (!windowValue.startTime || !windowValue.endTime || windowValue.startTime >= windowValue.endTime) {
+          throw new Error(DAYS[day.weekday] + ' has an invalid time window.');
+        }
+        if (index && sorted[index - 1].endTime > windowValue.startTime) {
+          throw new Error(DAYS[day.weekday] + ' has overlapping time windows.');
+        }
+        rules.push({
+          weekday: day.weekday,
+          preference: day.mode,
+          startTime: windowValue.startTime,
+          endTime: windowValue.endTime
         });
       });
-      item.appendChild(remove);
-      mount.appendChild(item);
+    });
+    return rules;
+  }
+
+  function saveWeeklyAvailability() {
+    var button = document.getElementById('save-weekly-availability');
+    var status = document.getElementById('availability-status');
+    var rules;
+    try { rules = weeklyAvailabilityPayload(); }
+    catch (error) { setStatus(status, 'error', error.message); return; }
+    button.disabled = true;
+    setStatus(status, null, 'Saving your regular week…');
+    Auth.apiCall('replaceAvailability', { availability: rules }).then(function (result) {
+      button.disabled = false;
+      if (result.ok) {
+        setStatus(status, 'success', 'Weekly availability saved.');
+        loadSchedule();
+      } else {
+        setStatus(status, 'error', result.error === 'overlapping_availability'
+          ? 'Time windows cannot overlap.' : Auth.errorMessage(result, 'Could not save availability.'));
+      }
+    }).catch(function () {
+      button.disabled = false;
+      setStatus(status, 'error', 'Could not reach the server. Try again.');
+    });
+  }
+
+  function renderAvailabilitySummary() {
+    var preferred = state.availabilityDraft.filter(function (day) { return day.mode === 'preferred'; }).length;
+    var unavailable = state.availabilityDraft.filter(function (day) { return day.mode === 'unavailable'; }).length;
+    var exceptions = (state.data.availabilityExceptions || []).filter(function (item) { return item.date >= localDate(new Date()); }).length;
+    var parts = [];
+    if (preferred) parts.push(preferred + ' preferred day' + (preferred === 1 ? '' : 's'));
+    if (unavailable) parts.push(unavailable + ' restricted day' + (unavailable === 1 ? '' : 's'));
+    if (exceptions) parts.push(exceptions + ' upcoming exception' + (exceptions === 1 ? '' : 's'));
+    document.getElementById('availability-summary').textContent = parts.length ? parts.join(' · ') : 'Available all week';
+  }
+
+  function changeAvailabilityMonth(amount) {
+    state.availabilityMonth = new Date(state.availabilityMonth.getFullYear(), state.availabilityMonth.getMonth() + amount, 1);
+    renderAvailabilityCalendar();
+  }
+
+  function renderAvailabilityCalendar() {
+    if (!state.data) return;
+    var month = state.availabilityMonth;
+    document.getElementById('availability-month-label').textContent = month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    var mount = document.getElementById('availability-calendar-grid');
+    mount.innerHTML = '';
+    var firstOffset = (month.getDay() + 6) % 7;
+    var firstCell = new Date(month.getFullYear(), month.getMonth(), 1 - firstOffset);
+    var todayString = localDate(new Date());
+    for (var index = 0; index < 42; index += 1) {
+      var cellDate = new Date(firstCell.getFullYear(), firstCell.getMonth(), firstCell.getDate() + index);
+      var dateString = localDate(cellDate);
+      var exception = findAvailabilityException(dateString);
+      var button = el('button', 'availability-calendar__day');
+      button.type = 'button';
+      if (cellDate.getMonth() !== month.getMonth()) button.classList.add('is-adjacent');
+      if (dateString === todayString) button.classList.add('is-today');
+      if (exception) button.classList.add('has-exception', 'is-' + exception.preference);
+      button.setAttribute('aria-label', formatDate(dateString) + (exception ? ', ' + availabilityPreferenceLabel(exception.preference) : ', available'));
+      button.appendChild(el('span', 'availability-calendar__number', String(cellDate.getDate())));
+      if (exception) {
+        button.appendChild(el('span', 'availability-calendar__event', availabilityPreferenceLabel(exception.preference)));
+        if (!exception.allDay) button.appendChild(el('small', null, formatTime(exception.startTime) + '–' + formatTime(exception.endTime)));
+      } else if (cellDate.getMonth() === month.getMonth()) {
+        button.appendChild(el('span', 'availability-calendar__add', '+ Add'));
+      }
+      (function (selectedDate) {
+        button.addEventListener('click', function () { openAvailabilityException(selectedDate); });
+      })(dateString);
+      mount.appendChild(button);
+    }
+  }
+
+  function findAvailabilityException(dateString) {
+    return (state.data.availabilityExceptions || []).find(function (item) { return item.date === dateString; });
+  }
+
+  function availabilityPreferenceLabel(preference) {
+    return preference === 'preferred' ? 'Prefer to work' : 'Unavailable';
+  }
+
+  function openAvailabilityException(dateString) {
+    populateExceptionForm(dateString);
+    document.getElementById('availability-exception-dialog').showModal();
+  }
+
+  function populateExceptionForm(dateString) {
+    var form = document.getElementById('availability-exception-form');
+    var exception = findAvailabilityException(dateString);
+    form.reset();
+    form.exceptionId.value = exception ? exception.id : '';
+    form.date.value = dateString;
+    form.preference.value = exception ? exception.preference : 'unavailable';
+    form.allDay.checked = exception ? exception.allDay : true;
+    form.startTime.value = exception && !exception.allDay ? exception.startTime : '09:00';
+    form.endTime.value = exception && !exception.allDay ? exception.endTime : '17:00';
+    form.note.value = exception ? exception.note : '';
+    document.getElementById('availability-exception-heading').textContent = exception ? 'Edit exception' : 'Add exception';
+    document.getElementById('delete-availability-exception').hidden = !exception;
+    setStatus(form.querySelector('[data-form-status]'), null, '');
+    updateExceptionTimeVisibility();
+  }
+
+  function updateExceptionTimeVisibility() {
+    var form = document.getElementById('availability-exception-form');
+    document.getElementById('availability-exception-times').hidden = form.allDay.checked;
+    form.startTime.required = !form.allDay.checked;
+    form.endTime.required = !form.allDay.checked;
+  }
+
+  function saveAvailabilityException(event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    var button = form.querySelector('button[type="submit"]');
+    var status = form.querySelector('[data-form-status]');
+    if (!form.allDay.checked && form.startTime.value >= form.endTime.value) {
+      setStatus(status, 'error', 'The end time must be after the start time.');
+      return;
+    }
+    button.disabled = true;
+    setStatus(status, null, 'Saving exception…');
+    Auth.apiCall('saveAvailabilityException', { exception: {
+      id: form.exceptionId.value,
+      date: form.date.value,
+      preference: form.preference.value,
+      allDay: form.allDay.checked,
+      startTime: form.startTime.value,
+      endTime: form.endTime.value,
+      note: form.note.value.trim()
+    } }).then(function (result) {
+      button.disabled = false;
+      if (result.ok) {
+        document.getElementById('availability-exception-dialog').close();
+        loadSchedule();
+        selectAvailabilityTab('exceptions');
+      } else setStatus(status, 'error', Auth.errorMessage(result, 'Could not save this exception.'));
+    }).catch(function () {
+      button.disabled = false;
+      setStatus(status, 'error', 'Could not reach the server. Try again.');
+    });
+  }
+
+  function deleteAvailabilityException() {
+    var form = document.getElementById('availability-exception-form');
+    if (!form.exceptionId.value || !window.confirm('Delete this date exception?')) return;
+    var button = document.getElementById('delete-availability-exception');
+    button.disabled = true;
+    Auth.apiCall('deleteAvailabilityException', { exceptionId: form.exceptionId.value }).then(function (result) {
+      button.disabled = false;
+      if (result.ok) {
+        document.getElementById('availability-exception-dialog').close();
+        loadSchedule();
+        selectAvailabilityTab('exceptions');
+      } else setStatus(form.querySelector('[data-form-status]'), 'error', Auth.errorMessage(result, 'Could not delete this exception.'));
     });
   }
 

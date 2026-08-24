@@ -65,44 +65,107 @@
         <div id="open-shifts" class="shift-card-list">Loading open shifts…</div>
       </section>
 
-      <div class="schedule-two-column">
-        <section class="schedule-section" aria-labelledby="availability-heading">
-          <div class="schedule-section__header">
-            <div><span class="schedule-eyebrow">Recurring</span><h2 id="availability-heading">Availability</h2></div>
+      <section class="schedule-section availability-workspace" aria-labelledby="availability-heading">
+        <div class="schedule-section__header availability-heading">
+          <div>
+            <span class="schedule-eyebrow">Your preferences</span>
+            <h2 id="availability-heading">My availability</h2>
+            <p>Set your normal week, then add exceptions for appointments or temporary changes.</p>
           </div>
-          <form id="availability-form" class="compact-form">
-            <div class="form-row form-row--three">
-              <div class="form-group"><label for="availability-day">Day</label><select id="availability-day" name="weekday" required></select></div>
-              <div class="form-group"><label for="availability-start">Start</label><input id="availability-start" name="startTime" type="time" required></div>
-              <div class="form-group"><label for="availability-end">End</label><input id="availability-end" name="endTime" type="time" required></div>
-            </div>
-            <div class="form-group">
-              <label for="availability-preference">Preference</label>
-              <select id="availability-preference" name="preference"><option value="unavailable">Unavailable</option><option value="preferred">Prefer to work</option></select>
-            </div>
-            <div class="form-actions"><button class="btn btn-primary" type="submit">Add availability</button><p class="form-status" data-form-status role="status"></p></div>
-          </form>
-          <div id="availability-list" class="request-list"></div>
+          <span class="availability-summary" id="availability-summary">Loading availability…</span>
+        </div>
+
+        <div class="availability-tabs" role="tablist" aria-label="Availability views">
+          <button type="button" class="availability-tab is-active" id="regular-availability-tab" role="tab"
+            aria-selected="true" aria-controls="regular-availability-panel" data-availability-tab="regular">Regular week</button>
+          <button type="button" class="availability-tab" id="exceptions-availability-tab" role="tab"
+            aria-selected="false" aria-controls="exceptions-availability-panel" data-availability-tab="exceptions">Date exceptions</button>
+        </div>
+
+        <section id="regular-availability-panel" class="availability-panel" role="tabpanel" aria-labelledby="regular-availability-tab">
+          <div class="availability-panel__intro">
+            <p>“Available” means management may schedule you at any time that day. Add preferred or unavailable windows only when needed.</p>
+            <button type="button" class="btn-outline btn-small" id="copy-monday-weekdays">Copy Monday to weekdays</button>
+          </div>
+          <div id="weekly-availability-editor" class="weekly-availability-editor" aria-live="polite"></div>
+          <div class="availability-savebar">
+            <p class="form-status" id="availability-status" role="status" aria-live="polite"></p>
+            <button class="btn btn-primary" type="button" id="save-weekly-availability">Save weekly availability</button>
+          </div>
         </section>
 
-        <section class="schedule-section" aria-labelledby="time-off-heading">
-          <div class="schedule-section__header">
-            <div><span class="schedule-eyebrow">Requests</span><h2 id="time-off-heading">Time off</h2></div>
-          </div>
-          <form id="time-off-form" class="compact-form">
-            <div class="form-row">
-              <div class="form-group"><label for="time-off-start">First day</label><input id="time-off-start" name="startDate" type="date" required></div>
-              <div class="form-group"><label for="time-off-end">Last day</label><input id="time-off-end" name="endDate" type="date" required></div>
+        <section id="exceptions-availability-panel" class="availability-panel" role="tabpanel"
+          aria-labelledby="exceptions-availability-tab" hidden>
+          <div class="availability-calendar-toolbar">
+            <div>
+              <h3 id="availability-month-label"></h3>
+              <p>Select a date to add or edit an exception.</p>
             </div>
-            <div class="form-group"><label for="time-off-type">Type</label><select id="time-off-type" name="type"><option value="unpaid">Unpaid</option><option value="pto">PTO</option><option value="sick">Sick</option><option value="other">Other</option></select></div>
-            <div class="form-group"><label for="time-off-reason">Note <span class="optional">optional</span></label><textarea id="time-off-reason" name="reason" rows="2" maxlength="500"></textarea></div>
-            <div class="form-actions"><button class="btn btn-primary" type="submit">Request time off</button><p class="form-status" data-form-status role="status"></p></div>
-          </form>
-          <div id="time-off-list" class="request-list"></div>
+            <div class="month-controls" aria-label="Choose exception month">
+              <button type="button" class="btn-outline btn-small" id="previous-availability-month" aria-label="Previous month">←</button>
+              <button type="button" class="btn-outline btn-small" id="current-availability-month">Today</button>
+              <button type="button" class="btn-outline btn-small" id="next-availability-month" aria-label="Next month">→</button>
+            </div>
+          </div>
+          <div class="availability-calendar" aria-labelledby="availability-month-label">
+            <div class="availability-calendar__weekdays" aria-hidden="true">
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div id="availability-calendar-grid" class="availability-calendar__grid"></div>
+          </div>
+          <div class="availability-legend" aria-label="Calendar legend">
+            <span><i class="availability-dot availability-dot--preferred"></i> Prefer to work</span>
+            <span><i class="availability-dot availability-dot--unavailable"></i> Unavailable</span>
+          </div>
         </section>
-      </div>
+      </section>
+
+      <section class="schedule-section" aria-labelledby="time-off-heading">
+        <div class="schedule-section__header">
+          <div><span class="schedule-eyebrow">Requests</span><h2 id="time-off-heading">Time off</h2></div>
+        </div>
+        <form id="time-off-form" class="compact-form time-off-form">
+          <div class="form-row">
+            <div class="form-group"><label for="time-off-start">First day</label><input id="time-off-start" name="startDate" type="date" required></div>
+            <div class="form-group"><label for="time-off-end">Last day</label><input id="time-off-end" name="endDate" type="date" required></div>
+          </div>
+          <div class="form-group"><label for="time-off-type">Type</label><select id="time-off-type" name="type"><option value="unpaid">Unpaid</option><option value="pto">PTO</option><option value="sick">Sick</option><option value="other">Other</option></select></div>
+          <div class="form-group"><label for="time-off-reason">Note <span class="optional">optional</span></label><textarea id="time-off-reason" name="reason" rows="2" maxlength="500"></textarea></div>
+          <div class="form-actions"><button class="btn btn-primary" type="submit">Request time off</button><p class="form-status" data-form-status role="status"></p></div>
+        </form>
+        <div id="time-off-list" class="request-list"></div>
+      </section>
     </div>
   </main>
+
+  <dialog id="availability-exception-dialog" class="availability-drawer" aria-labelledby="availability-exception-heading">
+    <form id="availability-exception-form" class="availability-drawer__form">
+      <div class="availability-drawer__header">
+        <div><span class="schedule-eyebrow">Date exception</span><h2 id="availability-exception-heading">Add exception</h2></div>
+        <button type="button" class="dialog-close" id="close-availability-exception" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" name="exceptionId">
+      <div class="form-group"><label for="availability-exception-date">Date</label><input id="availability-exception-date" name="date" type="date" required></div>
+      <fieldset class="availability-choice-group">
+        <legend>Status</legend>
+        <label class="availability-choice availability-choice--unavailable"><input type="radio" name="preference" value="unavailable" checked><span>Unavailable</span></label>
+        <label class="availability-choice availability-choice--preferred"><input type="radio" name="preference" value="preferred"><span>Prefer to work</span></label>
+      </fieldset>
+      <label class="availability-all-day"><input type="checkbox" name="allDay" checked><span>All day</span></label>
+      <div class="form-row availability-exception-times" id="availability-exception-times" hidden>
+        <div class="form-group"><label for="availability-exception-start">From</label><input id="availability-exception-start" name="startTime" type="time" value="09:00"></div>
+        <div class="form-group"><label for="availability-exception-end">To</label><input id="availability-exception-end" name="endTime" type="time" value="17:00"></div>
+      </div>
+      <div class="form-group"><label for="availability-exception-note">Note <span class="optional">optional</span></label><textarea id="availability-exception-note" name="note" rows="3" maxlength="350"></textarea></div>
+      <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+      <div class="availability-drawer__actions">
+        <button type="button" class="btn-remove-row" id="delete-availability-exception" hidden>Delete exception</button>
+        <span></span>
+        <button type="button" class="btn-outline" id="cancel-availability-exception">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save exception</button>
+      </div>
+    </form>
+  </dialog>
   <footer class="portal-footer"><div class="container"><p>&copy; <span id="footer-year"></span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p></div></footer>
 </body>
 </html>

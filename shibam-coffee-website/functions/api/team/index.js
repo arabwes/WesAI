@@ -5,9 +5,10 @@ import {
   setItemStatus, submitForm, updateEntry
 } from '../../_lib/legacy.js';
 import {
-  cancelShift, confirmShift, copySchedule, deleteAvailability, getAuditLog,
+  cancelShift, confirmShift, copySchedule, deleteAvailability, deleteAvailabilityException, getAuditLog,
   getManagerSchedule, getMySchedule, markNotificationsRead, publishSchedule,
-  requestOpenShift, reviewShiftRequest, reviewTimeOff, saveAvailability,
+  replaceAvailability, requestOpenShift, reviewShiftRequest, reviewTimeOff, saveAvailability,
+  saveAvailabilityException,
   saveShift, submitTimeOff
 } from '../../_lib/scheduling.js';
 
@@ -32,6 +33,9 @@ const ACTIONS = {
   publishSchedule,
   saveAvailability,
   deleteAvailability,
+  replaceAvailability,
+  saveAvailabilityException,
+  deleteAvailabilityException,
   submitTimeOff,
   reviewTimeOff,
   requestOpenShift,

@@ -153,7 +153,7 @@
         var cell = el('div', 'schedule-grid-cell schedule-grid-cell--shifts');
         var shifts = state.data.shifts.filter(function (shift) { return shift.employeeId === row.id && shift.date === date; });
         shifts.forEach(function (shift) { cell.appendChild(buildGridShift(shift)); });
-        var unavailability = row.id ? availabilityFor(row.id, day === 6 ? 0 : day + 1) : [];
+        var unavailability = row.id ? availabilityFor(row.id, day === 6 ? 0 : day + 1, date) : [];
         if (unavailability.length) cell.appendChild(el('span', 'availability-note', unavailability.join(', ')));
         grid.appendChild(cell);
       }
@@ -166,10 +166,17 @@
 
   function openForDate(date) { return function () { openShiftDialog(null, date); }; }
 
-  function availabilityFor(employeeId, weekday) {
-    return (state.data.availability || []).filter(function (rule) {
+  function availabilityFor(employeeId, weekday, date) {
+    var recurring = (state.data.availability || []).filter(function (rule) {
       return rule.employeeId === employeeId && rule.weekday === weekday && rule.preference === 'unavailable';
     }).map(function (rule) { return 'Unavailable ' + formatTime(rule.startTime) + '–' + formatTime(rule.endTime); });
+    var exceptions = (state.data.availabilityExceptions || []).filter(function (item) {
+      return item.employeeId === employeeId && item.date === date;
+    }).map(function (item) {
+      var label = item.preference === 'preferred' ? 'Prefers' : 'Unavailable';
+      return label + (item.allDay ? ' all day' : ' ' + formatTime(item.startTime) + '–' + formatTime(item.endTime));
+    });
+    return recurring.concat(exceptions);
   }
 
   function buildGridShift(shift) {

@@ -87,13 +87,16 @@ export async function getManagerSchedule(request, payload, env) {
   const weekStart = weekStartFor(payload.weekStart || new Date().toISOString().slice(0, 10));
   const schedule = await getOrCreateSchedule(env.TEAM_DB, actor, weekStart, asBoolean(payload.create));
   const [team, positions] = await Promise.all([listTeam(env.TEAM_DB), listPositions(env.TEAM_DB)]);
-  if (!schedule) return { ok: true, schedule: null, shifts: [], team, positions, availability: [], timeOff: [], requests: [] };
+  if (!schedule) return { ok: true, schedule: null, shifts: [], team, positions, availability: [], availabilityExceptions: [], timeOff: [], requests: [] };
   const weekEnd = addDays(weekStart, 6);
-  const [shifts, availabilityResult, timeOffResult, requestResult] = await Promise.all([
+  const [shifts, availabilityResult, exceptionResult, timeOffResult, requestResult] = await Promise.all([
     listShifts(env.TEAM_DB, schedule.id, actor.id),
     env.TEAM_DB.prepare(`SELECT * FROM availability_rules
       WHERE (effective_from IS NULL OR effective_from <= ?) AND (effective_to IS NULL OR effective_to >= ?)
       ORDER BY employee_id, weekday, start_time`).bind(weekEnd, weekStart).all(),
+    env.TEAM_DB.prepare(`SELECT * FROM availability_exceptions
+      WHERE exception_date BETWEEN ? AND ? ORDER BY employee_id, exception_date, start_time`)
+      .bind(weekStart, weekEnd).all(),
     env.TEAM_DB.prepare(`SELECT tor.*, u.name AS employee_name FROM time_off_requests tor
       JOIN users u ON u.id = tor.employee_id
       WHERE tor.status IN ('pending', 'approved') AND tor.start_date <= ? AND tor.end_date >= ?
@@ -111,6 +114,7 @@ export async function getManagerSchedule(request, payload, env) {
     team,
     positions,
     availability: availabilityResult.results.map(availabilityDto),
+    availabilityExceptions: exceptionResult.results.map(availabilityExceptionDto),
     timeOff: timeOffResult.results.map((row) => {
       const item = timeOffDto(row);
       if (!hasRole(actor, 'management')) {
@@ -128,10 +132,12 @@ export async function getMySchedule(request, payload, env) {
   const weekStart = weekStartFor(payload.weekStart || new Date().toISOString().slice(0, 10));
   const schedule = await env.TEAM_DB.prepare(`SELECT * FROM schedules
     WHERE location_id = 'atlanta' AND week_start = ? AND status = 'published'`).bind(weekStart).first();
-  const [positions, notifications, availability, timeOff, requests] = await Promise.all([
+  const [positions, notifications, availability, availabilityExceptions, timeOff, requests] = await Promise.all([
     listPositions(env.TEAM_DB),
     env.TEAM_DB.prepare(`SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 25`).bind(actor.id).all(),
     env.TEAM_DB.prepare(`SELECT * FROM availability_rules WHERE employee_id = ? ORDER BY weekday, start_time`).bind(actor.id).all(),
+    env.TEAM_DB.prepare(`SELECT * FROM availability_exceptions WHERE employee_id = ?
+      ORDER BY exception_date, start_time`).bind(actor.id).all(),
     env.TEAM_DB.prepare(`SELECT * FROM time_off_requests WHERE employee_id = ? ORDER BY submitted_at DESC LIMIT 50`).bind(actor.id).all(),
     env.TEAM_DB.prepare(`SELECT sr.*, sh.shift_date, sh.start_time, sh.end_time, p.name AS position_name
       FROM shift_requests sr JOIN shifts sh ON sh.id = sr.shift_id
@@ -144,6 +150,7 @@ export async function getMySchedule(request, payload, env) {
     shifts: schedule ? await listShifts(env.TEAM_DB, schedule.id, actor.id) : [],
     positions,
     availability: availability.results.map(availabilityDto),
+    availabilityExceptions: availabilityExceptions.results.map(availabilityExceptionDto),
     timeOff: timeOff.results.map(timeOffDto),
     requests: requests.results.map(shiftRequestDto),
     notifications: notifications.results.map(notificationDto),
@@ -348,6 +355,55 @@ function availabilityDto(row) {
   };
 }
 
+function availabilityExceptionDto(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    date: row.exception_date,
+    preference: row.preference,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    note: row.note || '',
+    allDay: row.start_time === '00:00' && row.end_time === '23:59'
+  };
+}
+
+export async function replaceAvailability(request, payload, env) {
+  const actor = await requireRole(request, payload, env);
+  const inputRules = Array.isArray(payload.availability) ? payload.availability : [];
+  if (inputRules.length > 35) throw new ApiError('too_many_availability_rules', 400);
+
+  const rules = inputRules.map((input) => {
+    const weekday = clampInt(input.weekday, 0, 6, -1);
+    if (weekday < 0 || !['preferred', 'unavailable'].includes(input.preference)) {
+      throw new ApiError('invalid_availability', 400);
+    }
+    const startTime = normalizeTime(input.startTime, 'start_time');
+    const endTime = normalizeTime(input.endTime, 'end_time');
+    minutesBetween(startTime, endTime, 0);
+    return { weekday, preference: input.preference, startTime, endTime };
+  }).sort((left, right) => left.weekday - right.weekday || left.startTime.localeCompare(right.startTime));
+
+  rules.forEach((rule, index) => {
+    const previous = rules[index - 1];
+    if (previous && previous.weekday === rule.weekday && previous.endTime > rule.startTime) {
+      throw new ApiError('overlapping_availability', 400);
+    }
+  });
+
+  const now = nowIso();
+  const statements = [env.TEAM_DB.prepare('DELETE FROM availability_rules WHERE employee_id = ?').bind(actor.id)];
+  rules.forEach((rule) => {
+    statements.push(env.TEAM_DB.prepare(`INSERT INTO availability_rules
+      (id, employee_id, weekday, preference, start_time, end_time, effective_from, effective_to, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`)
+      .bind(newId('availability'), actor.id, rule.weekday, rule.preference, rule.startTime, rule.endTime, now, now));
+  });
+  await env.TEAM_DB.batch(statements);
+  await audit(env.TEAM_DB, actor.id, 'availability.replace_week', 'availability', actor.id, { ruleCount: rules.length });
+  return { ok: true };
+}
+
 export async function saveAvailability(request, payload, env) {
   const actor = await requireRole(request, payload, env);
   const input = payload.availability || {};
@@ -379,6 +435,48 @@ export async function deleteAvailability(request, payload, env) {
     .bind(payload.availabilityId, actor.id).run();
   if (!result.meta.changes) throw new ApiError('not_found', 404);
   await audit(env.TEAM_DB, actor.id, 'availability.delete', 'availability', payload.availabilityId, {});
+  return { ok: true };
+}
+
+export async function saveAvailabilityException(request, payload, env) {
+  const actor = await requireRole(request, payload, env);
+  const input = payload.exception || {};
+  const date = normalizeDate(input.date, 'exception_date');
+  if (!['preferred', 'unavailable'].includes(input.preference)) throw new ApiError('invalid_availability', 400);
+  const allDay = asBoolean(input.allDay);
+  const startTime = allDay ? '00:00' : normalizeTime(input.startTime, 'start_time');
+  const endTime = allDay ? '23:59' : normalizeTime(input.endTime, 'end_time');
+  minutesBetween(startTime, endTime, 0);
+  const note = String(input.note || '').trim().slice(0, 350);
+  const existing = input.id
+    ? await env.TEAM_DB.prepare('SELECT * FROM availability_exceptions WHERE id = ? AND employee_id = ?')
+      .bind(input.id, actor.id).first()
+    : await env.TEAM_DB.prepare('SELECT * FROM availability_exceptions WHERE employee_id = ? AND exception_date = ? ORDER BY updated_at DESC LIMIT 1')
+      .bind(actor.id, date).first();
+  const now = nowIso();
+  const id = existing?.id || newId('availability_exception');
+  if (existing) {
+    await env.TEAM_DB.prepare(`UPDATE availability_exceptions SET exception_date = ?, preference = ?, start_time = ?,
+      end_time = ?, note = ?, updated_at = ? WHERE id = ? AND employee_id = ?`)
+      .bind(date, input.preference, startTime, endTime, note, now, id, actor.id).run();
+  } else {
+    await env.TEAM_DB.prepare(`INSERT INTO availability_exceptions
+      (id, employee_id, exception_date, preference, start_time, end_time, note, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, actor.id, date, input.preference, startTime, endTime, note, now, now).run();
+  }
+  await audit(env.TEAM_DB, actor.id, existing ? 'availability_exception.update' : 'availability_exception.create',
+    'availability_exception', id, { date, allDay });
+  return { ok: true, id };
+}
+
+export async function deleteAvailabilityException(request, payload, env) {
+  const actor = await requireRole(request, payload, env);
+  const id = String(payload.exceptionId || '');
+  const result = await env.TEAM_DB.prepare('DELETE FROM availability_exceptions WHERE id = ? AND employee_id = ?')
+    .bind(id, actor.id).run();
+  if (!result.meta.changes) throw new ApiError('not_found', 404);
+  await audit(env.TEAM_DB, actor.id, 'availability_exception.delete', 'availability_exception', id, {});
   return { ok: true };
 }
 

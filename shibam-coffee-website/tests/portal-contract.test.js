@@ -27,9 +27,20 @@ test('backend router exposes the scheduling MVP actions', async () => {
   const router = await source('functions/api/team/index.js');
   for (const action of [
     'getManagerSchedule', 'getMySchedule', 'saveShift', 'publishSchedule',
-    'saveAvailability', 'submitTimeOff', 'reviewTimeOff', 'requestOpenShift',
+    'saveAvailability', 'replaceAvailability', 'saveAvailabilityException',
+    'deleteAvailabilityException', 'submitTimeOff', 'reviewTimeOff', 'requestOpenShift',
     'reviewShiftRequest', 'confirmShift'
   ]) assert.match(router, new RegExp(`\\b${action}\\b`));
+});
+
+test('availability UI exposes a weekly editor and date-exception calendar', async () => {
+  const page = await source('team/schedule.html');
+  const controller = await source('team/js/schedule.js');
+  assert.match(page, /id="weekly-availability-editor"/);
+  assert.match(page, /id="availability-calendar-grid"/);
+  assert.match(page, /id="availability-exception-dialog"/);
+  assert.match(controller, /replaceAvailability/);
+  assert.match(controller, /saveAvailabilityException/);
 });
 
 test('browser session token is kept in an HttpOnly cookie', async () => {
