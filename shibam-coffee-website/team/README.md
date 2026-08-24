@@ -11,7 +11,7 @@ project.
 |---|---|---|
 | `index.html` | Everyone | Login. The portal's root — this is what `/team/` shows. |
 | `dashboard.html` | Everyone (logged in) | Landing page — links to the three forms, plus an Admin card for Management. |
-| `inventory.html` | Barista+ | Weekly kitchen + storage count — desserts aren't on this list, see below. |
+| `inventory.html` | Barista+ | Weekly count, with separate Qty in Kitchen / Qty in Storage columns per item — desserts aren't on this list, see below. |
 | `dessert-inventory.html` | Barista+ | Daily dessert count/delivery log. The Standing Vendor Order tab is currently hidden — see below. |
 | `local-order.html` | Barista+ | Consolidated local market order request. |
 | `documents.html` | Barista+ | List of company documents, managed by Management from the admin Documents tab. |
@@ -53,9 +53,17 @@ button in the UI is a convenience, not the actual security boundary.
 
 Every count table (Weekly Inventory, Dessert Inventory's daily count and
 vendor order, Local Order List) has a clickable Item column — click to sort
-alphabetically, click again to reverse. Sorting reorders the rows in place
-without touching whatever you've already typed into other rows, so it's
-safe to use mid-count.
+alphabetically, click again to reverse. Weekly Inventory's Unit column and
+Dessert Inventory's Group column are also sortable the same way. Only one
+column shows as the active sort at a time — clicking a different sortable
+column switches to it. Sorting reorders the rows in place without touching
+whatever you've already typed into other rows, so it's safe to use
+mid-count.
+
+**Weekly Inventory tracks Kitchen and Storage separately.** Each item has
+two quantity fields — "Qty in Kitchen" and "Qty in Storage" — instead of
+one combined count, since the same item often sits in both places. Both are
+required, same as before (0 is a valid count, blank isn't).
 
 **In-progress entries save themselves.** Anything typed into a form is
 autosaved to that browser roughly half a second after you stop typing —
@@ -106,11 +114,14 @@ Submissions tab below).
   A never-edited submission reads "Not edited yet" instead of a bare dash.
   - **Real columns instead of one Details blob.** Each form type gets its
     own column set in the expanded view — e.g. Inventory shows Item /
-    Category / Qty on Hand / Notes; Local Order shows Item / Unit / Order
-    Below / Have (or Qty Needed for an unlisted item) / Order?. Whatever
-    number was actually entered (Qty on Hand, Count on Hand, Current Stock,
-    etc.) is visually emphasized — larger, bold, gold-tinted — so it's
-    immediately obvious at a glance, not just another cell in the row.
+    Category / Qty in Kitchen / Qty in Storage / Notes; Local Order shows
+    Item / Unit / Order Below / Have (or Qty Needed for an unlisted item) /
+    Order?. Whatever number was actually entered (Qty in Kitchen/Storage,
+    Count on Hand, Current Stock, etc.) is visually emphasized — larger,
+    bold, gold-tinted — so it's immediately obvious at a glance, not just
+    another cell in the row. A submission from before Kitchen/Storage were
+    split shows its old single quantity under Kitchen with Storage blank,
+    rather than losing the number.
   - **Edit** on a line item unlocks its specific fields (not raw JSON) and
     "Save" writes them back, reconstructing that item's details JSON from
     just the fields shown.

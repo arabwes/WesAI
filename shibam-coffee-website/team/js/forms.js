@@ -75,19 +75,34 @@
   // sorting must reorder the existing <tr> nodes (appendChild on an
   // existing child MOVES it, it doesn't clone) rather than rebuild them —
   // rebuilding would silently wipe whatever the user just typed.
-  function initSortableColumn(theadRow, tbody, thIndex, getValue) {
-    var th = theadRow.children[thIndex];
-    if (!th) return;
-    th.classList.add('is-sortable');
-    var dir = 1;
-    th.addEventListener('click', function () {
-      var rows = Array.from(tbody.children).sort(function (a, b) {
-        return getValue(a).localeCompare(getValue(b)) * dir;
+  //
+  // `columns` is one or more { index, getValue } sortable headers on the
+  // same table. Only one column shows as the active sort at a time (the
+  // previous one's arrow clears), matching the admin dashboard's look;
+  // clicking a column reverses it on repeat clicks, same as before.
+  function initSortableColumns(theadRow, tbody, columns) {
+    var activeTh = null;
+    var activeDir = 1;
+
+    columns.forEach(function (col) {
+      var th = theadRow.children[col.index];
+      if (!th) return;
+      th.classList.add('is-sortable');
+
+      th.addEventListener('click', function () {
+        var dir = activeTh === th ? -activeDir : 1;
+
+        var rows = Array.from(tbody.children).sort(function (a, b) {
+          return col.getValue(a).localeCompare(col.getValue(b)) * dir;
+        });
+        rows.forEach(function (row) { tbody.appendChild(row); });
+
+        if (activeTh && activeTh !== th) activeTh.classList.remove('is-sorted-asc', 'is-sorted-desc');
+        th.classList.toggle('is-sorted-asc', dir === 1);
+        th.classList.toggle('is-sorted-desc', dir === -1);
+        activeTh = th;
+        activeDir = dir;
       });
-      rows.forEach(function (row) { tbody.appendChild(row); });
-      th.classList.toggle('is-sorted-asc', dir === 1);
-      th.classList.toggle('is-sorted-desc', dir === -1);
-      dir = -dir;
     });
   }
 
@@ -446,7 +461,7 @@
         var table = el('table', 'count-table');
         var thead = el('thead');
         var headRow = el('tr');
-        var headers = ['Item', 'Unit', 'Qty on Hand', 'Notes'];
+        var headers = ['Item', 'Unit', 'Qty in Kitchen', 'Qty in Storage', 'Notes'];
         if (showActions) headers.push('Actions');
         headers.forEach(function (label) { headRow.appendChild(el('th', null, label)); });
         thead.appendChild(headRow);
@@ -458,13 +473,18 @@
           row.dataset.product = item.name;
           row.dataset.category = groupName;
           row.dataset.catalogId = item.catalogId;
+          row.dataset.unit = item.unit || '';
 
           row.appendChild(el('th', 'count-table__item', item.name));
           row.appendChild(el('td', 'count-table__unit', item.unit));
 
-          var qtyCell = el('td');
-          qtyCell.appendChild(numberInput({ 'data-qty': '', 'required': '', 'value': '0', 'aria-label': 'Quantity on hand for ' + item.name }));
-          row.appendChild(qtyCell);
+          var qtyKitchenCell = el('td');
+          qtyKitchenCell.appendChild(numberInput({ 'data-qty-kitchen': '', 'required': '', 'value': '0', 'aria-label': 'Quantity in the kitchen for ' + item.name }));
+          row.appendChild(qtyKitchenCell);
+
+          var qtyStorageCell = el('td');
+          qtyStorageCell.appendChild(numberInput({ 'data-qty-storage': '', 'required': '', 'value': '0', 'aria-label': 'Quantity in storage for ' + item.name }));
+          row.appendChild(qtyStorageCell);
 
           var noteCell = el('td');
           var note = el('input');
@@ -481,7 +501,10 @@
           tbody.appendChild(row);
         });
 
-        initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+        initSortableColumns(headRow, tbody, [
+          { index: 0, getValue: function (row) { return row.dataset.product || ''; } },
+          { index: 1, getValue: function (row) { return row.dataset.unit || ''; } }
+        ]);
 
         table.appendChild(tbody);
         wrap.appendChild(table);
@@ -501,12 +524,12 @@
           function collect() {
             return {
               weekOf: form.querySelector('[name="weekOf"]').value,
-              items: collectRowFields(mount, ['catalogId'], { qty: '[data-qty]', note: '[data-note]' })
+              items: collectRowFields(mount, ['catalogId'], { qtyKitchen: '[data-qty-kitchen]', qtyStorage: '[data-qty-storage]', note: '[data-note]' })
             };
           },
           function restore(draft) {
             if (draft.weekOf) form.querySelector('[name="weekOf"]').value = draft.weekOf;
-            return applyRowFields(mount, ['catalogId'], { qty: '[data-qty]', note: '[data-note]' }, draft.items);
+            return applyRowFields(mount, ['catalogId'], { qtyKitchen: '[data-qty-kitchen]', qtyStorage: '[data-qty-storage]', note: '[data-note]' }, draft.items);
           });
 
         initRecall('inventory', form, mount, function applyItems(sub) {
@@ -514,9 +537,9 @@
           var byProduct = {};
           sub.items.forEach(function (item) {
             var parsed = JSON.parse(item.details);
-            byProduct[item.product] = { qty: parsed.qtyOnHand, note: parsed.notes || '' };
+            byProduct[item.product] = { qtyKitchen: parsed.qtyKitchen, qtyStorage: parsed.qtyStorage, note: parsed.notes || '' };
           });
-          applyRowFields(mount, ['product'], { qty: '[data-qty]', note: '[data-note]' }, byProduct);
+          applyRowFields(mount, ['product'], { qtyKitchen: '[data-qty-kitchen]', qtyStorage: '[data-qty-storage]', note: '[data-note]' }, byProduct);
         });
       }
     });
@@ -541,7 +564,7 @@
       var table = el('table', 'count-table');
       var thead = el('thead');
       var headRow = el('tr');
-      var headers = ['Dessert', 'Count on Hand', 'New Delivery Received'];
+      var headers = ['Dessert', 'Group', 'Count on Hand', 'New Delivery Received'];
       if (showActions) headers.push('Actions');
       headers.forEach(function (label) { headRow.appendChild(el('th', null, label)); });
       thead.appendChild(headRow);
@@ -552,8 +575,10 @@
         var row = el('tr');
         row.dataset.product = item.name;
         row.dataset.catalogId = item.catalogId;
+        row.dataset.group = item.group || '';
 
         row.appendChild(el('th', 'count-table__item', item.name));
+        row.appendChild(el('td', 'count-table__unit', item.group || '—'));
 
         var countCell = el('td');
         countCell.appendChild(numberInput({ 'data-count': '', 'required': '', 'value': '0', 'aria-label': 'Count on hand for ' + item.name }));
@@ -569,7 +594,10 @@
         tbody.appendChild(row);
       });
 
-      initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+      initSortableColumns(headRow, tbody, [
+        { index: 0, getValue: function (row) { return row.dataset.product || ''; } },
+        { index: 1, getValue: function (row) { return row.dataset.group || ''; } }
+      ]);
 
       table.appendChild(tbody);
       wrap.appendChild(table);
@@ -657,7 +685,9 @@
         tbody.appendChild(row);
       });
 
-      initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+      initSortableColumns(headRow, tbody, [
+        { index: 0, getValue: function (row) { return row.dataset.product || ''; } }
+      ]);
 
       table.appendChild(tbody);
       wrap.appendChild(table);
@@ -762,7 +792,9 @@
           tbody.appendChild(row);
         });
 
-        initSortableColumn(headRow, tbody, 0, function (row) { return row.dataset.product || ''; });
+        initSortableColumns(headRow, tbody, [
+        { index: 0, getValue: function (row) { return row.dataset.product || ''; } }
+      ]);
 
         table.appendChild(tbody);
         wrap.appendChild(table);
@@ -994,7 +1026,8 @@
         return {
           product: row.dataset.product,
           category: row.dataset.category,
-          qtyOnHand: Number(row.querySelector('[data-qty]').value),
+          qtyKitchen: Number(row.querySelector('[data-qty-kitchen]').value),
+          qtyStorage: Number(row.querySelector('[data-qty-storage]').value),
           notes: row.querySelector('[data-note]').value.trim()
         };
       })
