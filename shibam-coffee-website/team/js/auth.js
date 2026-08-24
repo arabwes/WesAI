@@ -12,6 +12,7 @@
   var REDIRECT_LIMIT = 4;
   var REDIRECT_WINDOW_MS = 5000;
   var ROLE_RANK = { barista: 1, lead: 2, management: 3 };
+  var turnstileWidgetId = null;
 
   function clearSession() {
     localStorage.removeItem(STORAGE_KEY);
@@ -142,7 +143,9 @@
   }
 
   function resetTurnstile() {
-    if (window.turnstile) window.turnstile.reset();
+    if (window.turnstile && turnstileWidgetId !== null) {
+      window.turnstile.reset(turnstileWidgetId);
+    }
   }
 
   function initTurnstile() {
@@ -150,7 +153,12 @@
     if (!mount || !CONFIG.TURNSTILE_SITEKEY) return;
     mount.hidden = false;
     var render = function () {
-      if (window.turnstile) window.turnstile.render(mount, { sitekey: CONFIG.TURNSTILE_SITEKEY, theme: 'light' });
+      if (window.turnstile) {
+        turnstileWidgetId = window.turnstile.render(mount, {
+          sitekey: CONFIG.TURNSTILE_SITEKEY,
+          theme: 'light'
+        });
+      }
     };
     if (window.turnstile) render();
     else window.addEventListener('load', render, { once: true });
