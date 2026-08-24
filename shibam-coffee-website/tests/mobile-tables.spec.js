@@ -46,7 +46,7 @@ async function mockBackend(page) {
       payload = {
         ok: true,
         entries: [
-          { submittedAt: new Date().toISOString(), employeeName: 'Test Barista', date: '2026-08-19', product: 'Some product with a long name', details: '{"qtyOnHand":3}', entryId: 'e1', lastEditedBy: '', lastEditedAt: '' },
+          { submittedAt: new Date().toISOString(), employeeName: 'Test Barista', date: '2026-08-19', product: 'Some product with a long name', details: '{"category":"Coffee Beans","qtyKitchen":3,"qtyStorage":1,"notes":""}', entryId: 'e1', lastEditedBy: '', lastEditedAt: '' },
         ],
       };
     } else if (action === 'getUsers') {

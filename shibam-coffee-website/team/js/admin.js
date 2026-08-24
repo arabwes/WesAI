@@ -285,7 +285,7 @@
   // single JSON-blob column.
   // =========================================================================
   var LINE_ITEM_COLUMNS = {
-    'inventory': ['Item', 'Category', 'Qty on Hand', 'Notes', 'Last Edited', 'Actions'],
+    'inventory': ['Item', 'Category', 'Qty in Kitchen', 'Qty in Storage', 'Notes', 'Last Edited', 'Actions'],
     'dessert-daily': ['Item', 'Count on Hand', 'New Delivery', 'Last Edited', 'Actions'],
     'dessert-order': ['Item', 'Vendor', 'New Mon', 'New Fri', 'Last Edited', 'Actions'],
     'local-order': ['Item', 'Unit', 'Order Below', 'Have / Qty Needed', 'Order?', 'Last Edited', 'Actions']
@@ -477,8 +477,13 @@
     var isUnlisted = formType === 'local-order' && 'qty' in parsed && 'name' in parsed && !('currentStock' in parsed);
 
     if (formType === 'inventory') {
+      // Rows submitted before Kitchen/Storage were split out only have a
+      // single qtyOnHand — show that under Kitchen and leave Storage blank
+      // rather than losing the number or guessing how to split it.
+      var hasSplitQty = 'qtyKitchen' in parsed || 'qtyStorage' in parsed;
       addField('category', parsed.category, false);
-      addField('qtyOnHand', parsed.qtyOnHand, true);
+      addField('qtyKitchen', hasSplitQty ? parsed.qtyKitchen : parsed.qtyOnHand, true);
+      addField('qtyStorage', parsed.qtyStorage, true);
       addField('notes', parsed.notes, false);
     } else if (formType === 'dessert-daily') {
       addField('countOnHand', parsed.countOnHand, true);
@@ -522,6 +527,7 @@
     saveBtn.addEventListener('click', function () {
       saveBtn.disabled = true;
       var newDetails = Object.assign({}, parsed);
+      if (formType === 'inventory' && 'qtyOnHand' in newDetails) delete newDetails.qtyOnHand; // migrate a legacy row to the split Kitchen/Storage shape once it's edited
       fields.forEach(function (f) { newDetails[f.key] = coerceValue(f.input.value); });
 
       Auth.apiCall('updateEntry', {
