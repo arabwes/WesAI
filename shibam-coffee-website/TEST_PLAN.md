@@ -111,5 +111,46 @@ done
 ## 10. Console hygiene
 
 - [ ] Load every page with devtools open; zero JS errors in the
-      console on initial load, after opening/closing the mobile nav, and
-      after submitting a form.
+  console on initial load, after opening/closing the mobile nav, and
+  after submitting a form.
+
+## 11. Team portal authentication and regression
+
+- [ ] Logged-out visits to every `/team/*` protected page return to `/team/` without a redirect loop.
+- [ ] Barista, Lead, and Management accounts reach the dashboard and see only their permitted cards.
+- [ ] The session cookie is `HttpOnly`, `Secure`, and `SameSite=Strict`; no bearer token appears in local storage.
+- [ ] Logout invalidates the server session and clears the browser profile.
+- [ ] Ten failed logins within 15 minutes trigger throttling.
+- [ ] Inventory, dessert, local-order, catalog, user, and submission-history workflows still work through `/api/team`.
+
+## 12. Employee scheduling
+
+- [ ] A Barista cannot see a draft schedule.
+- [ ] A published schedule shows only the selected week and displays shift date, time, position, break, and notes correctly.
+- [ ] Confirming a shift persists after refresh.
+- [ ] Recurring preferred/unavailable periods can be added and removed.
+- [ ] Time-off requests appear as pending and update after Management review.
+- [ ] Eligible open shifts can be requested exactly once; ineligible and overlapping requests are rejected.
+- [ ] Notifications appear once and can be marked read.
+- [ ] At 360–390px width, the page has no horizontal overflow and all controls remain usable.
+
+## 13. Schedule builder
+
+- [ ] Lead can create/edit draft shifts but cannot publish, edit a published schedule, approve requests, or override concerns.
+- [ ] Management can publish and revise a published schedule.
+- [ ] Copy previous week only works into an empty draft.
+- [ ] Overlap, approved time off, unavailability, position mismatch, and weekly-hour concerns are detected.
+- [ ] A Management override requires a non-empty reason and appears in audit history.
+- [ ] A stale shift version produces a version conflict instead of overwriting a coworker's edit.
+- [ ] Cancelling a published shift preserves it as cancelled and notifies the affected employee.
+- [ ] Two simultaneous approvals cannot assign the same open shift twice.
+- [ ] The manager grid scrolls inside its container on mobile without widening the page.
+
+## 14. Cloudflare infrastructure
+
+- [ ] `/api/team?health=1` reports healthy in preview and production.
+- [ ] Preview and production use different D1 database IDs.
+- [ ] All migrations are applied before the Pages deployment.
+- [ ] Notification messages are queued once; delivery retries do not create duplicate emails.
+- [ ] The cleanup Cron removes expired/revoked sessions and expired login-attempt buckets.
+- [ ] D1 export/Time Travel recovery has been tested before making the portal the scheduling source of truth.

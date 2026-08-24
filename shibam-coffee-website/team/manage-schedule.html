@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Build Schedule — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css">
+  <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/auth.js" defer></script>
+  <script src="/team/js/manage-schedule.js" defer></script>
+</head>
+<body data-page="app" data-require-role="lead">
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand"><a href="/team/dashboard.html">Shibam Coffee</a><span>Schedule Builder</span></div>
+      <div class="portal-header__session">
+        <span><strong data-session-name></strong> <span class="badge" data-session-role></span></span>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container schedule-shell schedule-shell--wide">
+      <div class="schedule-heading">
+        <div>
+          <a class="portal-header__back schedule-back" href="/team/dashboard.html">← Team portal</a>
+          <h1>Build Schedule</h1>
+          <p><strong id="manage-week-label"></strong> <span class="schedule-state" id="schedule-state"></span></p>
+        </div>
+        <div class="week-controls" aria-label="Choose schedule week">
+          <button type="button" class="btn-outline" id="manage-previous-week">← Previous</button>
+          <button type="button" class="btn-outline" id="manage-current-week">This week</button>
+          <button type="button" class="btn-outline" id="manage-next-week">Next →</button>
+        </div>
+      </div>
+
+      <div class="schedule-toolbar">
+        <button type="button" class="btn btn-primary" id="add-shift">+ Add shift</button>
+        <button type="button" class="btn-outline" id="copy-previous">Copy previous week</button>
+        <button type="button" class="btn btn-primary" id="publish-schedule" data-role="management">Publish schedule</button>
+        <span class="schedule-summary" id="schedule-totals"></span>
+      </div>
+      <p class="form-status" id="manage-status" role="status" aria-live="polite"></p>
+
+      <section class="schedule-section schedule-section--grid" aria-labelledby="weekly-grid-heading">
+        <div class="schedule-section__header">
+          <div><span class="schedule-eyebrow">Team view</span><h2 id="weekly-grid-heading">Weekly schedule</h2></div>
+          <div class="schedule-legend"><span><i class="legend-dot legend-dot--open"></i> Open shift</span><span><i class="legend-dot legend-dot--warning"></i> Conflict override</span></div>
+        </div>
+        <div id="manager-schedule-grid" class="manager-schedule-grid" aria-live="polite">Loading schedule…</div>
+      </section>
+
+      <div class="schedule-two-column">
+        <section class="schedule-section" aria-labelledby="time-off-requests-heading" data-role="management">
+          <div class="schedule-section__header"><div><span class="schedule-eyebrow">Management</span><h2 id="time-off-requests-heading">Time-off requests</h2></div></div>
+          <div id="manager-time-off" class="request-list">Loading…</div>
+        </section>
+        <section class="schedule-section" aria-labelledby="open-shift-requests-heading" data-role="management">
+          <div class="schedule-section__header"><div><span class="schedule-eyebrow">Management</span><h2 id="open-shift-requests-heading">Open-shift requests</h2></div></div>
+          <div id="manager-shift-requests" class="request-list">Loading…</div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="shift-dialog" class="shift-dialog">
+    <form id="shift-form" class="portal-form" method="dialog">
+      <div class="dialog-heading"><div><span class="schedule-eyebrow">Schedule</span><h2 id="shift-dialog-title">Add shift</h2></div><button type="button" class="dialog-close" id="close-shift-dialog" aria-label="Close">×</button></div>
+      <input type="hidden" name="id"><input type="hidden" name="version">
+      <div class="form-group"><label for="shift-employee">Assign to</label><select id="shift-employee" name="employeeId"><option value="">Open shift</option></select></div>
+      <div class="form-row">
+        <div class="form-group"><label for="shift-date">Date</label><input id="shift-date" name="date" type="date" required></div>
+        <div class="form-group"><label for="shift-position">Position</label><select id="shift-position" name="positionId"><option value="">No position</option></select></div>
+      </div>
+      <div class="form-row form-row--three">
+        <div class="form-group"><label for="shift-start">Start</label><input id="shift-start" name="startTime" type="time" required></div>
+        <div class="form-group"><label for="shift-end">End</label><input id="shift-end" name="endTime" type="time" required></div>
+        <div class="form-group"><label for="shift-break">Break</label><select id="shift-break" name="breakMinutes"><option value="0">None</option><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></div>
+      </div>
+      <div class="form-group"><label for="shift-notes">Notes <span class="optional">optional</span></label><textarea id="shift-notes" name="notes" rows="2" maxlength="350"></textarea></div>
+      <div id="shift-conflicts" class="conflict-list" hidden></div>
+      <div class="form-group" id="override-field" hidden><label for="override-reason">Management override reason</label><textarea id="override-reason" name="overrideReason" rows="2" maxlength="350"></textarea></div>
+      <div class="form-actions dialog-actions">
+        <button type="button" class="btn-inline-action btn-inline-action--danger" id="cancel-shift" hidden>Cancel shift</button>
+        <span class="dialog-actions__spacer"></span>
+        <button type="button" class="btn-outline" id="dismiss-shift">Close</button>
+        <button type="submit" class="btn btn-primary">Save shift</button>
+      </div>
+      <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+    </form>
+  </dialog>
+  <footer class="portal-footer"><div class="container"><p>&copy; <span id="footer-year"></span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p></div></footer>
+</body>
+</html>

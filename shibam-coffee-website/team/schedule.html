@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Schedule — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css">
+  <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/auth.js" defer></script>
+  <script src="/team/js/schedule.js" defer></script>
+</head>
+<body data-page="app" data-require-role="barista">
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand"><a href="/team/dashboard.html">Shibam Coffee</a><span>My Schedule</span></div>
+      <div class="portal-header__session">
+        <span><strong data-session-name></strong> <span class="badge" data-session-role></span></span>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container schedule-shell">
+      <div class="schedule-heading">
+        <div>
+          <a class="portal-header__back schedule-back" href="/team/dashboard.html">← Team portal</a>
+          <h1>My Schedule</h1>
+          <p>Published shifts and requests for <strong id="schedule-week-label"></strong>.</p>
+        </div>
+        <div class="week-controls" aria-label="Choose schedule week">
+          <button type="button" class="btn-outline" id="previous-week">← Previous</button>
+          <button type="button" class="btn-outline" id="current-week">This week</button>
+          <button type="button" class="btn-outline" id="next-week">Next →</button>
+        </div>
+      </div>
+
+      <p class="form-status schedule-page-status" id="schedule-page-status" role="status" aria-live="polite"></p>
+
+      <section class="schedule-section" aria-labelledby="notifications-heading" id="notifications-section" hidden>
+        <div class="schedule-section__header">
+          <div><span class="schedule-eyebrow">Updates</span><h2 id="notifications-heading">What changed</h2></div>
+          <button type="button" class="btn-outline" id="mark-notifications-read">Mark all read</button>
+        </div>
+        <div id="notifications-list" class="notification-list"></div>
+      </section>
+
+      <section class="schedule-section" aria-labelledby="my-shifts-heading">
+        <div class="schedule-section__header">
+          <div><span class="schedule-eyebrow">Published</span><h2 id="my-shifts-heading">My shifts</h2></div>
+          <span class="schedule-summary" id="my-hours"></span>
+        </div>
+        <div id="my-shifts" class="shift-card-list" aria-live="polite">Loading schedule…</div>
+      </section>
+
+      <section class="schedule-section" aria-labelledby="open-shifts-heading">
+        <div class="schedule-section__header">
+          <div><span class="schedule-eyebrow">Available</span><h2 id="open-shifts-heading">Open shifts</h2></div>
+        </div>
+        <div id="open-shifts" class="shift-card-list">Loading open shifts…</div>
+      </section>
+
+      <div class="schedule-two-column">
+        <section class="schedule-section" aria-labelledby="availability-heading">
+          <div class="schedule-section__header">
+            <div><span class="schedule-eyebrow">Recurring</span><h2 id="availability-heading">Availability</h2></div>
+          </div>
+          <form id="availability-form" class="compact-form">
+            <div class="form-row form-row--three">
+              <div class="form-group"><label for="availability-day">Day</label><select id="availability-day" name="weekday" required></select></div>
+              <div class="form-group"><label for="availability-start">Start</label><input id="availability-start" name="startTime" type="time" required></div>
+              <div class="form-group"><label for="availability-end">End</label><input id="availability-end" name="endTime" type="time" required></div>
+            </div>
+            <div class="form-group">
+              <label for="availability-preference">Preference</label>
+              <select id="availability-preference" name="preference"><option value="unavailable">Unavailable</option><option value="preferred">Prefer to work</option></select>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" type="submit">Add availability</button><p class="form-status" data-form-status role="status"></p></div>
+          </form>
+          <div id="availability-list" class="request-list"></div>
+        </section>
+
+        <section class="schedule-section" aria-labelledby="time-off-heading">
+          <div class="schedule-section__header">
+            <div><span class="schedule-eyebrow">Requests</span><h2 id="time-off-heading">Time off</h2></div>
+          </div>
+          <form id="time-off-form" class="compact-form">
+            <div class="form-row">
+              <div class="form-group"><label for="time-off-start">First day</label><input id="time-off-start" name="startDate" type="date" required></div>
+              <div class="form-group"><label for="time-off-end">Last day</label><input id="time-off-end" name="endDate" type="date" required></div>
+            </div>
+            <div class="form-group"><label for="time-off-type">Type</label><select id="time-off-type" name="type"><option value="unpaid">Unpaid</option><option value="pto">PTO</option><option value="sick">Sick</option><option value="other">Other</option></select></div>
+            <div class="form-group"><label for="time-off-reason">Note <span class="optional">optional</span></label><textarea id="time-off-reason" name="reason" rows="2" maxlength="500"></textarea></div>
+            <div class="form-actions"><button class="btn btn-primary" type="submit">Request time off</button><p class="form-status" data-form-status role="status"></p></div>
+          </form>
+          <div id="time-off-list" class="request-list"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <footer class="portal-footer"><div class="container"><p>&copy; <span id="footer-year"></span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p></div></footer>
+</body>
+</html>

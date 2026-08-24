@@ -23,15 +23,17 @@ shibam-coffee-website/
 └── tracking-notes.md / seo-notes.md
 ```
 
-`team/` is the staff-facing forms portal at `/team/`. It ships with this site
+`team/` is the staff-facing forms and scheduling portal at `/team/`. It ships with this site
 but is deliberately unlisted — no nav link, no sitemap entry, `noindex` on
 every page, and no `robots.txt` rule (which would only advertise the path).
-Leave it out when adding pages to `sitemap.xml`. See `team/README.md`.
+The portal API runs in Cloudflare Pages Functions with a D1 database. Leave it
+out when adding pages to `sitemap.xml`. See `team/README.md` and
+`CLOUDFLARE_SETUP.md`.
 
 ## 1. Local development
 
-No build step, no server required. Just open `index.html` in a browser —
-all CSS and JS load via relative/root-absolute paths.
+The public marketing pages have no build step. The team portal's database and
+API require the Cloudflare local runtime; see `CLOUDFLARE_SETUP.md`.
 
 If you'd rather use a local server (recommended only because `fetch()` in
 some browsers behaves oddly on `file://`), any static server works:

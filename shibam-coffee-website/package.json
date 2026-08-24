@@ -1,0 +1,21 @@
+{
+  "name": "shibam-coffee-team-portal",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler pages dev .",
+    "db:migrate:local": "wrangler d1 migrations apply shibam-team --local",
+    "db:migrate:preview": "wrangler d1 migrations apply shibam-team --remote --env preview",
+    "db:migrate:production": "wrangler d1 migrations apply shibam-team --remote",
+    "legacy:build-import": "node scripts/build-legacy-import.mjs",
+    "notifications:set-secret": "wrangler secret put RESEND_API_KEY --config workers/notifications/wrangler.jsonc",
+    "notifications:deploy": "wrangler deploy --config workers/notifications/wrangler.jsonc",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.125.0"
+  }
+}

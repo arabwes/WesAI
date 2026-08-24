@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/team/css/styles.css">
   <script src="/team/js/config.js" defer></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
   <script src="/team/js/auth.js" defer></script>
 </head>
 <body data-page="login">
@@ -33,6 +34,8 @@
           <label for="password">Password</label>
           <input type="password" id="password" name="password" required autocomplete="current-password">
         </div>
+
+        <div id="turnstile-widget" hidden></div>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary btn-block">Log In</button>

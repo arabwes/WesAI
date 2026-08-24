@@ -4,3 +4,9 @@ __pycache__/
 .env
 *.env
 !*.env.example
+node_modules/
+.wrangler/
+.wrangler-validation/
+.dev.vars
+legacy-export/
+legacy-import.sql

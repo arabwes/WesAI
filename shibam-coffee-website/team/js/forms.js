@@ -197,7 +197,7 @@
 
     Auth.apiCall('getCatalog', { formType: 'inventory' }).then(function (result) {
       mount.innerHTML = '';
-      if (!result.ok) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
+      if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
 
       var session = Auth.getSession();
       var showActions = Auth.hasRole(session, 'lead');
@@ -272,7 +272,7 @@
 
     Auth.apiCall('getCatalog', { formType: 'dessert' }).then(function (result) {
       mount.innerHTML = '';
-      if (!result.ok) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
+      if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
 
       var session = Auth.getSession();
       var showActions = Auth.hasRole(session, 'lead');
@@ -384,7 +384,7 @@
 
     Auth.apiCall('getCatalog', { formType: 'local-order' }).then(function (result) {
       mount.innerHTML = '';
-      if (!result.ok) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
+      if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
 
       var session = Auth.getSession();
       var showActions = Auth.hasRole(session, 'lead');

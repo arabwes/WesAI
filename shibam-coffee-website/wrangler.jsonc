@@ -1,0 +1,57 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "shibam-coffee-website",
+  "compatibility_date": "2026-08-24",
+  "pages_build_output_dir": ".",
+  "d1_databases": [
+    {
+      "binding": "TEAM_DB",
+      "database_name": "shibam-team",
+      "database_id": "REPLACE_WITH_PRODUCTION_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "NOTIFICATIONS",
+        "queue": "shibam-team-notifications"
+      }
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "APP_ENV": "production",
+    "STORE_NAME": "Shibam Coffee Atlanta",
+    "STORE_TIMEZONE": "America/New_York",
+    "SESSION_HOURS": "12"
+  },
+  "env": {
+    "preview": {
+      "d1_databases": [
+        {
+          "binding": "TEAM_DB",
+          "database_name": "shibam-team-preview",
+          "database_id": "REPLACE_WITH_PREVIEW_D1_DATABASE_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "NOTIFICATIONS",
+            "queue": "shibam-team-notifications"
+          }
+        ]
+      },
+      "vars": {
+        "APP_ENV": "preview",
+        "STORE_NAME": "Shibam Coffee Atlanta (Preview)",
+        "STORE_TIMEZONE": "America/New_York",
+        "SESSION_HOURS": "12"
+      }
+    }
+  }
+}

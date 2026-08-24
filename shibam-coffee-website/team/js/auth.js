@@ -1,167 +1,230 @@
 // /team/js/auth.js
-// Shibam Coffee Atlanta — employee portal session & role handling.
-// Loaded on every /team/ page. Runs its redirect check immediately (not on
-// DOMContentLoaded) so a logged-out visitor never sees protected content
-// flash before being sent to the login page.
+// Shared session, role, API, and login behavior for the employee portal.
+// Authentication is enforced by the Cloudflare API's HttpOnly session cookie;
+// localStorage holds display-only profile data for fast page guards.
 
 (function () {
   'use strict';
 
-  var STORAGE_KEY = 'shibam_team_session';
+  var STORAGE_KEY = 'shibam_team_profile';
+  var LEGACY_STORAGE_KEY = 'shibam_team_session';
+  var REDIRECT_GUARD_KEY = 'shibam_team_redirect_guard';
+  var REDIRECT_LIMIT = 4;
+  var REDIRECT_WINDOW_MS = 5000;
   var ROLE_RANK = { barista: 1, lead: 2, management: 3 };
-  var SESSION_HOURS = 12;
+
+  function clearSession() {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  }
+
+  function storeSession(result) {
+    var session = {
+      id: result.id,
+      username: result.username,
+      name: result.name,
+      email: result.email || '',
+      role: result.role,
+      expiresAt: result.expiresAt
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    return session;
+  }
 
   function getSession() {
     var raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     try {
       var session = JSON.parse(raw);
-      if (!session.expiresAt || new Date(session.expiresAt).getTime() < Date.now()) {
-        localStorage.removeItem(STORAGE_KEY);
+      if (!session.id || !session.name || !ROLE_RANK[session.role] ||
+          !session.expiresAt || new Date(session.expiresAt).getTime() < Date.now()) {
+        clearSession();
         return null;
       }
       return session;
-    } catch (e) {
-      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      clearSession();
       return null;
     }
   }
 
-  function hasRole(session, minRole) {
-    return !!session && ROLE_RANK[session.role] >= ROLE_RANK[minRole];
+  function hasRole(session, minimumRole) {
+    return !!session && ROLE_RANK[session.role] >= ROLE_RANK[minimumRole];
   }
 
-  // ---------------------------------------------------------------------
-  // Page guard — reads <body data-page> / data-require-role> and redirects
-  // before first paint finishes. data-page="login" bounces an already-
-  // logged-in visitor straight to the dashboard instead of showing the form.
-  // ---------------------------------------------------------------------
+  function guardedRedirect(url) {
+    var targetPath = url.split('?')[0].split('#')[0];
+    if (targetPath === window.location.pathname) {
+      url = '/team/';
+      clearSession();
+    }
+    var now = Date.now();
+    var state = null;
+    try { state = JSON.parse(sessionStorage.getItem(REDIRECT_GUARD_KEY)); } catch (error) { state = null; }
+    if (!state || now - state.firstAt > REDIRECT_WINDOW_MS) state = { count: 0, firstAt: now };
+    state.count += 1;
+    sessionStorage.setItem(REDIRECT_GUARD_KEY, JSON.stringify(state));
+    if (state.count > REDIRECT_LIMIT) {
+      sessionStorage.removeItem(REDIRECT_GUARD_KEY);
+      clearSession();
+      showRedirectLoopError();
+      return;
+    }
+    window.location.replace(url);
+  }
+
+  function showRedirectLoopError() {
+    document.title = 'Login problem — Shibam Coffee Atlanta';
+    document.body.innerHTML =
+      '<div style="font-family:system-ui,sans-serif;max-width:480px;margin:15vh auto;padding:0 24px;line-height:1.6;color:#1A0F00;">' +
+      '<h1 style="font-size:1.4rem;">Something went wrong</h1>' +
+      '<p>The team portal stopped a login redirect loop and signed you out.</p>' +
+      '<p><a href="/team/">Try logging in again</a>.</p></div>';
+  }
+
   var page = document.body.getAttribute('data-page');
   var requiredRole = document.body.getAttribute('data-require-role');
   var currentSession = getSession();
-
   if (page === 'login') {
-    if (currentSession) window.location.replace('/team/dashboard.html');
+    if (currentSession) guardedRedirect('/team/dashboard.html');
+    else sessionStorage.removeItem(REDIRECT_GUARD_KEY);
   } else if (requiredRole) {
-    if (!currentSession) {
-      window.location.replace('/team/');
-    } else if (!hasRole(currentSession, requiredRole)) {
-      window.location.replace('/team/dashboard.html');
-    }
+    if (!currentSession) guardedRedirect('/team/');
+    else if (!hasRole(currentSession, requiredRole)) guardedRedirect('/team/dashboard.html');
+    else sessionStorage.removeItem(REDIRECT_GUARD_KEY);
   }
 
-  // ---------------------------------------------------------------------
-  // Backend calls — every action goes through the same Apps Script POST
-  // endpoint; the session token rides in the JSON body (not a header,
-  // to avoid triggering a CORS preflight Apps Script can't answer).
-  // ---------------------------------------------------------------------
   function apiCall(action, body) {
-    var session = getSession();
-    var payload = Object.assign({ action: action }, body || {});
-    if (session) payload.token = session.token;
-
     return fetch(CONFIG.API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    })
-      .then(function (res) { return res.json(); })
-      .then(function (result) {
-        if (result && result.ok === false && result.error === 'session_expired') {
-          localStorage.removeItem(STORAGE_KEY);
-          window.location.replace('/team/');
-        }
-        return result;
-      });
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ action: action }, body || {}))
+    }).then(function (response) {
+      return response.json().catch(function () { return { ok: false, error: 'invalid_server_response' }; });
+    }).then(function (result) {
+      if (result && result.ok === false && result.error === 'session_expired') {
+        clearSession();
+        guardedRedirect('/team/');
+      }
+      return result;
+    });
   }
 
   function logout() {
-    var session = getSession();
-    localStorage.removeItem(STORAGE_KEY);
-    if (session) apiCall('logout', { token: session.token }).catch(function () {});
-    window.location.href = '/team/';
+    fetch(CONFIG.API_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' })
+    }).catch(function () {}).finally(function () {
+      clearSession();
+      window.location.href = '/team/';
+    });
   }
 
-  // ---------------------------------------------------------------------
-  // Shows/hides any [data-role="lead"] / [data-role="management"] element
-  // based on the current session — additive, so a "lead" element also
-  // shows for management. Fills [data-session-name] / [data-session-role].
-  // ---------------------------------------------------------------------
   function applyRoleVisibility() {
     var session = getSession();
-    document.querySelectorAll('[data-role]').forEach(function (el) {
-      el.hidden = !hasRole(session, el.getAttribute('data-role'));
+    document.querySelectorAll('[data-role]').forEach(function (element) {
+      element.hidden = !hasRole(session, element.getAttribute('data-role'));
     });
-    document.querySelectorAll('[data-session-name]').forEach(function (el) {
-      el.textContent = session ? session.name : '';
+    document.querySelectorAll('[data-session-name]').forEach(function (element) {
+      element.textContent = session ? session.name : '';
     });
-    document.querySelectorAll('[data-session-role]').forEach(function (el) {
-      el.textContent = session ? session.role : '';
+    document.querySelectorAll('[data-session-role]').forEach(function (element) {
+      element.textContent = session ? session.role : '';
     });
   }
 
-  // ---------------------------------------------------------------------
-  // Login form — only present on index.html, but auth.js is loaded there
-  // too, so it's handled here rather than a separate file.
-  // ---------------------------------------------------------------------
+  function getTurnstileToken() {
+    var field = document.querySelector('[name="cf-turnstile-response"]');
+    return field ? field.value : '';
+  }
+
+  function resetTurnstile() {
+    if (window.turnstile) window.turnstile.reset();
+  }
+
+  function initTurnstile() {
+    var mount = document.getElementById('turnstile-widget');
+    if (!mount || !CONFIG.TURNSTILE_SITEKEY) return;
+    mount.hidden = false;
+    var render = function () {
+      if (window.turnstile) window.turnstile.render(mount, { sitekey: CONFIG.TURNSTILE_SITEKEY, theme: 'light' });
+    };
+    if (window.turnstile) render();
+    else window.addEventListener('load', render, { once: true });
+  }
+
   function bindLoginForm(form) {
     var status = form.querySelector('[data-form-status]');
-
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
       var username = form.username.value.trim();
       var password = form.password.value;
-
       if (!username || !password) {
         setStatus(status, 'error', 'Enter your username and password.');
         return;
       }
-
-      var submitBtn = form.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
+      var button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
       setStatus(status, null, 'Logging in…');
-
       fetch(CONFIG.API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'login', username: username, password: password })
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (result) {
-          if (result.ok) {
-            var expiresAt = new Date(Date.now() + SESSION_HOURS * 3600 * 1000).toISOString();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({
-              token: result.token,
-              role: result.role,
-              name: result.name,
-              username: result.username,
-              expiresAt: expiresAt
-            }));
-            window.location.href = '/team/dashboard.html';
-          } else {
-            setStatus(status, 'error', 'Incorrect username or password.');
-            submitBtn.disabled = false;
-          }
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'login',
+          username: username,
+          password: password,
+          turnstileToken: getTurnstileToken()
         })
-        .catch(function () {
-          setStatus(status, 'error', 'Could not reach the server — check your connection and try again.');
-          submitBtn.disabled = false;
-        });
+      }).then(function (response) {
+        return response.json();
+      }).then(function (result) {
+        if (result.ok && result.id && ROLE_RANK[result.role]) {
+          storeSession(result);
+          window.location.href = '/team/dashboard.html';
+          return;
+        }
+        var messages = {
+          too_many_attempts: 'Too many login attempts. Wait 15 minutes and try again.',
+          turnstile_required: 'Complete the security check and try again.',
+          turnstile_failed: 'The security check expired. Try again.'
+        };
+        setStatus(status, 'error', messages[result.error] || 'Incorrect username or password.');
+        button.disabled = false;
+        resetTurnstile();
+      }).catch(function () {
+        setStatus(status, 'error', 'Could not reach the server — check your connection and try again.');
+        button.disabled = false;
+        resetTurnstile();
+      });
     });
   }
 
-  function setStatus(el, state, message) {
-    if (!el) return;
-    el.textContent = message;
-    if (state) el.setAttribute('data-state', state); else el.removeAttribute('data-state');
+  function setStatus(element, state, message) {
+    if (!element) return;
+    element.textContent = message;
+    if (state) element.setAttribute('data-state', state);
+    else element.removeAttribute('data-state');
+  }
+
+  function errorMessage(result, fallback) {
+    var messages = {
+      forbidden: 'You do not have permission to do that.',
+      version_conflict: 'Someone else changed this item. Refresh and try again.',
+      database_unavailable: 'The team database is temporarily unavailable.',
+      server_error: 'The server hit an unexpected problem.'
+    };
+    return messages[result && result.error] || fallback || 'Something went wrong.';
   }
 
   document.addEventListener('DOMContentLoaded', function () {
     applyRoleVisibility();
-
-    var logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', logout);
-
+    initTurnstile();
+    var logoutButton = document.getElementById('logout-btn');
+    if (logoutButton) logoutButton.addEventListener('click', logout);
     var loginForm = document.getElementById('login-form');
     if (loginForm) bindLoginForm(loginForm);
   });
@@ -171,6 +234,7 @@
     hasRole: hasRole,
     apiCall: apiCall,
     logout: logout,
-    applyRoleVisibility: applyRoleVisibility
+    applyRoleVisibility: applyRoleVisibility,
+    errorMessage: errorMessage
   };
 })();

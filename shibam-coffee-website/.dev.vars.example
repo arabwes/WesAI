@@ -1,0 +1,3 @@
+APP_ENV=development
+BOOTSTRAP_SECRET=replace-with-a-long-random-local-value
+# TURNSTILE_SECRET=
