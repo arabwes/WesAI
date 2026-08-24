@@ -37,6 +37,7 @@ test('browser session token is kept in an HttpOnly cookie', async () => {
   const serverAuth = await source('functions/_lib/auth.js');
   assert.doesNotMatch(browserAuth, /result\.token/);
   assert.match(serverAuth, /HttpOnly; SameSite=Strict/);
+  assert.match(serverAuth, /PBKDF2_ITERATIONS = 100_000/);
 });
 
 test('login only resets a Turnstile widget after one was rendered', async () => {

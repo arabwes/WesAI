@@ -2,7 +2,7 @@ import { ApiError, getCookie, newId, nowIso, publicUser, sha256Hex } from './htt
 
 const ROLE_RANK = { barista: 1, lead: 2, management: 3 };
 const COOKIE_NAME = 'shibam_team_session';
-const PBKDF2_ITERATIONS = 120_000;
+const PBKDF2_ITERATIONS = 100_000;
 const encoder = new TextEncoder();
 
 async function timingSafeTextEqual(left, right) {
