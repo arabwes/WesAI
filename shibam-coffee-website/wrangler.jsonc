@@ -27,7 +27,10 @@
     "APP_ENV": "production",
     "STORE_NAME": "Shibam Coffee Atlanta",
     "STORE_TIMEZONE": "America/New_York",
-    "SESSION_HOURS": "12"
+    "SESSION_HOURS": "12",
+    "VAPID_PUBLIC_KEY": "",
+    "SMS_ENABLED": "false",
+    "INVITATION_EMAIL_ENABLED": "false"
   },
   "env": {
     "preview": {
@@ -51,7 +54,10 @@
         "APP_ENV": "preview",
         "STORE_NAME": "Shibam Coffee Atlanta (Preview)",
         "STORE_TIMEZONE": "America/New_York",
-        "SESSION_HOURS": "12"
+        "SESSION_HOURS": "12",
+        "VAPID_PUBLIC_KEY": "",
+        "SMS_ENABLED": "false",
+        "INVITATION_EMAIL_ENABLED": "false"
       }
     }
   }

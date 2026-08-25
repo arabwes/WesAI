@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Schedule — Shibam Coffee Atlanta</title>
   <meta name="robots" content="noindex, nofollow">
+  <link rel="manifest" href="/team/app.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -32,6 +33,7 @@
           <a class="portal-header__back schedule-back" href="/team/dashboard.html">← Team portal</a>
           <h1>My Schedule</h1>
           <p>Published shifts and requests for <strong id="schedule-week-label"></strong>.</p>
+          <p><a href="/team/profile.html">Profile, calendar & notification settings →</a></p>
         </div>
         <div class="week-controls" aria-label="Choose schedule week">
           <button type="button" class="btn-outline" id="previous-week">← Previous</button>
@@ -65,6 +67,13 @@
         <div id="open-shifts" class="shift-card-list">Loading open shifts…</div>
       </section>
 
+      <section class="schedule-section" aria-labelledby="exchange-heading">
+        <div class="schedule-section__header">
+          <div><span class="schedule-eyebrow">Coverage</span><h2 id="exchange-heading">Shift trades & drops</h2><p>Offer a shift, volunteer for coverage, or respond to a direct swap.</p></div>
+        </div>
+        <div id="exchange-list" class="request-list">Loading exchanges…</div>
+      </section>
+
       <section class="schedule-section availability-workspace" aria-labelledby="availability-heading">
         <div class="schedule-section__header availability-heading">
           <div>
@@ -83,6 +92,14 @@
         </div>
 
         <section id="regular-availability-panel" class="availability-panel" role="tabpanel" aria-labelledby="regular-availability-tab">
+          <div class="availability-period-editor">
+            <div class="form-group"><label for="availability-set-select">Availability period</label><select id="availability-set-select"><option value="">New period</option></select></div>
+            <div class="form-group"><label for="availability-set-label">Label</label><input id="availability-set-label" type="text" maxlength="80" value="Regular availability"></div>
+            <div class="form-group"><label for="availability-effective-from">Starts <span class="optional">blank = always</span></label><input id="availability-effective-from" type="date"></div>
+            <div class="form-group"><label for="availability-effective-to">Ends <span class="optional">blank = ongoing</span></label><input id="availability-effective-to" type="date"></div>
+            <button type="button" class="btn-outline btn-small" id="new-availability-period">New period</button>
+            <button type="button" class="btn-remove-row" id="delete-availability-period" hidden>Delete period</button>
+          </div>
           <div class="availability-panel__intro">
             <p>“Available” means management may schedule you at any time that day. Add preferred or unavailable windows only when needed.</p>
             <button type="button" class="btn-outline btn-small" id="copy-monday-weekdays">Copy Monday to weekdays</button>
@@ -157,6 +174,11 @@
         <div class="form-group"><label for="availability-exception-end">To</label><input id="availability-exception-end" name="endTime" type="time" value="17:00"></div>
       </div>
       <div class="form-group"><label for="availability-exception-note">Note <span class="optional">optional</span></label><textarea id="availability-exception-note" name="note" rows="3" maxlength="350"></textarea></div>
+      <label class="availability-all-day"><input type="checkbox" name="repeats"><span>Repeat weekly</span></label>
+      <div class="form-row" id="availability-repeat-options" hidden>
+        <div class="form-group"><label for="availability-repeat-every">Every</label><select id="availability-repeat-every" name="intervalWeeks"><option value="1">Week</option><option value="2">2 weeks</option><option value="3">3 weeks</option><option value="4">4 weeks</option></select></div>
+        <div class="form-group"><label for="availability-repeat-until">Until</label><input id="availability-repeat-until" name="endsOn" type="date"></div>
+      </div>
       <p class="form-status" data-form-status role="status" aria-live="polite"></p>
       <div class="availability-drawer__actions">
         <button type="button" class="btn-remove-row" id="delete-availability-exception" hidden>Delete exception</button>

@@ -3,6 +3,7 @@ import {
   ApiError, addDays, asBoolean, clampInt, minutesBetween, newId, normalizeDate,
   normalizeTime, nowIso, publicUser, safeJsonParse, weekStartFor
 } from './http.js';
+import { captureScheduleVersion } from './schedule-snapshots.js';
 
 function scheduleDto(row) {
   if (!row) return null;
@@ -134,7 +135,15 @@ export async function getMySchedule(request, payload, env) {
     WHERE location_id = 'atlanta' AND week_start = ? AND status = 'published'`).bind(weekStart).first();
   const [positions, notifications, availability, availabilityExceptions, timeOff, requests] = await Promise.all([
     listPositions(env.TEAM_DB),
-    env.TEAM_DB.prepare(`SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 25`).bind(actor.id).all(),
+    env.TEAM_DB.prepare(`SELECT n.* FROM notifications n WHERE n.user_id = ? AND NOT EXISTS (
+      SELECT 1 FROM user_notification_preferences pref
+      WHERE pref.user_id = n.user_id AND pref.channel = 'in_app' AND pref.enabled = 0
+      AND pref.category = CASE
+        WHEN n.notification_type LIKE '%request%' OR n.notification_type LIKE '%time_off%' OR n.notification_type LIKE '%exchange%' THEN 'requests'
+        WHEN n.notification_type LIKE '%open_shift%' THEN 'open_shifts'
+        WHEN n.notification_type LIKE '%account%' OR n.notification_type LIKE '%invite%' THEN 'account'
+        ELSE 'schedule' END
+    ) ORDER BY n.created_at DESC LIMIT 25`).bind(actor.id).all(),
     env.TEAM_DB.prepare(`SELECT * FROM availability_rules WHERE employee_id = ? ORDER BY weekday, start_time`).bind(actor.id).all(),
     env.TEAM_DB.prepare(`SELECT * FROM availability_exceptions WHERE employee_id = ?
       ORDER BY exception_date, start_time`).bind(actor.id).all(),
@@ -158,7 +167,7 @@ export async function getMySchedule(request, payload, env) {
   };
 }
 
-async function scheduleWarnings(db, input, shiftId, schedule) {
+export async function scheduleWarnings(db, input, shiftId, schedule) {
   if (!input.employeeId) return [];
   const employee = await db.prepare('SELECT * FROM users WHERE id = ? AND active = 1').bind(input.employeeId).first();
   if (!employee) throw new ApiError('invalid_employee', 400);
@@ -251,6 +260,7 @@ export async function saveShift(request, payload, env) {
   await env.TEAM_DB.prepare('UPDATE schedules SET version = version + 1, updated_at = ? WHERE id = ?').bind(now, schedule.id).run();
   await audit(env.TEAM_DB, actor.id, existing ? 'shift.update' : 'shift.create', 'shift', shiftId, { warnings, overrideReason });
   if (schedule.status === 'published') {
+    await captureScheduleVersion(env, schedule.id, actor.id, existing ? 'Published shift updated' : 'Shift added to published schedule');
     const affected = new Set([existing?.employee_id, normalized.employeeId].filter(Boolean));
     for (const userId of affected) {
       await notifyUser(env, userId, 'shift_changed', 'Your schedule changed',
@@ -289,6 +299,9 @@ export async function cancelShift(request, payload, env) {
     env.TEAM_DB.prepare('UPDATE schedules SET version = version + 1, updated_at = ? WHERE id = ?').bind(now, shift.schedule_id)
   ]);
   await audit(env.TEAM_DB, actor.id, 'shift.cancel', 'shift', shift.id, { reason: String(payload.reason || '') });
+  if (shift.schedule_status === 'published') {
+    await captureScheduleVersion(env, shift.schedule_id, actor.id, 'Published shift cancelled');
+  }
   if (shift.schedule_status === 'published' && shift.employee_id) {
     await notifyUser(env, shift.employee_id, 'shift_cancelled', 'Shift cancelled',
       `Your shift on ${shift.shift_date} was cancelled.`, '/team/schedule.html', `${shift.id}:cancelled:${shift.version + 1}`);
@@ -333,6 +346,7 @@ export async function publishSchedule(request, payload, env) {
   const newVersion = Number(schedule.version) + 1;
   await env.TEAM_DB.prepare(`UPDATE schedules SET status = 'published', version = ?, published_at = ?,
     published_by = ?, updated_at = ? WHERE id = ?`).bind(newVersion, now, actor.id, now, schedule.id).run();
+  await captureScheduleVersion(env, schedule.id, actor.id, schedule.status === 'published' ? 'Schedule republished' : 'Schedule published');
   const { results: employees } = await env.TEAM_DB.prepare('SELECT id FROM users WHERE active = 1').all();
   for (const employee of employees) {
     await notifyUser(env, employee.id, 'schedule_published', 'New schedule published',
@@ -613,6 +627,9 @@ export async function reviewShiftRequest(request, payload, env) {
         review_note = 'Another employee was approved.' WHERE shift_id = ? AND id != ? AND status = 'pending'`)
         .bind(actor.id, now, existing.shift_id, existing.id)
     ]);
+    await env.TEAM_DB.prepare('UPDATE schedules SET version = version + 1, updated_at = ? WHERE id = ?')
+      .bind(now, existing.schedule_id).run();
+    await captureScheduleVersion(env, existing.schedule_id, actor.id, 'Open shift assigned');
     for (const other of otherPending) {
       await notifyUser(env, other.employee_id, 'shift_request_reviewed', 'Open shift request declined',
         `Another employee was assigned the ${existing.shift_date} shift.`, '/team/schedule.html', `${other.id}:declined`);
@@ -663,14 +680,43 @@ export async function markNotificationsRead(request, payload, env) {
   return { ok: true };
 }
 
-async function notifyUser(env, userId, type, title, message, link, idempotencyKey) {
+export async function notifyUser(env, userId, type, title, message, link, idempotencyKey) {
   const id = newId('notification');
+  const createdAt = nowIso();
   const result = await env.TEAM_DB.prepare(`INSERT OR IGNORE INTO notifications
     (id, user_id, notification_type, title, message, link, idempotency_key, email_status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`)
-    .bind(id, userId, type, title, message, link || null, idempotencyKey, nowIso()).run();
+    .bind(id, userId, type, title, message, link || null, idempotencyKey, createdAt).run();
   if (result.meta.changes && env.NOTIFICATIONS?.send) {
     try {
+      const user = await env.TEAM_DB.prepare('SELECT email, phone_e164, phone_verified_at FROM users WHERE id = ?')
+        .bind(userId).first();
+      const category = type.includes('request') || type.includes('time_off') || type.includes('exchange')
+        ? 'requests' : type.includes('open_shift') ? 'open_shifts' : type.includes('account') || type.includes('invite') ? 'account' : 'schedule';
+      const { results: preferences } = await env.TEAM_DB.prepare(`SELECT channel, enabled FROM user_notification_preferences
+        WHERE user_id = ? AND category = ?`).bind(userId, category).all();
+      const preference = new Map(preferences.map((row) => [row.channel, Number(row.enabled) === 1]));
+      const deliveries = [];
+      if (user?.email && (preference.has('email') ? preference.get('email') : true)) {
+        deliveries.push(env.TEAM_DB.prepare(`INSERT OR IGNORE INTO notification_deliveries
+          (id, notification_id, channel, destination, status, created_at) VALUES (?, ?, 'email', ?, 'pending', ?)`)
+          .bind(newId('delivery'), id, user.email, createdAt));
+      }
+      if (preference.get('push')) {
+        const { results: subscriptions } = await env.TEAM_DB.prepare(`SELECT endpoint FROM push_subscriptions
+          WHERE user_id = ? AND active = 1`).bind(userId).all();
+        subscriptions.forEach((subscription) => deliveries.push(env.TEAM_DB.prepare(`INSERT OR IGNORE INTO notification_deliveries
+          (id, notification_id, channel, destination, status, created_at) VALUES (?, ?, 'push', ?, 'pending', ?)`)
+          .bind(newId('delivery'), id, subscription.endpoint, createdAt)));
+      }
+      if (preference.get('sms') && user?.phone_e164 && user.phone_verified_at) {
+        const optedOut = await env.TEAM_DB.prepare('SELECT 1 AS found FROM sms_opt_outs WHERE phone_e164 = ? AND opted_in_at IS NULL')
+          .bind(user.phone_e164).first();
+        if (!optedOut) deliveries.push(env.TEAM_DB.prepare(`INSERT OR IGNORE INTO notification_deliveries
+            (id, notification_id, channel, destination, status, created_at) VALUES (?, ?, 'sms', ?, 'pending', ?)`)
+          .bind(newId('delivery'), id, user.phone_e164, createdAt));
+      }
+      if (deliveries.length) await env.TEAM_DB.batch(deliveries);
       await env.NOTIFICATIONS.send({ notificationId: id });
       await env.TEAM_DB.prepare("UPDATE notifications SET email_status = 'queued' WHERE id = ?").bind(id).run();
     } catch (error) {

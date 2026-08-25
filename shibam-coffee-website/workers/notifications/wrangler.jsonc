@@ -23,11 +23,14 @@
     ]
   },
   "triggers": {
-    "crons": ["17 7 * * *"]
+    "crons": ["17 * * * *"]
   },
   "vars": {
     "EMAIL_FROM": "Shibam Coffee Team <schedule@shibamatlanta.com>",
-    "PORTAL_ORIGIN": "https://www.shibamatlanta.com"
+    "PORTAL_ORIGIN": "https://www.shibamatlanta.com",
+    "STORE_TIMEZONE": "America/New_York",
+    "VAPID_SUBJECT": "mailto:yemenicoffeeco@gmail.com",
+    "VAPID_PUBLIC_KEY": ""
   },
   "observability": {
     "enabled": true

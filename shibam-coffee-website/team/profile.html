@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile & Notifications — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="manifest" href="/team/app.webmanifest">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css">
+  <script src="/team/js/config.js" defer></script>
+  <script src="/team/js/auth.js" defer></script>
+  <script src="/team/js/profile.js" defer></script>
+</head>
+<body data-page="app" data-require-role="barista">
+  <header class="portal-header"><div class="container portal-header__inner">
+    <div class="portal-header__brand"><a href="/team/dashboard.html">Shibam Coffee</a><span>Profile & Notifications</span></div>
+    <div class="portal-header__session"><span><strong data-session-name></strong> <span class="badge" data-session-role></span></span><button type="button" id="logout-btn" class="btn-remove-row">Log out</button></div>
+  </div></header>
+  <main class="portal-main"><div class="container schedule-shell">
+    <div class="schedule-heading"><div><a class="schedule-back" href="/team/dashboard.html">← Team portal</a><h1>Profile & Notifications</h1><p>Manage your account, calendars, and delivery preferences.</p></div></div>
+    <p class="form-status" id="profile-page-status" role="status"></p>
+
+    <div class="schedule-two-column">
+      <section class="schedule-section"><div class="schedule-section__header"><div><span class="schedule-eyebrow">Account</span><h2>My profile</h2></div></div>
+        <div class="profile-account-summary" aria-label="Scheduling account details">
+          <p><span>Role</span><strong id="profile-role">—</strong></p>
+          <p><span>Qualified positions</span><strong id="profile-positions">—</strong></p>
+          <p><span>Maximum weekly hours</span><strong id="profile-max-hours">—</strong></p>
+        </div>
+        <form id="profile-form" class="portal-form compact-form">
+          <div class="form-group"><label for="profile-name">Full name</label><input id="profile-name" name="name" required maxlength="100"></div>
+          <div class="form-group"><label for="profile-preferred-name">Preferred name</label><input id="profile-preferred-name" name="preferredName" maxlength="100"></div>
+          <div class="form-group"><label for="profile-email">Email</label><input id="profile-email" name="email" type="email"></div>
+          <div class="form-actions"><button class="btn btn-primary" type="submit">Save profile</button><p class="form-status" data-form-status></p></div>
+        </form>
+        <form id="password-form" class="portal-form">
+          <div class="form-group"><label for="profile-password">New password</label><input id="profile-password" name="password" type="password" minlength="10" autocomplete="new-password" required></div>
+          <div class="form-group"><label for="profile-password-confirm">Confirm password</label><input id="profile-password-confirm" name="confirmPassword" type="password" minlength="10" required></div>
+          <div class="form-actions"><button class="btn-outline" type="submit">Change password</button><p class="form-status" data-form-status></p></div>
+        </form>
+      </section>
+
+      <section class="schedule-section"><div class="schedule-section__header"><div><span class="schedule-eyebrow">Mobile</span><h2>Phone & push</h2><p>SMS requires a verified number. Push works on supported installed browsers.</p></div></div>
+        <form id="phone-form" class="portal-form compact-form">
+          <div class="form-group"><label for="profile-phone">Mobile number</label><input id="profile-phone" name="phone" type="tel" placeholder="+14045550123"></div>
+          <div class="form-actions"><button class="btn-outline" type="submit">Send verification code</button><span id="phone-verification-state"></span></div>
+        </form>
+        <form id="phone-code-form" class="portal-form compact-form" hidden>
+          <input type="hidden" name="verificationId"><div class="form-group"><label for="profile-phone-code">Six-digit code</label><input id="profile-phone-code" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6"></div>
+          <button class="btn btn-primary" type="submit">Verify number</button>
+        </form>
+        <div class="form-actions"><button type="button" class="btn btn-primary" id="enable-push">Enable push on this device</button><span id="push-status"></span></div>
+        <div id="push-devices" class="request-list"></div>
+      </section>
+    </div>
+
+    <section class="schedule-section"><div class="schedule-section__header"><div><span class="schedule-eyebrow">Delivery</span><h2>Notification preferences</h2><p>Account and security messages always remain available in the portal.</p></div></div>
+      <form id="notification-preferences-form">
+        <div class="table-scroll"><table class="count-table" id="notification-preferences-table"></table></div>
+        <div class="form-grid form-grid--2">
+          <div class="form-group"><label for="notification-quiet-start">Quiet hours start</label><input id="notification-quiet-start" name="quietStart" type="time"><small>Email, push, and SMS wait until quiet hours end.</small></div>
+          <div class="form-group"><label for="notification-quiet-end">Quiet hours end</label><input id="notification-quiet-end" name="quietEnd" type="time"><small>Leave both blank to deliver at any time.</small></div>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Save preferences</button><p class="form-status" data-form-status></p></div>
+      </form>
+    </section>
+
+    <section class="schedule-section"><div class="schedule-section__header"><div><span class="schedule-eyebrow">Calendar</span><h2>Calendar subscriptions</h2><p>Private read-only links work with Google Calendar, Outlook, and Apple Calendar.</p></div><button type="button" class="btn btn-primary" id="create-calendar">Create private link</button></div>
+      <div id="calendar-new-link" class="calendar-secret" hidden><strong>Copy this link now. It will not be displayed again.</strong><input readonly><button type="button" class="btn-outline">Copy</button><a class="btn-outline" href="#">Download .ics</a></div>
+      <div id="calendar-list" class="request-list"></div>
+    </section>
+  </div></main>
+  <footer class="portal-footer"><div class="container"><p>&copy; <span id="footer-year"></span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p></div></footer>
+</body>
+</html>

@@ -92,6 +92,7 @@
     Auth.apiCall('getManagerSchedule', { weekStart: state.weekStart, create: true }).then(function (result) {
       if (!result.ok) { setPageStatus('error', Auth.errorMessage(result, 'Could not load the schedule.')); return; }
       state.data = result;
+      document.dispatchEvent(new CustomEvent('schedule:loaded', { detail: { data: result, weekStart: state.weekStart } }));
       setPageStatus(null, '');
       document.getElementById('schedule-state').textContent = result.schedule.status;
       document.getElementById('schedule-state').className = 'schedule-state schedule-state--' + result.schedule.status;

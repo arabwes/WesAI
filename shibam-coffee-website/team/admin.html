@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Dashboard — Shibam Coffee Atlanta</title>
   <meta name="robots" content="noindex, nofollow">
+  <link rel="manifest" href="/team/app.webmanifest">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -45,6 +46,7 @@
         <button type="button" class="portal-tab is-active" role="tab" aria-selected="true" data-tab-target="tab-submissions">Submissions</button>
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-catalog">Catalog</button>
         <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-users">Users</button>
+        <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-invitations">Invitations</button>
       </div>
 
       <section id="tab-submissions" data-tab-panel role="tabpanel">
@@ -89,6 +91,10 @@
                 <input type="text" id="new-name" name="name" required>
               </div>
               <div class="form-group">
+                <label for="new-email">Email</label>
+                <input type="email" id="new-email" name="email">
+              </div>
+              <div class="form-group">
                 <label for="new-role">Role</label>
                 <select id="new-role" name="role">
                   <option value="barista">Barista</option>
@@ -100,13 +106,30 @@
                 <label for="new-password">Temporary password</label>
                 <input type="text" id="new-password" name="password" required autocomplete="off">
               </div>
+              <div class="form-group">
+                <label for="new-max-hours">Maximum weekly hours</label>
+                <input type="number" id="new-max-hours" name="maxHours" min="0" max="168" step="0.5" value="40">
+              </div>
             </div>
+            <fieldset><legend>Qualified positions</legend><div id="new-user-positions" class="checkbox-grid"></div></fieldset>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary">Add User</button>
               <p class="form-status" data-form-status role="status" aria-live="polite"></p>
             </div>
           </form>
         </div>
+      </section>
+      <section id="tab-invitations" data-tab-panel role="tabpanel" hidden>
+        <div class="schedule-section__header"><div><h2>Employee invitations</h2><p>Invite employees without sharing temporary passwords.</p></div></div>
+        <form id="invitation-admin-form" class="portal-form compact-form inline-feature-form">
+          <div class="form-group"><label for="invitation-name">Name</label><input id="invitation-name" name="name" required maxlength="100"></div>
+          <div class="form-group"><label for="invitation-email">Email</label><input id="invitation-email" name="email" type="email" required></div>
+          <div class="form-group"><label for="invitation-role">Role</label><select id="invitation-role" name="role"><option value="barista">Barista</option><option value="lead">Lead</option><option value="management">Management</option></select></div>
+          <div class="form-group"><label for="invitation-max-hours">Maximum weekly hours</label><input id="invitation-max-hours" name="maxHours" type="number" min="0" max="168" step="0.5" value="40"></div>
+          <fieldset><legend>Qualified positions</legend><div id="invitation-positions" class="checkbox-grid"></div></fieldset>
+          <button class="btn btn-primary" type="submit">Send invitation</button><p class="form-status" data-form-status></p>
+        </form>
+        <div id="invitation-admin-list" class="request-list"></div>
       </section>
 
     </div>

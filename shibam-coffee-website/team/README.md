@@ -15,6 +15,8 @@ The portal now uses Cloudflare Pages Functions and D1. See
 | `dashboard.html` | Barista+ | Portal landing page |
 | `schedule.html` | Barista+ | Published schedule, confirmations, availability, time off, open shifts |
 | `manage-schedule.html` | Lead+ | Weekly schedule builder and request review |
+| `profile.html` | Barista+ | Profile, password, phone verification, notifications, push devices, calendar links |
+| `accept-invitation.html` | Invited employees | One-time account activation |
 | `inventory.html` | Barista+ | Weekly kitchen and storage count |
 | `dessert-inventory.html` | Barista+ | Daily dessert count and vendor order |
 | `local-order.html` | Barista+ | Consolidated local market request |
@@ -53,12 +55,40 @@ An unassigned published shift is an open shift. Qualified employees can request
 it, but Management must approve. Assignment uses a conditional database write,
 so the same shift cannot be awarded twice.
 
+### Trades and drops
+
+Employees can offer an assigned shift to qualified coworkers, request a direct
+swap, or ask Management to drop it. Direct swaps require the invited employee's
+acceptance and every exchange requires Management approval. The server rechecks
+overlaps, availability, time off, qualifications, and weekly-hour limits before
+changing assignments.
+
+### Templates, rotations, coverage, and history
+
+Leads can save a week as a reusable template and create multi-week rotations.
+The manager view includes a coverage heatmap based on availability and assigned
+shifts. Published schedules have immutable version snapshots; Management can
+inspect and restore an earlier version without deleting later audit history.
+
 ### Availability and time off
 
 Employees can enter recurring preferred or unavailable periods. Time-off
 requests remain pending until Management approves or declines them. Approving
 time off does not silently remove a scheduled shift; the manager must resolve
 the conflict explicitly.
+
+Employees can maintain date-bounded availability sets, add weekly repeating
+exceptions, cancel pending time-off or open-shift requests, and distinguish
+preferred time from unavailable time.
+
+### Notifications and calendars
+
+In-portal, email, Web Push, and SMS deliveries share per-user preferences and
+idempotent delivery records. A Cloudflare Queue handles provider calls and
+retries. Calendar subscription tokens are stored only as hashes and expose a
+private read-only iCalendar feed with stable event IDs and cancellation updates.
+The portal is installable as a basic PWA and its service worker displays push
+messages without caching authenticated application data.
 
 ## Existing operational forms
 
@@ -89,10 +119,15 @@ works while the user table is empty and requires a Cloudflare secret.
 | `users`, `sessions` | Identity, roles, weekly-hour limits, authenticated sessions |
 | `positions`, `employee_positions` | Shift qualifications |
 | `schedules`, `shifts` | Draft/published weekly schedules and assignments |
-| `availability_rules`, `availability_exceptions` | Employee scheduling preferences |
-| `time_off_requests`, `shift_requests` | Approval workflows |
+| `availability_rule_sets`, `availability_rules`, `availability_exceptions`, `availability_exception_series` | Date-bounded and repeating employee scheduling preferences |
+| `time_off_requests`, `shift_requests`, `shift_exchange_requests`, `shift_exchange_candidates` | Time-off, open-shift, drop, trade, and swap workflows |
 | `shift_confirmations` | Employee acknowledgement |
-| `notifications` | In-app updates and email delivery outbox |
+| `schedule_templates`, `template_shifts`, `schedule_rotations`, `schedule_rotation_weeks` | Reusable weeks and rotations |
+| `schedule_versions` | Immutable published schedule snapshots and restoration history |
+| `notifications`, `notification_deliveries`, `user_notification_preferences` | Multi-channel notification outbox and preferences |
+| `push_subscriptions`, `phone_verifications`, `sms_opt_outs` | Push and verified SMS delivery state |
+| `calendar_tokens` | Hashed private iCalendar subscription credentials |
+| `user_invitations` | Hashed, expiring employee invitations |
 | `audit_events` | Immutable action history |
 | `catalog`, `form_entries` | Existing operational forms and admin history |
 | `app_settings` | Scheduling policy configuration |
@@ -106,12 +141,20 @@ available after an account or item becomes inactive.
 team/
   schedule.html / js/schedule.js             employee experience
   manage-schedule.html / js/manage-schedule.js  manager experience
+  js/workforce.js                            exchanges, templates, coverage, history
+  profile.html / js/profile.js               account, notifications, calendar
+  accept-invitation.html                     invitation activation
+  sw.js / app.webmanifest                    push display and install metadata
   js/auth.js                                 cookie-session client and role UI
 functions/
   api/team/index.js                          API router
+  api/team/calendar/[token].js               private iCalendar feed
+  api/team/sms.js                            verified Twilio STOP/START webhook
   _lib/auth.js                               login, sessions, roles, audit
   _lib/legacy.js                             catalog/forms/admin compatibility
   _lib/scheduling.js                         scheduling domain and workflows
+  _lib/scheduling-extended.js                expanded scheduling and account workflows
+  _lib/schedule-snapshots.js                 immutable schedule versions
 migrations/                                  versioned D1 schema
 workers/notifications/                       Queue email consumer and cleanup job
 scripts/build-legacy-import.mjs              CSV-to-D1 migration helper
@@ -129,4 +172,5 @@ npm run dev
 
 Open `http://127.0.0.1:8788/team/`. See `CLOUDFLARE_SETUP.md` for initial
 Management bootstrap, preview/production databases, queues, secrets, and legacy
-data import.
+data import. Its final blocker table lists the provider accounts and API keys
+that can be added after the application code is deployed.

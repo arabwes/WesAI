@@ -223,7 +223,11 @@
       forbidden: 'You do not have permission to do that.',
       version_conflict: 'Someone else changed this item. Refresh and try again.',
       database_unavailable: 'The team database is temporarily unavailable.',
-      server_error: 'The server hit an unexpected problem.'
+      server_error: 'The server hit an unexpected problem.',
+      sms_not_configured: 'SMS is not configured yet. Management can enable it after adding the provider keys.',
+      email_taken: 'That email address is already assigned to another account.',
+      cannot_remove_last_management: 'At least one active Management account must remain.',
+      cannot_remove_self: 'You cannot deactivate your own account.'
     };
     return messages[result && result.error] || fallback || 'Something went wrong.';
   }
@@ -231,6 +235,9 @@
   document.addEventListener('DOMContentLoaded', function () {
     applyRoleVisibility();
     initTurnstile();
+    if (document.body.dataset.page === 'app' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/team/sw.js').catch(function () { /* The portal still works without PWA support. */ });
+    }
     var logoutButton = document.getElementById('logout-btn');
     if (logoutButton) logoutButton.addEventListener('click', logout);
     var loginForm = document.getElementById('login-form');

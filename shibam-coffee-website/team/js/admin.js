@@ -6,14 +6,17 @@
 
 (function () {
   'use strict';
+  var adminPositions = [];
 
   document.addEventListener('DOMContentLoaded', function () {
     setFooterYear();
     renderSessionBanner();
+    loadAdminPositions();
     initTabs();
     initSubmissionsTab();
     initCatalogTab();
     initUsersTab();
+    initInvitationsTab();
   });
 
   function el(tag, className, text) {
@@ -68,6 +71,28 @@
     if (!iso) return '';
     var d = new Date(iso);
     return isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
+  }
+
+  function loadAdminPositions() {
+    Auth.apiCall('getManagerSchedule', { weekStart: new Date().toISOString().slice(0, 10), create: false }).then(function (result) {
+      if (!result.ok) return;
+      adminPositions = result.positions || [];
+      renderPositionOptions(document.getElementById('new-user-positions'), []);
+      renderPositionOptions(document.getElementById('invitation-positions'), []);
+    });
+  }
+
+  function renderPositionOptions(mount, selected) {
+    if (!mount) return;
+    mount.innerHTML = '';
+    adminPositions.forEach(function (position) {
+      var label = el('label'); var input = el('input'); input.type = 'checkbox'; input.value = position.id;
+      input.checked = selected.indexOf(position.id) !== -1; label.appendChild(input); label.appendChild(document.createTextNode(' ' + position.name)); mount.appendChild(label);
+    });
+  }
+
+  function selectedPositions(mount) {
+    return Array.from(mount ? mount.querySelectorAll('input:checked') : []).map(function (input) { return input.value; });
   }
 
   // =========================================================================
@@ -244,8 +269,11 @@
       var newUser = {
         username: form.username.value.trim(),
         name: form.name.value.trim(),
+        email: form.email.value.trim(),
         role: form.role.value,
-        password: form.password.value
+        password: form.password.value,
+        maxWeeklyMinutes: Math.round(Number(form.maxHours.value) * 60),
+        positionIds: selectedPositions(document.getElementById('new-user-positions'))
       };
       if (!newUser.username || !newUser.password) {
         setStatus(status, 'error', 'Username and password are required.');
@@ -259,6 +287,8 @@
         if (result.ok) {
           setStatus(status, 'success', 'User added.');
           form.reset();
+          form.maxHours.value = 40;
+          renderPositionOptions(document.getElementById('new-user-positions'), []);
           loadUsers();
         } else {
           setStatus(status, 'error', result.error === 'username_taken' ? 'That username is already taken.' : 'Could not add that user.');
@@ -294,6 +324,10 @@
         row.appendChild(el('td', null, user.active ? 'Active' : 'Removed'));
 
         var actionCell = el('td');
+        var editBtn = el('button', 'btn-inline-action', 'Edit');
+        editBtn.type = 'button';
+        editBtn.addEventListener('click', function () { editUser(user); });
+        actionCell.appendChild(editBtn);
         if (user.active && user.username !== session.username) {
           var removeBtn = el('button', 'btn-inline-action btn-inline-action--danger', 'Remove');
           removeBtn.type = 'button';
@@ -319,6 +353,50 @@
       table.appendChild(tbody);
       wrap.appendChild(table);
       mount.appendChild(wrap);
+    });
+  }
+
+  function editUser(user) {
+    var dialog = document.getElementById('user-edit-dialog');
+    if (!dialog) {
+      dialog = document.createElement('dialog'); dialog.id = 'user-edit-dialog'; dialog.className = 'shift-dialog';
+      dialog.innerHTML = '<form class="portal-form"><div class="dialog-heading"><h2>Edit employee</h2><button type="button" class="dialog-close" data-close>×</button></div><input type="hidden" name="id"><div class="form-group"><label>Name</label><input name="name" required maxlength="100"></div><div class="form-group"><label>Email</label><input name="email" type="email"></div><div class="form-group"><label>Role</label><select name="role"><option value="barista">Barista</option><option value="lead">Lead</option><option value="management">Management</option></select></div><div class="form-group"><label>Maximum weekly hours</label><input name="maxHours" type="number" min="0" max="168" step="0.5"></div><fieldset><legend>Qualified positions</legend><div class="checkbox-grid" data-position-options></div></fieldset><label class="availability-all-day"><input name="active" type="checkbox"><span>Active portal access</span></label><p class="form-status" data-form-status></p><div class="dialog-actions"><span class="dialog-actions__spacer"></span><button type="button" class="btn-outline" data-close>Cancel</button><button type="submit" class="btn btn-primary">Save</button></div></form>';
+      document.body.appendChild(dialog); dialog.querySelectorAll('[data-close]').forEach(function (button) { button.addEventListener('click', function () { dialog.close(); }); });
+      dialog.querySelector('form').addEventListener('submit', function (event) {
+        event.preventDefault(); var form = event.currentTarget;
+        Auth.apiCall('updateManagedUser', { user: { id: form.id.value, name: form.name.value, email: form.email.value, role: form.role.value, maxWeeklyMinutes: Math.round(Number(form.maxHours.value) * 60), active: form.active.checked, positionIds: selectedPositions(form.querySelector('[data-position-options]')) } }).then(function (result) {
+          if (result.ok) { dialog.close(); loadUsers(); } else setStatus(form.querySelector('[data-form-status]'), 'error', Auth.errorMessage(result, 'Could not update employee.'));
+        });
+      });
+    }
+    var form = dialog.querySelector('form'); form.id.value = user.id; form.name.value = user.name; form.email.value = user.email || ''; form.role.value = user.role; form.maxHours.value = user.maxWeeklyMinutes / 60; form.active.checked = user.active; renderPositionOptions(form.querySelector('[data-position-options]'), user.positionIds || []); setStatus(form.querySelector('[data-form-status]'), null, ''); dialog.showModal();
+  }
+
+  function initInvitationsTab() {
+    var form = document.getElementById('invitation-admin-form');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault(); var button = form.querySelector('button[type="submit"]'); button.disabled = true;
+      Auth.apiCall('createInvitation', { name: form.name.value, email: form.email.value, role: form.role.value, maxWeeklyMinutes: Math.round(Number(form.maxHours.value) * 60), positionIds: selectedPositions(document.getElementById('invitation-positions')) }).then(function (result) {
+        button.disabled = false;
+        if (result.ok) { form.reset(); form.maxHours.value = 40; renderPositionOptions(document.getElementById('invitation-positions'), []); setStatus(form.querySelector('[data-form-status]'), result.deliveryConfigured ? 'success' : null, result.deliveryConfigured ? 'Invitation sent.' : 'Invitation created. Email delivery will begin after Resend is configured.'); loadInvitations(); }
+        else setStatus(form.querySelector('[data-form-status]'), 'error', Auth.errorMessage(result, 'Could not create invitation.'));
+      });
+    });
+    loadInvitations();
+  }
+
+  function loadInvitations() {
+    var mount = document.getElementById('invitation-admin-list'); mount.textContent = 'Loading…';
+    Auth.apiCall('listInvitations', {}).then(function (result) {
+      mount.innerHTML = ''; if (!result.ok) { mount.textContent = 'Could not load invitations.'; return; }
+      result.invitations.forEach(function (invitation) {
+        var card = el('article', 'request-card'); card.appendChild(el('strong', null, invitation.name + ' · ' + invitation.role));
+        var delivery = invitation.emailSentAt ? ' · email sent ' + formatDateTime(invitation.emailSentAt) : invitation.emailLastError ? ' · email failed: ' + invitation.emailLastError : '';
+        card.appendChild(el('p', null, invitation.email + ' · ' + invitation.status + ' · expires ' + formatDateTime(invitation.expiresAt) + delivery));
+        if (invitation.status === 'pending') { var revoke = el('button', 'btn-remove-row', 'Revoke'); revoke.type = 'button'; revoke.addEventListener('click', function () { Auth.apiCall('revokeInvitation', { invitationId: invitation.id }).then(loadInvitations); }); card.appendChild(revoke); }
+        mount.appendChild(card);
+      });
+      if (!result.invitations.length) mount.appendChild(el('p', null, 'No invitations yet.'));
     });
   }
 })();

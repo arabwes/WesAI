@@ -14,10 +14,13 @@
     "legacy:build-import": "node scripts/build-legacy-import.mjs",
     "notifications:set-secret": "wrangler secret put RESEND_API_KEY --config workers/notifications/wrangler.jsonc",
     "notifications:deploy": "wrangler deploy --config workers/notifications/wrangler.jsonc",
-    "pages:preview": "npm run build && wrangler pages deploy dist --project-name yemenicoffeeco --branch feature/team-scheduling-cloudflare",
+    "pages:preview": "npm run build && wrangler pages deploy dist --project-name yemenicoffeeco --branch feature/scheduling-high-medium",
     "test": "node --test tests/*.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.125.0"
+  },
+  "dependencies": {
+    "@pushforge/builder": "^2.0.5"
   }
 }

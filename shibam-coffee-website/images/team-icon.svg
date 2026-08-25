@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Shibam Coffee Team">
+  <rect width="512" height="512" rx="112" fill="#6f4e37"/>
+  <path d="M126 168h236v112c0 74-47 124-118 124s-118-50-118-124V168Z" fill="#fffdf9"/>
+  <path d="M362 204h30c48 0 58 82 7 105-17 8-33 7-48 4" fill="none" stroke="#fffdf9" stroke-width="28" stroke-linecap="round"/>
+  <path d="M196 116c-22 24 19 42-4 69m67-69c-22 24 19 42-4 69m67-69c-22 24 19 42-4 69" fill="none" stroke="#c9952a" stroke-width="18" stroke-linecap="round"/>
+</svg>
+

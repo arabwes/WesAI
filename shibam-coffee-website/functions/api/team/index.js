@@ -11,6 +11,18 @@ import {
   saveAvailabilityException,
   saveShift, submitTimeOff
 } from '../../_lib/scheduling.js';
+import {
+  acceptInvitation, applyScheduleTemplate, cancelExchangeRequest, cancelOpenShiftRequest,
+  cancelTimeOffRequest, changeMyPassword, createCalendarToken, createExchangeRequest,
+  createInvitation, createTemplateFromSchedule, deleteAvailabilityExceptionSeries,
+  deleteAvailabilitySet, deleteScheduleTemplate, generateScheduleRotation, getAvailabilitySets,
+  getExchangeData, getMySettings, getScheduleHistory, getTeamCoverage, inspectInvitation,
+  listInvitations, listScheduleTemplates, registerPushSubscription, removePushSubscription,
+  requestPhoneVerification, respondSwapRequest, restoreScheduleVersion, reviewExchangeRequest,
+  revokeCalendarToken, revokeInvitation, saveAvailabilitySet, saveNotificationPreferences,
+  saveRepeatingAvailabilityException, saveScheduleRotation, updateManagedUser, updateMyProfile,
+  verifyPhone, volunteerForExchange
+} from '../../_lib/scheduling-extended.js';
 
 const ACTIONS = {
   bootstrap: (request, payload, env) => bootstrap(payload, env),
@@ -42,7 +54,45 @@ const ACTIONS = {
   reviewShiftRequest,
   confirmShift,
   markNotificationsRead,
-  getAuditLog
+  getAuditLog,
+  cancelTimeOffRequest,
+  cancelOpenShiftRequest,
+  getExchangeData,
+  createExchangeRequest,
+  volunteerForExchange,
+  respondSwapRequest,
+  cancelExchangeRequest,
+  reviewExchangeRequest,
+  listScheduleTemplates,
+  createTemplateFromSchedule,
+  deleteScheduleTemplate,
+  applyScheduleTemplate,
+  saveScheduleRotation,
+  generateScheduleRotation,
+  getAvailabilitySets,
+  saveAvailabilitySet,
+  deleteAvailabilitySet,
+  saveRepeatingAvailabilityException,
+  deleteAvailabilityExceptionSeries,
+  getTeamCoverage,
+  getScheduleHistory,
+  restoreScheduleVersion,
+  getMySettings,
+  updateMyProfile,
+  changeMyPassword,
+  saveNotificationPreferences,
+  registerPushSubscription,
+  removePushSubscription,
+  createCalendarToken,
+  revokeCalendarToken,
+  requestPhoneVerification,
+  verifyPhone,
+  listInvitations,
+  createInvitation,
+  revokeInvitation,
+  inspectInvitation,
+  acceptInvitation,
+  updateManagedUser
 };
 
 export async function onRequestGet({ request, env }) {

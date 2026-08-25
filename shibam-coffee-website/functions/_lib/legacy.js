@@ -117,8 +117,12 @@ export async function updateEntry(request, payload, env) {
 
 export async function getUsers(request, payload, env) {
   await requireRole(request, payload, env, 'management');
-  const { results } = await env.TEAM_DB.prepare('SELECT * FROM users ORDER BY active DESC, name').all();
-  return { ok: true, users: results.map(publicUser) };
+  const { results } = await env.TEAM_DB.prepare(`SELECT u.*, COALESCE(GROUP_CONCAT(ep.position_id), '') AS position_ids
+    FROM users u LEFT JOIN employee_positions ep ON ep.user_id = u.id
+    GROUP BY u.id ORDER BY u.active DESC, u.name`).all();
+  return { ok: true, users: results.map((row) => ({ ...publicUser(row), preferredName: row.preferred_name || '',
+    phone: row.phone_e164 || '', phoneVerified: !!row.phone_verified_at,
+    positionIds: row.position_ids ? row.position_ids.split(',') : [] })) };
 }
 
 export async function addUser(request, payload, env) {
@@ -134,17 +138,20 @@ export async function addUser(request, payload, env) {
   const password = await makePassword(input.password);
   const id = newId('usr');
   const now = nowIso();
-  const positionId = role === 'management' ? 'position-management' : role === 'lead' ? 'position-lead' : 'position-barista';
+  const positionIds = Array.isArray(input.positionIds) ? input.positionIds.slice(0, 20).filter(Boolean) : [];
+  if (!positionIds.length) positionIds.push(role === 'management' ? 'position-management' : role === 'lead' ? 'position-lead' : 'position-barista');
   try {
-    await env.TEAM_DB.batch([
+    const statements = [
       env.TEAM_DB.prepare(`INSERT INTO users
         (id, username, name, email, role, password_hash, password_salt, password_algorithm,
          max_weekly_minutes, active, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`)
         .bind(id, username, name, email, role, password.hash, password.salt, password.algorithm,
-          clampInt(input.maxWeeklyMinutes, 0, 10080, 2400), now, now),
-      env.TEAM_DB.prepare('INSERT INTO employee_positions (user_id, position_id) VALUES (?, ?)').bind(id, positionId)
-    ]);
+          clampInt(input.maxWeeklyMinutes, 0, 10080, 2400), now, now)
+    ];
+    positionIds.forEach((positionId) => statements.push(env.TEAM_DB.prepare(
+      'INSERT INTO employee_positions (user_id, position_id) VALUES (?, ?)').bind(id, positionId)));
+    await env.TEAM_DB.batch(statements);
   } catch (error) {
     if (String(error).includes('UNIQUE')) throw new ApiError('email_or_username_taken', 409);
     throw error;

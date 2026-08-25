@@ -19,6 +19,10 @@ This distinction matters when configuring secrets:
 | `BOOTSTRAP_SECRET` | Pages project `yemenicoffeeco` | Creates the first management account |
 | `TURNSTILE_SECRET` | Pages project `yemenicoffeeco` | Optional login bot protection |
 | `RESEND_API_KEY` | Worker `shibam-team-notifications` | Sends schedule notification email |
+| `VAPID_PRIVATE_JWK` | Worker `shibam-team-notifications` | Signs browser Web Push messages |
+| `TWILIO_ACCOUNT_SID` | Notification Worker | Twilio account identifier used by the SMS sender |
+| `TWILIO_AUTH_TOKEN` | Notification Worker **and** Pages | Sends SMS and validates Twilio STOP/START webhooks |
+| `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM_NUMBER` | Notification Worker | Selects the Twilio sender |
 
 ### Fast path: set only the notification Worker secret
 
@@ -425,6 +429,131 @@ npx wrangler secret delete RESEND_API_KEY --config workers/notifications/wrangle
 Removing it disables email delivery and causes queued email attempts to retry.
 In-app notifications continue to be stored in D1.
 
+### 3D. Browser Web Push keys
+
+Web Push does not require a paid messaging vendor, but it does require one VAPID
+key pair. The public key is safe to expose to browsers. The private JWK must only
+exist as a notification Worker secret.
+
+Generate the pair from the project folder:
+
+```powershell
+npx @pushforge/builder vapid
+```
+
+The command prints a public key and a private JWK. Complete all of these steps:
+
+1. Copy the public key into `VAPID_PUBLIC_KEY` in both locations:
+   - the root `wrangler.jsonc` production and preview `vars` blocks;
+   - `workers/notifications/wrangler.jsonc` under `vars`.
+2. Store the complete private JWK JSON interactively:
+
+```powershell
+npx wrangler secret put VAPID_PRIVATE_JWK --config workers/notifications/wrangler.jsonc
+```
+
+3. Paste the private JSON at the prompt. Do not add quotation marks around the
+   entire value beyond the JSON's own quotation marks.
+4. Verify only the secret name, never its value:
+
+```powershell
+npx wrangler secret list --config workers/notifications/wrangler.jsonc
+```
+
+5. Redeploy the notification Worker and the Pages preview.
+6. Open **Profile & Notifications**, choose **Enable push on this device**, and
+   allow browser notifications.
+
+If `VAPID_PUBLIC_KEY` remains blank, the button explains that push setup is still
+pending. Email and in-app notifications continue to work.
+
+### 3E. Twilio SMS and phone verification
+
+SMS is optional. The checked-in application keeps `SMS_ENABLED` set to `false`
+until these steps are complete, so employees cannot accidentally queue messages
+that have nowhere to go.
+
+In Twilio, obtain:
+
+- Account SID;
+- Auth Token;
+- either a Messaging Service SID (recommended) or an SMS-capable Twilio number.
+
+Store the Worker values interactively. Run each command separately and paste
+only when Wrangler prompts:
+
+```powershell
+npx wrangler secret put TWILIO_ACCOUNT_SID --config workers/notifications/wrangler.jsonc
+npx wrangler secret put TWILIO_AUTH_TOKEN --config workers/notifications/wrangler.jsonc
+npx wrangler secret put TWILIO_MESSAGING_SERVICE_SID --config workers/notifications/wrangler.jsonc
+```
+
+If you use a direct Twilio number instead of a Messaging Service, skip the last
+command and run:
+
+```powershell
+npx wrangler secret put TWILIO_FROM_NUMBER --config workers/notifications/wrangler.jsonc
+```
+
+The Pages Function that processes STOP and START must validate Twilio's request,
+so add the same Auth Token to Pages:
+
+```powershell
+npx wrangler pages secret put TWILIO_AUTH_TOKEN --project-name yemenicoffeeco
+```
+
+Repeat that Pages command for the preview environment if SMS will be tested on a
+preview deployment. Then configure the Twilio Messaging Service's incoming
+message webhook as an HTTP POST to:
+
+```text
+https://www.shibamatlanta.com/api/team/sms
+```
+
+Finally:
+
+1. Change `SMS_ENABLED` from `"false"` to `"true"` in the appropriate
+   `wrangler.jsonc` environment.
+2. Deploy the notification Worker and Pages environment.
+3. Add a mobile number in **Profile & Notifications** using E.164 format, such
+   as `+14045550123`.
+4. Verify the six-digit code.
+5. Enable one SMS notification category and trigger a test schedule change.
+6. Reply `STOP`, confirm the portal stops creating SMS deliveries, then reply
+   `START` and explicitly re-enable the desired SMS categories in the portal.
+
+Twilio credentials are not checked into the repository. Carrier registration,
+sender approval, costs, and geographic restrictions remain external Twilio
+account tasks.
+
+### 3F. Enable invitation email after Resend works
+
+Employee invitations use the same `RESEND_API_KEY` and notification Worker as
+schedule email. After the Resend sender test succeeds, change
+`INVITATION_EMAIL_ENABLED` to `"true"` in the appropriate root
+`wrangler.jsonc` environment and deploy Pages.
+
+Invitations created while `INVITATION_EMAIL_ENABLED` is `false` are stored but
+are not queued for delivery. Revoke those pending invitations and create fresh
+ones after email is active; only token hashes are stored, so an old raw
+invitation link cannot be reconstructed.
+
+### 3G. Current credential-dependent blockers
+
+The code and database flows are complete, but these external actions cannot be
+completed without account credentials:
+
+| Capability | Blocker | Portal behavior before resolution |
+|---|---|---|
+| Email and invitations | Verified Resend domain and `RESEND_API_KEY` | In-app notifications work; ordinary email deliveries retry, while invitation email stays explicitly disabled |
+| Browser push | Generated VAPID pair and Worker secret | Push enable button remains unavailable |
+| SMS verification/alerts | Twilio account, sender, keys, webhook, and any required carrier registration | SMS setup stays disabled; no SMS is queued |
+| Login bot protection | Turnstile sitekey and secret | Login throttling remains active; Turnstile widget stays hidden |
+
+These are configuration blockers only. Schedule building, exchanges, templates,
+rotations, availability periods, coverage, history, profiles, calendar feeds,
+in-app notifications, and request approvals do not depend on them.
+
 ## 4. Create or import the first management account
 
 ### Fresh portal
@@ -557,7 +686,7 @@ For a manual preview deploy instead of Git integration:
 
 ~~~powershell
 npm run build
-npx wrangler pages deploy dist --project-name yemenicoffeeco --branch feature/team-scheduling-cloudflare
+npx wrangler pages deploy dist --project-name yemenicoffeeco --branch feature/scheduling-high-medium
 ~~~
 
 Before a production deployment:
