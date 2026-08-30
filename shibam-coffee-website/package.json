@@ -2,6 +2,7 @@
   "name": "shibam-coffee-team-portal",
   "private": true,
   "type": "module",
+  "description": "Shibam Coffee website and Cloudflare-backed employee portal.",
   "engines": {
     "node": ">=22"
   },
@@ -14,10 +15,12 @@
     "legacy:build-import": "node scripts/build-legacy-import.mjs",
     "notifications:set-secret": "wrangler secret put RESEND_API_KEY --config workers/notifications/wrangler.jsonc",
     "notifications:deploy": "wrangler deploy --config workers/notifications/wrangler.jsonc",
-    "pages:preview": "npm run build && wrangler pages deploy dist --project-name yemenicoffeeco --branch feature/scheduling-high-medium",
-    "test": "node --test tests/*.test.js"
+    "pages:preview": "npm run build && wrangler pages deploy dist --project-name yemenicoffeeco --branch main",
+    "test": "node --test tests/*.test.js",
+    "test:mobile": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "wrangler": "^4.125.0"
   },
   "dependencies": {

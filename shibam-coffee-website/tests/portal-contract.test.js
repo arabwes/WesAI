@@ -114,6 +114,19 @@ test('migration adds exchange, template, history, profile, and delivery tables',
   ]) assert.match(migration, new RegExp(`CREATE TABLE ${table}\\b`));
 });
 
+test('Cloudflare API preserves the document, changelog, catalog-edit, and same-day recall workflows', async () => {
+  const router = await source('functions/api/team/index.js');
+  const compatibility = await source('functions/_lib/portal-qol.js');
+  const migration = await source('migrations/0003_portal_qol_compatibility.sql');
+  for (const action of [
+    'updateItem', 'getChangelog', 'resetPassword', 'getDocuments', 'addDocument',
+    'updateDocument', 'discontinueDocument', 'restoreDocument', 'getMyEntries', 'updateMyEntries'
+  ]) assert.match(router, new RegExp(`\\b${action}\\b`));
+  assert.match(compatibility, /form\.update_own_submission/);
+  assert.match(migration, /CREATE TABLE portal_documents/);
+  assert.match(migration, /submission_id/);
+});
+
 test('browser session token is kept in an HttpOnly cookie', async () => {
   const browserAuth = await source('team/js/auth.js');
   const serverAuth = await source('functions/_lib/auth.js');

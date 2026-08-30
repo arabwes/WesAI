@@ -5,6 +5,10 @@ import {
   setItemStatus, submitForm, updateEntry
 } from '../../_lib/legacy.js';
 import {
+  addDocument, discontinueDocument, getChangelog, getDocuments, getMyEntries,
+  resetPassword, restoreDocument, updateDocument, updateItem, updateMyEntries
+} from '../../_lib/portal-qol.js';
+import {
   cancelShift, confirmShift, copySchedule, deleteAvailability, deleteAvailabilityException, getAuditLog,
   getManagerSchedule, getMySchedule, markNotificationsRead, publishSchedule,
   replaceAvailability, requestOpenShift, reviewShiftRequest, reviewTimeOff, saveAvailability,
@@ -28,15 +32,25 @@ const ACTIONS = {
   bootstrap: (request, payload, env) => bootstrap(payload, env),
   getCatalog,
   addItem,
+  updateItem,
   flagItem: (request, payload, env) => setItemStatus(request, payload, env, 'flagged'),
   discontinueItem: (request, payload, env) => setItemStatus(request, payload, env, 'discontinued'),
   restoreItem: (request, payload, env) => setItemStatus(request, payload, env, 'active'),
   submitForm,
   getEntries,
   updateEntry,
+  getMyEntries,
+  updateMyEntries,
+  getChangelog,
+  getDocuments,
+  addDocument,
+  updateDocument,
+  discontinueDocument,
+  restoreDocument,
   getUsers,
   addUser,
   removeUser,
+  resetPassword,
   getManagerSchedule,
   getMySchedule,
   saveShift,

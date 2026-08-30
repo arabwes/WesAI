@@ -31,6 +31,9 @@ export async function addItem(request, payload, env) {
   const item = payload.item || {};
   const name = String(item.name || '').trim();
   if (!name) throw new ApiError('missing_name', 400);
+  const duplicate = await env.TEAM_DB.prepare(`SELECT id FROM catalog WHERE form_type = ? AND status != 'discontinued'
+    AND name = ? COLLATE NOCASE`).bind(payload.formType, name).first();
+  if (duplicate) throw new ApiError('duplicate_name', 409);
   const id = newId('catalog');
   await env.TEAM_DB.prepare(`INSERT INTO catalog
     (id, form_type, group_name, name, unit, threshold, location, target, status, added_by, created_at)
@@ -42,11 +45,14 @@ export async function addItem(request, payload, env) {
 
 export async function setItemStatus(request, payload, env, status) {
   const user = await requireRole(request, payload, env, status === 'flagged' ? 'lead' : 'management');
-  const result = await env.TEAM_DB.prepare('UPDATE catalog SET status = ? WHERE id = ?')
-    .bind(status, payload.catalogId).run();
-  if (!result.meta.changes) throw new ApiError('not_found', 404);
-  await audit(env.TEAM_DB, user.id, `catalog.${status}`, 'catalog', payload.catalogId, {});
-  return { ok: true };
+  const ids = (Array.isArray(payload.catalogIds) ? payload.catalogIds : payload.catalogId ? [payload.catalogId] : [])
+    .slice(0, 100).map(String).filter(Boolean);
+  if (!ids.length) throw new ApiError('not_found', 404);
+  const results = await env.TEAM_DB.batch(ids.map((id) => env.TEAM_DB.prepare('UPDATE catalog SET status = ? WHERE id = ?')
+    .bind(status, id)));
+  const updated = ids.filter((id, index) => Number(results[index].meta?.changes) > 0);
+  await audit(env.TEAM_DB, user.id, `catalog.${status}`, 'catalog', updated.join(','), { count: updated.length });
+  return { ok: true, updated, notFound: ids.filter((id) => !updated.includes(id)) };
 }
 
 export async function submitForm(request, payload, env) {
@@ -57,27 +63,28 @@ export async function submitForm(request, payload, env) {
   const items = Array.isArray(payload.items) ? payload.items : [];
   const unlisted = Array.isArray(payload.unlistedItems) ? payload.unlistedItems : [];
   if (!items.length && !unlisted.length) throw new ApiError('empty_submission', 400);
+  const submissionId = newId('submission');
   const statements = [];
   for (const item of items) {
     const product = String(item.product || '').trim();
     if (!product) continue;
     statements.push(env.TEAM_DB.prepare(`INSERT INTO form_entries
-      (id, form_type, submitted_at, employee_id, employee_name, entry_date, product, details_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(newId('entry'), payload.formType, submittedAt, user.id, user.name, entryDate, product, JSON.stringify(item)));
+      (id, form_type, submitted_at, employee_id, employee_name, entry_date, product, details_json, submission_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(newId('entry'), payload.formType, submittedAt, user.id, user.name, entryDate, product, JSON.stringify(item), submissionId));
   }
   for (const item of unlisted) {
     const name = String(item.name || '').trim();
     if (!name) continue;
     statements.push(env.TEAM_DB.prepare(`INSERT INTO form_entries
-      (id, form_type, submitted_at, employee_id, employee_name, entry_date, product, details_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(newId('entry'), payload.formType, submittedAt, user.id, user.name, entryDate, `${name} (not on list)`, JSON.stringify(item)));
+      (id, form_type, submitted_at, employee_id, employee_name, entry_date, product, details_json, submission_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(newId('entry'), payload.formType, submittedAt, user.id, user.name, entryDate, `${name} (not on list)`, JSON.stringify(item), submissionId));
   }
   if (!statements.length) throw new ApiError('empty_submission', 400);
   await env.TEAM_DB.batch(statements);
-  await audit(env.TEAM_DB, user.id, 'form.submit', 'form_submission', submittedAt, { formType: payload.formType, rows: statements.length });
-  return { ok: true };
+  await audit(env.TEAM_DB, user.id, 'form.submit', 'form_submission', submissionId, { formType: payload.formType, rows: statements.length });
+  return { ok: true, submissionId };
 }
 
 export async function getEntries(request, payload, env) {
@@ -93,6 +100,7 @@ export async function getEntries(request, payload, env) {
     product: row.product,
     details: row.details_json,
     entryId: row.id,
+    submissionId: row.submission_id || '',
     lastEditedBy: row.last_edited_by || '',
     lastEditedAt: row.last_edited_at || ''
   })) };

@@ -51,10 +51,10 @@ Nothing in this setup changes the public marketing pages.
 ### Work from the correct folder
 
 Open PowerShell in the folder containing this file and `package.json`. For the
-current feature worktree, the exact command is:
+merged `main` checkout, the exact command is:
 
 ~~~powershell
-Set-Location 'C:\Users\arabw\Documents\claude\Projects\WesAI-scheduling\shibam-coffee-website'
+Set-Location 'C:\Users\arabw\Documents\claude\Projects\WesAI\shibam-coffee-website'
 Get-Location
 ~~~
 
@@ -248,10 +248,10 @@ remote database. Read the database name before answering yes. Production must sa
 Verify key production tables:
 
 ~~~powershell
-npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','schedules','shifts','notifications') ORDER BY name;"
+npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','schedules','shifts','notifications','schedule_templates','portal_documents') ORDER BY name;"
 ~~~
 
-The result should contain all four table names.
+The result should contain all six table names.
 
 Migrations are deliberately separate from Pages deployment. Apply a migration
 before deploying application code that requires it.
@@ -701,6 +701,142 @@ Before a production deployment:
 8. Required Pages secrets appear in the Pages secret list.
 9. The Pages preview passes the scheduling section of `TEST_PLAN.md`.
 10. The existing Apps Script deployment remains available during the pilot.
+
+### Production launch sequence
+
+Run this sequence from the merged `main` checkout. It intentionally backs up
+D1 and deploys the notification consumer before deploying the Pages producer.
+
+1. Confirm the checkout and run the release checks:
+
+~~~powershell
+Set-Location 'C:\Users\arabw\Documents\claude\Projects\WesAI\shibam-coffee-website'
+git status --short --branch
+npm ci
+npm test
+npm run test:mobile
+npm run build
+npx wrangler deploy --dry-run --config workers/notifications/wrangler.jsonc
+~~~
+
+`git status` must show `main` with no uncommitted files. Every test and build
+command must exit successfully.
+
+2. Confirm the Cloudflare account and existing resource names:
+
+~~~powershell
+npx wrangler whoami
+npx wrangler d1 list
+npx wrangler queues list
+~~~
+
+The account must own `yemenicoffeeco`, `shibam-team`,
+`shibam-team-notifications`, and
+`shibam-team-notifications-dead-letter`. Do not create duplicates if they are
+already listed.
+
+3. Export a pre-migration database backup outside the repository:
+
+~~~powershell
+$backupDir = Join-Path $env:USERPROFILE 'Documents\shibam-production-backups'
+New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+$backupFile = Join-Path $backupDir ("shibam-team-{0}.sql" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+npx wrangler d1 export shibam-team --remote --output $backupFile
+Get-Item -LiteralPath $backupFile
+~~~
+
+Keep the printed backup path. Do not commit the export because it may contain
+employee information.
+
+4. List and apply only the pending production migrations:
+
+~~~powershell
+npx wrangler d1 migrations list shibam-team --remote
+npm run db:migrate:production
+npx wrangler d1 migrations list shibam-team --remote
+~~~
+
+Before confirming, verify that Wrangler names the remote database
+`shibam-team`. The final list must report that there are no migrations to
+apply. For this release, existing installations should apply
+`0002_scheduling_high_medium.sql` and
+`0003_portal_qol_compatibility.sql`.
+
+5. Configure credential-dependent services before enabling their flags:
+
+- For production email, verify the Resend sender domain, set `EMAIL_FROM`,
+  deploy the Worker, and run `npm run notifications:set-secret`.
+- For Web Push, complete Step 3D and set both the public and private VAPID
+  values.
+- For SMS, complete Step 3E before changing `SMS_ENABLED` to `"true"`.
+- For invitation email, complete the Resend setup before changing
+  `INVITATION_EMAIL_ENABLED` to `"true"`.
+- Turnstile remains optional; complete Step 3B if it is wanted at launch.
+
+After setting Worker secrets, verify only their names:
+
+~~~powershell
+npx wrangler secret list --config workers/notifications/wrangler.jsonc
+npx wrangler pages secret list --project-name yemenicoffeeco
+~~~
+
+6. Deploy the notification Worker:
+
+~~~powershell
+npm run notifications:deploy
+~~~
+
+If email, Web Push, and SMS are still disabled, the Worker can still be
+deployed safely; in-app notifications and the hourly maintenance task remain
+available.
+
+7. Publish `main` and deploy Pages. With the existing Git-integrated Pages
+project, push the merge commit:
+
+~~~powershell
+Set-Location 'C:\Users\arabw\Documents\claude\Projects\WesAI'
+git push origin main
+~~~
+
+If automatic production deployments are disabled in Cloudflare, deploy the
+already-built output manually from the website folder:
+
+~~~powershell
+Set-Location 'C:\Users\arabw\Documents\claude\Projects\WesAI\shibam-coffee-website'
+npm run build
+npx wrangler pages deploy dist --project-name yemenicoffeeco --branch main
+~~~
+
+Use one Pages deployment path, not both. In Cloudflare Dashboard → Workers &
+Pages → `yemenicoffeeco` → Deployments, wait for the production deployment to
+show **Success**.
+
+8. Verify the live API and database:
+
+~~~powershell
+Invoke-RestMethod 'https://www.shibamatlanta.com/api/team?health=1'
+npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','schedules','shifts','notifications','schedule_templates','portal_documents') ORDER BY name;"
+~~~
+
+The health response must contain `ok: true`, and the database query must return
+all six tables.
+
+9. Sign in at `https://www.shibamatlanta.com/team/` using the existing
+management account. Use the bootstrap procedure in Step 4 only if the `users`
+table is empty. Then smoke-test these flows in order:
+
+   - open Admin and confirm Users, Invitations, Changelog, and Documents load;
+   - open Schedule Management, create a draft week, add a shift, and publish;
+   - sign in as an employee, submit availability and a time-off request;
+   - confirm the employee can view and acknowledge the published shift;
+   - submit and recall/edit one same-day inventory entry;
+   - if email is enabled, send one invitation and inspect Worker and Resend logs;
+   - if push or SMS is enabled, test one opted-in device or verified phone.
+
+10. Keep the D1 backup and the previous successful Pages deployment through the
+pilot. If a release problem appears, roll Pages back in the dashboard and use
+the D1 Time Travel or export restore procedure only when database restoration
+is actually required.
 
 ## 7. Verify email delivery
 

@@ -130,6 +130,7 @@ works while the user table is empty and requires a Cloudflare secret.
 | `user_invitations` | Hashed, expiring employee invitations |
 | `audit_events` | Immutable action history |
 | `catalog`, `form_entries` | Existing operational forms and admin history |
+| `portal_documents` | Management-controlled handbook and reference links |
 | `app_settings` | Scheduling policy configuration |
 
 All relationships use stable IDs. User, shift, and catalog history remains

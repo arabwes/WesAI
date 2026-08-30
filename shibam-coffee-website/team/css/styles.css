@@ -274,6 +274,51 @@
 }
 
 /* ==========================================================================
+   Submissions tab — expand/collapse per submission, and the "noticeable
+   number" treatment for whatever quantity a line item actually recorded.
+   ========================================================================== */
+.submission-row {
+  cursor: pointer;
+}
+
+.submission-row:hover {
+  background-color: rgba(201, 149, 42, 0.1);
+}
+
+.submission-row__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  font-weight: 700;
+  color: var(--color-gold);
+}
+
+.submission-detail-cell {
+  padding: 0 !important;
+  background-color: var(--color-cream);
+}
+
+.submission-detail-cell > .table-scroll {
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.count-table__qty-value,
+.count-table input.count-table__qty-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-brown-dark);
+}
+
+.count-table input.count-table__qty-value {
+  border-color: var(--color-gold);
+  background-color: rgba(201, 149, 42, 0.08);
+}
+
+/* ==========================================================================
    Tabs (dessert inventory)
    ========================================================================== */
 
@@ -901,4 +946,368 @@
   .availability-choice-group { grid-template-columns: 1fr; }
   .availability-tabs { display: grid; grid-template-columns: 1fr 1fr; }
   .availability-tab { padding-inline: 8px; font-size: 0.82rem; }
+}
+
+/* ==========================================================================
+   Table controls — search + sort + CSV export (admin dashboard tables)
+   ========================================================================== */
+
+.table-controls {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.table-search-input {
+  flex: 1 1 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+}
+
+.btn-export-csv {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.count-table th.is-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.count-table th.is-sortable:hover {
+  color: var(--color-text);
+}
+
+.count-table th.is-sortable::after {
+  content: '\21C5';
+  margin-left: 6px;
+  opacity: 0.35;
+  font-weight: 400;
+}
+
+.count-table th.is-sorted-asc::after {
+  content: '\2191';
+  opacity: 1;
+}
+
+.count-table th.is-sorted-desc::after {
+  content: '\2193';
+  opacity: 1;
+}
+
+.count-table td:first-child input[type="checkbox"],
+.count-table th:first-child input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-gold);
+}
+
+/* ==========================================================================
+   Bulk-action toolbar (multiselect on the admin Catalog tab)
+   ========================================================================== */
+
+.table-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-btn);
+  background-color: rgba(201, 149, 42, 0.10);
+}
+
+.table-bulk-toolbar__label {
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.inline-error {
+  display: block;
+  font-size: 0.8rem;
+  color: #B3261E;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   Confirmation modal — replaces window.confirm() on destructive actions
+   ========================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(31, 22, 15, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  z-index: 100;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 380px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-5);
+}
+
+.modal-message {
+  margin: 0 0 var(--space-4);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ==========================================================================
+   Mobile card-collapse — every .count-table stacks as labeled rows below
+   ~640px instead of relying on horizontal scroll. Each cell already carries
+   a data-label attribute (set in admin.js/forms.js) matching its column
+   header, which the ::before pseudo-element below renders as the label.
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .table-scroll {
+    overflow-x: visible;
+    border: none;
+    background: none;
+  }
+
+  .count-table {
+    display: block;
+  }
+
+  .count-table thead {
+    display: none;
+  }
+
+  .count-table tbody {
+    display: block;
+  }
+
+  .count-table tbody tr {
+    display: block;
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background-color: var(--color-surface);
+  }
+
+  .count-table tbody tr:nth-child(even) {
+    background-color: var(--color-surface);
+  }
+
+  .count-table th,
+  .count-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    width: 100%;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    text-align: right;
+    white-space: normal;
+  }
+
+  .count-table tbody tr:last-child th,
+  .count-table tbody tr:last-child td {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .count-table tr > :last-child {
+    border-bottom: none;
+  }
+
+  .count-table td[data-label]::before,
+  .count-table th[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-brown-mid);
+    text-align: left;
+    flex-shrink: 0;
+  }
+
+  .count-table input,
+  .count-table select,
+  .count-table textarea {
+    width: auto;
+    max-width: 62%;
+    text-align: right;
+  }
+
+  .count-table__actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .count-table__item {
+    min-width: 0;
+  }
+
+  .table-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ==========================================================================
+   Draft-restore banner (autosave)
+   ========================================================================== */
+
+.draft-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-gold);
+  border-radius: var(--radius-card);
+  background-color: rgba(201, 149, 42, 0.10);
+}
+
+.draft-banner__text {
+  flex: 1 1 auto;
+  font-size: 0.92rem;
+}
+
+.draft-banner__dismiss {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 4px 8px;
+  color: var(--color-text-light);
+}
+
+.draft-banner__dismiss:hover {
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Recall a same-day submission to edit it
+   ========================================================================== */
+
+.recall-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.recall-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  width: 100%;
+}
+
+.recall-panel select {
+  flex: 1 1 auto;
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-btn);
+  background-color: var(--color-surface);
+}
+
+.editing-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--color-focus);
+  border-radius: var(--radius-card);
+  background-color: rgba(14, 111, 184, 0.08);
+}
+
+.editing-banner__text {
+  flex: 1 1 auto;
+  font-size: 0.92rem;
+}
+
+/* ==========================================================================
+   Documents portal
+   ========================================================================== */
+
+.document-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 900px) {
+  .document-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.document-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.document-card__title {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.document-card__description {
+  color: var(--color-text-light);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.document-card__placeholder {
+  color: var(--color-text-light);
+  font-style: italic;
+  margin: 0;
+}
+
+.document-card__link {
+  align-self: flex-start;
+}
+
+.document-embed {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.document-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: var(--radius-btn);
 }

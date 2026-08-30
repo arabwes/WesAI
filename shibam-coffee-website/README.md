@@ -18,7 +18,8 @@ shibam-coffee-website/
 ├── js/script.js               Nav toggle, CTA tracking, form handling
 ├── images/                    Photo placeholders (see images/README.md)
 ├── team/                      Internal employee forms (see team/README.md)
-├── robots.txt / sitemap.xml / _redirects
+├── dev-server.cjs             Local server that behaves like Cloudflare Pages
+├── robots.txt / sitemap.xml / _redirects / _headers
 ├── TEST_PLAN.md               QA checklist — run after every push to main
 └── tracking-notes.md / seo-notes.md
 ```
@@ -32,11 +33,25 @@ out when adding pages to `sitemap.xml`. See `team/README.md` and
 
 ## 1. Local development
 
-The public marketing pages have no build step. The team portal's database and
-API require the Cloudflare local runtime; see `CLOUDFLARE_SETUP.md`.
+```bash
+npm install
+npm run db:migrate:local
+npm run dev
+```
 
-If you'd rather use a local server (recommended only because `fetch()` in
-some browsers behaves oddly on `file://`), any static server works:
+The Cloudflare local runtime serves the team portal API and database. See
+`CLOUDFLARE_SETUP.md`. For marketing-page-only checks, `node dev-server.cjs`
+still provides the production-style extensionless redirects and headers.
+
+`dev-server.cjs` reproduces the two Cloudflare Pages behaviors a generic
+static server doesn't: it strips `.html` with a 308 redirect
+(`/menu.html` → `/menu`) and applies the rules in `_headers`. Testing
+against a server without those has already let a production-only bug
+through, so prefer it over `npx serve` / `python3 -m http.server`,
+especially for anything under `/team/`.
+
+For quick visual tweaks to the public marketing pages you can still just
+open `index.html` directly, or use any static server:
 
 ```bash
 npx serve .
