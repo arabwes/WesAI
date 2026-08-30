@@ -1,13 +1,13 @@
 # Test Plan — run after every push to `main`
 
 Run this against the **live production URL**
-(`https://www.shibamatlanta.com`), not a local server. Several of these
+(`https://shibamatlanta.com`), not a local server. Several of these
 checks (especially §1, redirects) depend on Cloudflare Pages' own
 platform behavior and cannot be reproduced by `python3 -m http.server`
 or any other local static server — a clean local test does not mean the
 deployed site is clean.
 
-Replace `https://www.shibamatlanta.com` below if the domain changes.
+Replace `https://shibamatlanta.com` below if the domain changes.
 
 ## 1. Redirect integrity
 
@@ -20,7 +20,7 @@ seconds and would have caught that regression immediately.
 for path in / menu.html catering-events.html about.html location.html contact.html \
             menu catering events about location contact; do
   echo "=== /$path ==="
-  curl -sIL "https://www.shibamatlanta.com/$path" | grep -E '^HTTP|^location' -i
+  curl -sIL "https://shibamatlanta.com/$path" | grep -E '^HTTP|^location' -i
 done
 ```
 

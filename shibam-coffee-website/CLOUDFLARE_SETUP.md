@@ -507,7 +507,7 @@ preview deployment. Then configure the Twilio Messaging Service's incoming
 message webhook as an HTTP POST to:
 
 ```text
-https://www.shibamatlanta.com/api/team/sms
+https://shibamatlanta.com/api/team/sms
 ```
 
 Finally:
@@ -564,7 +564,7 @@ bootstrap request succeeds only while the `users` table is empty.
 From PowerShell:
 
 ~~~powershell
-$portalUrl = 'https://www.shibamatlanta.com'
+$portalUrl = 'https://shibamatlanta.com'
 $bootstrapSecret = Read-Host 'Paste BOOTSTRAP_SECRET'
 $body = @{
   action = 'bootstrap'
@@ -814,14 +814,14 @@ show **Success**.
 8. Verify the live API and database:
 
 ~~~powershell
-Invoke-RestMethod 'https://www.shibamatlanta.com/api/team?health=1'
+Invoke-RestMethod 'https://shibamatlanta.com/api/team?health=1'
 npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','schedules','shifts','notifications','schedule_templates','portal_documents') ORDER BY name;"
 ~~~
 
 The health response must contain `ok: true`, and the database query must return
 all six tables.
 
-9. Sign in at `https://www.shibamatlanta.com/team/` using the existing
+9. Sign in at `https://shibamatlanta.com/team/` using the existing
 management account. Use the bootstrap procedure in Step 4 only if the `users`
 table is empty. Then smoke-test these flows in order:
 

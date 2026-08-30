@@ -19,6 +19,15 @@
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   }
 
+  // Recovery URL for devices that still have a display profile from an older
+  // portal deployment. Visit /team/?reset to clear browser-only auth state
+  // before the normal page guard decides where to navigate.
+  if (new URLSearchParams(window.location.search).has('reset')) {
+    clearSession();
+    try { sessionStorage.clear(); } catch (error) { /* Storage can be disabled. */ }
+    window.history.replaceState(null, '', '/team/');
+  }
+
   function storeSession(result) {
     var session = {
       id: result.id,

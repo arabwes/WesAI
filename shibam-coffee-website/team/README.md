@@ -1,6 +1,6 @@
 # Shibam Coffee team portal
 
-The internal employee portal lives at `https://www.shibamatlanta.com/team/`.
+The internal employee portal lives at `https://shibamatlanta.com/team/`.
 It ships with the marketing website but remains unlisted, excluded from the
 sitemap, and marked `noindex, nofollow`.
 

@@ -27,7 +27,7 @@
   },
   "vars": {
     "EMAIL_FROM": "Shibam Coffee Team <schedule@shibamatlanta.com>",
-    "PORTAL_ORIGIN": "https://www.shibamatlanta.com",
+    "PORTAL_ORIGIN": "https://shibamatlanta.com",
     "STORE_TIMEZONE": "America/New_York",
     "VAPID_SUBJECT": "mailto:yemenicoffeeco@gmail.com",
     "VAPID_PUBLIC_KEY": ""

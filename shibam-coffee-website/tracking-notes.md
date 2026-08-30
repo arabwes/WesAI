@@ -141,11 +141,11 @@ distinctly in GA4.
 
 | Channel | Example URL |
 |---|---|
-| Google Business Profile | `https://www.shibamatlanta.com/?utm_source=google&utm_medium=organic&utm_campaign=gbp` |
-| Instagram bio | `https://www.shibamatlanta.com/?utm_source=instagram&utm_medium=social&utm_campaign=bio` |
-| TikTok bio | `https://www.shibamatlanta.com/?utm_source=tiktok&utm_medium=social&utm_campaign=bio` |
-| In-store QR (table sign) | `https://www.shibamatlanta.com/?utm_source=store&utm_medium=qr&utm_campaign=table_sign` |
-| Catering flyer QR | `https://www.shibamatlanta.com/catering-events.html?utm_source=flyer&utm_medium=qr&utm_campaign=catering` |
+| Google Business Profile | `https://shibamatlanta.com/?utm_source=google&utm_medium=organic&utm_campaign=gbp` |
+| Instagram bio | `https://shibamatlanta.com/?utm_source=instagram&utm_medium=social&utm_campaign=bio` |
+| TikTok bio | `https://shibamatlanta.com/?utm_source=tiktok&utm_medium=social&utm_campaign=bio` |
+| In-store QR (table sign) | `https://shibamatlanta.com/?utm_source=store&utm_medium=qr&utm_campaign=table_sign` |
+| Catering flyer QR | `https://shibamatlanta.com/catering-events.html?utm_source=flyer&utm_medium=qr&utm_campaign=catering` |
 
 Conventions:
 - `utm_source`: where the link is posted (google, instagram, tiktok, store, flyer).

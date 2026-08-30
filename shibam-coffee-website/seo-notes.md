@@ -60,16 +60,16 @@ number if either ever changes.
 Every page has a self-referencing canonical tag:
 
 ```html
-<link rel="canonical" href="https://www.shibamatlanta.com/page-name.html">
+<link rel="canonical" href="https://shibamatlanta.com/page-name.html">
 ```
 
-The homepage canonical is `https://www.shibamatlanta.com/` (root, no filename) — internal
+The homepage canonical is `https://shibamatlanta.com/` (root, no filename) — internal
 links to the homepage also use `/` rather than `/index.html` for the
 same reason, so there's only ever one valid URL per page from both a
 crawler and an internal-linking perspective.
 
 Open Graph (`og:url`, `og:image`) and Twitter Card (`twitter:image`) tags
-follow the same `https://www.shibamatlanta.com`-prefixed pattern, so social share previews
+follow the same `https://shibamatlanta.com`-prefixed pattern, so social share previews
 and canonical tags always agree on the page's "real" URL.
 
 ## 3. The site URL
@@ -77,14 +77,14 @@ and canonical tags always agree on the page's "real" URL.
 Every absolute URL reference that depends on the live domain — canonical
 tags, OG/Twitter `url`/`image`, JSON-LD `url`/`image`/`hasMap`,
 `robots.txt`'s `Sitemap:` line, and every `<loc>` in `sitemap.xml` — is
-set to `https://www.shibamatlanta.com`. If the domain ever changes,
+set to `https://shibamatlanta.com`. If the domain ever changes,
 repoint everything in one pass:
 
 ```bash
-grep -rl 'https://www.shibamatlanta.com' . | xargs sed -i 's|https://www.shibamatlanta.com|https://new-domain.com|g'
+grep -rl 'https://shibamatlanta.com' . | xargs sed -i 's|https://shibamatlanta.com|https://new-domain.com|g'
 ```
 
-Run `grep -rn 'https://www.shibamatlanta.com' .` afterward to confirm
+Run `grep -rn 'https://shibamatlanta.com' .` afterward to confirm
 every reference now points at the new domain.
 
 ## 4. Sitemap
@@ -96,7 +96,7 @@ about, location, contact) — legal pages (`privacy-policy.html`,
 results.
 
 Each `<url>` entry has:
-- `<loc>` — the page URL, using `https://www.shibamatlanta.com`.
+- `<loc>` — the page URL, using `https://shibamatlanta.com`.
 - `<lastmod>` — date of last meaningful content change, `YYYY-MM-DD`.
 - `<changefreq>` — `weekly` for the homepage, `monthly` for the rest.
 - `<priority>` — `1.0` for the homepage, `0.8` for the other 5 pages.
@@ -105,7 +105,7 @@ Each `<url>` entry has:
 1. Add/update its `<url>` block in `sitemap.xml`.
 2. Update its `<lastmod>`.
 3. Confirm `robots.txt`'s `Sitemap:` line still points at
-   `https://www.shibamatlanta.com/sitemap.xml`.
+   `https://shibamatlanta.com/sitemap.xml`.
 4. Resubmit the sitemap in Google Search Console (Sitemaps → enter
    `sitemap.xml` → Submit) so Google re-crawls promptly instead of
    waiting for its next scheduled crawl.
