@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventory — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="manifest" href="/team/app.webmanifest">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css?v=8">
+  <script src="/team/js/config.js?v=8" defer></script>
+  <script src="/team/js/auth.js?v=8" defer></script>
+</head>
+<body data-page="app" data-require-role="barista">
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">Shibam Coffee<span>Inventory</span></div>
+      <div class="portal-header__session">
+        <a class="portal-header__back" href="/team/dashboard">&larr; Team portal</a>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container">
+      <div class="portal-intro">
+        <h1>Inventory</h1>
+        <p>Choose the count or order list you need. Your name and submission time are recorded automatically.</p>
+      </div>
+
+      <ul class="form-cards">
+        <li>
+          <a class="form-card-link" href="/team/inventory">
+            <span class="badge">Weekly</span>
+            <h2>Weekly inventory</h2>
+            <p>Count stock in the kitchen and storage, organized by location and product group.</p>
+          </a>
+        </li>
+        <li>
+          <a class="form-card-link" href="/team/dessert-inventory">
+            <span class="badge">Daily</span>
+            <h2>Dessert inventory</h2>
+            <p>Record dessert quantities on hand and note deliveries received today.</p>
+          </a>
+        </li>
+        <li>
+          <a class="form-card-link" href="/team/local-order">
+            <span class="badge">As needed</span>
+            <h2>Local order list</h2>
+            <p>Prepare one complete local-market order and include any unlisted items.</p>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year"></span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+  <script>document.getElementById('footer-year').textContent = new Date().getFullYear();</script>
+</body>
+</html>

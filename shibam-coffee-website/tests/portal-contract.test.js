@@ -114,6 +114,20 @@ test('migration adds exchange, template, history, profile, and delivery tables',
   ]) assert.match(migration, new RegExp(`CREATE TABLE ${table}\\b`));
 });
 
+test('dashboard consolidates portal navigation into five areas', async () => {
+  const dashboard = await source('team/dashboard.html');
+  const inventoryHub = await source('team/inventory-hub.html');
+  const scheduling = await source('team/schedule.html');
+  for (const path of ['documents', 'schedule', 'inventory-hub', 'profile', 'admin']) {
+    assert.match(dashboard, new RegExp(`href="/team/${path}"`));
+  }
+  assert.doesNotMatch(dashboard, /href="\/team\/(?:dessert-inventory|local-order|manage-schedule)"/);
+  for (const path of ['inventory', 'dessert-inventory', 'local-order']) {
+    assert.match(inventoryHub, new RegExp(`href="/team/${path}"`));
+  }
+  assert.match(scheduling, /data-role="lead"><a href="\/team\/manage-schedule"/);
+});
+
 test('Cloudflare API preserves the document, changelog, catalog-edit, and same-day recall workflows', async () => {
   const router = await source('functions/api/team/index.js');
   const compatibility = await source('functions/_lib/portal-qol.js');
