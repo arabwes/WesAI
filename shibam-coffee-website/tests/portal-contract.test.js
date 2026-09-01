@@ -118,11 +118,12 @@ test('shift editor supports quarter-hour overnight and repeated shifts', async (
   const page = await source('team/manage-schedule.html');
   const controller = await source('team/js/manage-schedule.js');
   const server = await source('functions/_lib/scheduling.js');
-  assert.match(page, /id="shift-start"[^>]*step="900"/);
-  assert.match(page, /id="shift-end"[^>]*step="900"/);
+  assert.match(page, /<select id="shift-start"[^>]*name="startTime"/);
+  assert.match(page, /<select id="shift-end"[^>]*name="endTime"/);
   assert.match(page, /id="repeat-shift"/);
   assert.match(page, /id="repeat-shift-date-options"/);
   assert.match(controller, /repeatDates: repeatDates/);
+  assert.match(controller, /minutes < 24 \* 60; minutes \+= 15/);
   assert.match(controller, /endsNextDay/);
   assert.match(server, /invalid_shift_time_interval/);
   assert.match(server, /minutesBetween\(normalizedBase\.startTime, normalizedBase\.endTime, normalizedBase\.breakMinutes, true\)/);
@@ -130,6 +131,19 @@ test('shift editor supports quarter-hour overnight and repeated shifts', async (
   const calendar = await source('functions/api/team/calendar/[token].js');
   assert.match(calendar, /shift\.end_time < shift\.start_time \? addDays\(shift\.shift_date, 1\)/);
   assert.match(calendar, /localStamp\(endDate, shift\.end_time\)/);
+});
+
+test('all inventory catalogs have a reproducible seed and visible load failures', async () => {
+  const migration = await source('migrations/0004_seed_inventory_catalog.sql');
+  const forms = await source('team/js/forms.js');
+  assert.equal((migration.match(/^INSERT INTO catalog/gm) || []).length, 177);
+  for (const formType of ['inventory', 'dessert', 'local-order']) {
+    assert.match(migration, new RegExp(`'${formType}'`));
+  }
+  assert.match(forms, /No inventory items are configured yet/);
+  assert.match(forms, /No dessert items are configured yet/);
+  assert.match(forms, /No local-order items are configured yet/);
+  assert.match(forms, /Check your connection and refresh to try again/);
 });
 
 test('dashboard consolidates portal navigation into five areas', async () => {

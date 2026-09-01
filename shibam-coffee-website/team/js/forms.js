@@ -445,6 +445,7 @@
     Auth.apiCall('getCatalog', { formType: 'inventory' }).then(function (result) {
       mount.innerHTML = '';
       if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
+      if (!result.items.length) { mount.textContent = 'No inventory items are configured yet. Ask Management to add catalog items.'; return; }
 
       var session = Auth.getSession();
       var showActions = Auth.hasRole(session, 'lead');
@@ -542,6 +543,8 @@
           applyRowFields(mount, ['product'], { qtyKitchen: '[data-qty-kitchen]', qtyStorage: '[data-qty-storage]', note: '[data-note]' }, byProduct);
         });
       }
+    }).catch(function () {
+      mount.textContent = 'Could not load the item list. Check your connection and refresh to try again.';
     });
   }
 
@@ -556,6 +559,7 @@
     Auth.apiCall('getCatalog', { formType: 'dessert' }).then(function (result) {
       mount.innerHTML = '';
       if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
+      if (!result.items.length) { mount.textContent = 'No dessert items are configured yet. Ask Management to add catalog items.'; return; }
 
       var session = Auth.getSession();
       var showActions = Auth.hasRole(session, 'lead');
@@ -631,6 +635,8 @@
           applyRowFields(mount, ['product'], { count: '[data-count]', delivery: '[data-delivery]' }, byProduct);
         });
       }
+    }).catch(function () {
+      mount.textContent = 'Could not load the item list. Check your connection and refresh to try again.';
     });
   }
 
@@ -733,6 +739,7 @@
     Auth.apiCall('getCatalog', { formType: 'local-order' }).then(function (result) {
       mount.innerHTML = '';
       if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
+      if (!result.items.length) { mount.textContent = 'No local-order items are configured yet. Ask Management to add catalog items.'; return; }
 
       var session = Auth.getSession();
       var showActions = Auth.hasRole(session, 'lead');
@@ -891,6 +898,8 @@
           }
         });
       }
+    }).catch(function () {
+      mount.textContent = 'Could not load the item list. Check your connection and refresh to try again.';
     });
   }
 

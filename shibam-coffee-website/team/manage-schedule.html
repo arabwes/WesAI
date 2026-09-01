@@ -10,11 +10,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=9">
-  <script src="/team/js/config.js?v=9" defer></script>
-  <script src="/team/js/auth.js?v=9" defer></script>
-  <script src="/team/js/manage-schedule.js?v=9" defer></script>
-  <script src="/team/js/workforce.js?v=9" defer></script>
+  <link rel="stylesheet" href="/team/css/styles.css?v=10">
+  <script src="/team/js/config.js?v=10" defer></script>
+  <script src="/team/js/auth.js?v=10" defer></script>
+  <script src="/team/js/manage-schedule.js?v=10" defer></script>
+  <script src="/team/js/workforce.js?v=10" defer></script>
 </head>
 <body data-page="app" data-require-role="lead">
   <header class="portal-header">
@@ -113,8 +113,8 @@
         <div class="form-group"><label for="shift-position">Position</label><select id="shift-position" name="positionId"><option value="">No position</option></select></div>
       </div>
       <div class="form-row form-row--three">
-        <div class="form-group"><label for="shift-start">Start</label><input id="shift-start" name="startTime" type="time" step="900" required></div>
-        <div class="form-group"><label for="shift-end">End</label><input id="shift-end" name="endTime" type="time" step="900" required></div>
+        <div class="form-group"><label for="shift-start">Start</label><select id="shift-start" name="startTime" required></select></div>
+        <div class="form-group"><label for="shift-end">End</label><select id="shift-end" name="endTime" required></select></div>
         <div class="form-group"><label for="shift-break">Break</label><select id="shift-break" name="breakMinutes"><option value="0">None</option><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option></select></div>
       </div>
       <p class="form-help">Times use 15-minute intervals. If the end time is earlier than the start time, the shift ends the next day.</p>

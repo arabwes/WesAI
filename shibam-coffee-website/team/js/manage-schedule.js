@@ -10,6 +10,7 @@
     document.getElementById('footer-year').textContent = new Date().getFullYear();
     dialog = document.getElementById('shift-dialog');
     form = document.getElementById('shift-form');
+    populateShiftTimeOptions();
     bindWeekControls();
     bindToolbar();
     bindShiftDialog();
@@ -259,6 +260,19 @@
       label.appendChild(el('span', null, formatDate(date, { weekday: 'short', month: 'short', day: 'numeric' })));
       mount.appendChild(label);
     }
+  }
+
+  function populateShiftTimeOptions() {
+    ['shift-start', 'shift-end'].forEach(function (id) {
+      var select = document.getElementById(id);
+      select.innerHTML = '';
+      for (var minutes = 0; minutes < 24 * 60; minutes += 15) {
+        var value = String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
+        var option = el('option', null, formatTime(value));
+        option.value = value;
+        select.appendChild(option);
+      }
+    });
   }
 
   function saveCurrentShift() {

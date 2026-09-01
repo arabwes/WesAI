@@ -181,10 +181,10 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     await page.click('#add-shift');
 
     await expect(page.locator('#shift-dialog')).toBeVisible();
-    await expect(page.locator('#shift-start')).toHaveAttribute('step', '900');
-    await expect(page.locator('#shift-end')).toHaveAttribute('step', '900');
-    await page.fill('#shift-start', '20:00');
-    await page.fill('#shift-end', '00:00');
+    await expect(page.locator('#shift-start option')).toHaveCount(96);
+    await expect(page.locator('#shift-end option')).toHaveCount(96);
+    await page.selectOption('#shift-start', '20:00');
+    await page.selectOption('#shift-end', '00:00');
     await page.locator('#shift-form').evaluate((node) => { node.scrollTop = node.scrollHeight; });
     await page.click('label[for="repeat-shift"]', { force: true });
     await expect(page.locator('#repeat-shift-date-options input')).toHaveCount(7);
