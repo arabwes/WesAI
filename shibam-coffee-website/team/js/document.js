@@ -86,6 +86,9 @@
       } else {
         body.appendChild(el('p', 'document-card__placeholder', 'This document has no file linked yet.'));
       }
+    }).catch(function () {
+      titleEl.textContent = 'Could not load this document';
+      body.textContent = 'Check your connection and refresh to try again.';
     });
   }
 })();

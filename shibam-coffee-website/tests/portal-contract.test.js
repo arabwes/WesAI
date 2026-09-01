@@ -146,6 +146,18 @@ test('all inventory catalogs have a reproducible seed and visible load failures'
   assert.match(forms, /Check your connection and refresh to try again/);
 });
 
+test('documents have a reproducible seed and visible connection failures', async () => {
+  const migration = await source('migrations/0005_seed_portal_documents.sql');
+  const listController = await source('team/js/documents.js');
+  const detailController = await source('team/js/document.js');
+  assert.equal((migration.match(/^INSERT INTO portal_documents/gm) || []).length, 2);
+  assert.match(migration, /'Employee Handbook'/);
+  assert.match(migration, /'Guidelines'/);
+  assert.match(migration, /WHERE NOT EXISTS/);
+  assert.match(listController, /Check your connection and refresh to try again/);
+  assert.match(detailController, /Check your connection and refresh to try again/);
+});
+
 test('dashboard consolidates portal navigation into five areas', async () => {
   const dashboard = await source('team/dashboard.html');
   const inventoryHub = await source('team/inventory-hub.html');

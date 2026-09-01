@@ -82,6 +82,8 @@
 
         mount.appendChild(section);
       });
+    }).catch(function () {
+      mount.textContent = 'Could not load the document list. Check your connection and refresh to try again.';
     });
   }
 
