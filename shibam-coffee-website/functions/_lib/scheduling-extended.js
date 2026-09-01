@@ -26,6 +26,15 @@ function timeOverlaps(start, end, slotStart, slotEnd) {
   return start < slotEnd && end > slotStart;
 }
 
+function shiftOverlapsDateSlot(shift, date, slotStart, slotEnd) {
+  if (shift.shift_date === date) {
+    return shift.end_time < shift.start_time
+      ? shift.start_time < slotEnd
+      : timeOverlaps(shift.start_time, shift.end_time, slotStart, slotEnd);
+  }
+  return shift.end_time < shift.start_time && addDays(shift.shift_date, 1) === date && shift.end_time > slotStart;
+}
+
 async function notifyManagers(env, type, title, message, key) {
   const { results } = await env.TEAM_DB.prepare("SELECT id FROM users WHERE active = 1 AND role = 'management'").all();
   for (const manager of results) {
@@ -628,8 +637,8 @@ export async function getTeamCoverage(request, payload, env) {
       .bind(weekStart, weekEnd).all(),
     env.TEAM_DB.prepare(`SELECT * FROM time_off_requests WHERE status = 'approved' AND start_date <= ? AND end_date >= ?`)
       .bind(weekEnd, weekStart).all(),
-    env.TEAM_DB.prepare(`SELECT sh.* FROM shifts sh JOIN schedules s ON s.id = sh.schedule_id
-      WHERE s.week_start = ? AND sh.status = 'active'`).bind(weekStart).all()
+    env.TEAM_DB.prepare(`SELECT sh.* FROM shifts sh
+      WHERE sh.shift_date BETWEEN ? AND ? AND sh.status = 'active'`).bind(addDays(weekStart, -1), weekEnd).all()
   ]);
   const slots = [];
   for (let day = 0; day < 7; day += 1) {
@@ -651,8 +660,8 @@ export async function getTeamCoverage(request, payload, env) {
           (!dateRules.length && recurring.some((item) => item.preference === 'unavailable'));
         const preferred = !blocked && (dateRules.some((item) => item.preference === 'preferred') ||
           (!dateRules.length && recurring.some((item) => item.preference === 'preferred')));
-        const scheduled = schedules.results.some((shift) => shift.employee_id === user.id && shift.shift_date === date &&
-          (!positionId || shift.position_id === positionId) && timeOverlaps(shift.start_time, shift.end_time, time, end));
+        const scheduled = schedules.results.some((shift) => shift.employee_id === user.id &&
+          (!positionId || shift.position_id === positionId) && shiftOverlapsDateSlot(shift, date, time, end));
         people.push({ id: user.id, name: user.name, available: !blocked, preferred, scheduled,
           reason: off ? 'Approved time off' : blocked ? 'Unavailable' : preferred ? 'Preferred' : 'Available' });
       }

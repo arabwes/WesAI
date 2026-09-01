@@ -74,6 +74,14 @@ async function mockBackend(page) {
       };
     } else if (action === 'getMyEntries') {
       payload = { ok: true, submissions: [] };
+    } else if (action === 'getManagerSchedule') {
+      payload = {
+        ok: true,
+        schedule: { id: 'schedule-test', weekStart: '2026-08-31', status: 'draft', version: 1 },
+        shifts: [],
+        team: [{ id: SESSION.id, name: SESSION.name, role: SESSION.role, positionIds: [] }],
+        positions: [], availability: [], availabilityExceptions: [], timeOff: [], requests: []
+      };
     }
 
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
@@ -163,5 +171,23 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     await page.click('.submission-row');
     await page.waitForTimeout(150);
     await assertNoHorizontalScroll(page, '/team/admin#tab-submissions (expanded)');
+  });
+
+  test('schedule editor exposes overnight, quarter-hour, and repeat controls', async ({ page }) => {
+    await mockBackend(page);
+    await seedSession(page);
+    await page.goto('/team/manage-schedule');
+    await page.waitForSelector('#add-shift:not([disabled])');
+    await page.click('#add-shift');
+
+    await expect(page.locator('#shift-dialog')).toBeVisible();
+    await expect(page.locator('#shift-start')).toHaveAttribute('step', '900');
+    await expect(page.locator('#shift-end')).toHaveAttribute('step', '900');
+    await page.fill('#shift-start', '20:00');
+    await page.fill('#shift-end', '00:00');
+    await page.locator('#shift-form').evaluate((node) => { node.scrollTop = node.scrollHeight; });
+    await page.click('label[for="repeat-shift"]', { force: true });
+    await expect(page.locator('#repeat-shift-date-options input')).toHaveCount(7);
+    await expect(page.locator('#repeat-shift-days')).toBeVisible();
   });
 });

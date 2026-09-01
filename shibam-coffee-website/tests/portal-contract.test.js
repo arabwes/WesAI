@@ -114,6 +114,24 @@ test('migration adds exchange, template, history, profile, and delivery tables',
   ]) assert.match(migration, new RegExp(`CREATE TABLE ${table}\\b`));
 });
 
+test('shift editor supports quarter-hour overnight and repeated shifts', async () => {
+  const page = await source('team/manage-schedule.html');
+  const controller = await source('team/js/manage-schedule.js');
+  const server = await source('functions/_lib/scheduling.js');
+  assert.match(page, /id="shift-start"[^>]*step="900"/);
+  assert.match(page, /id="shift-end"[^>]*step="900"/);
+  assert.match(page, /id="repeat-shift"/);
+  assert.match(page, /id="repeat-shift-date-options"/);
+  assert.match(controller, /repeatDates: repeatDates/);
+  assert.match(controller, /endsNextDay/);
+  assert.match(server, /invalid_shift_time_interval/);
+  assert.match(server, /minutesBetween\(normalizedBase\.startTime, normalizedBase\.endTime, normalizedBase\.breakMinutes, true\)/);
+  assert.match(server, /createdCount: shifts\.length/);
+  const calendar = await source('functions/api/team/calendar/[token].js');
+  assert.match(calendar, /shift\.end_time < shift\.start_time \? addDays\(shift\.shift_date, 1\)/);
+  assert.match(calendar, /localStamp\(endDate, shift\.end_time\)/);
+});
+
 test('dashboard consolidates portal navigation into five areas', async () => {
   const dashboard = await source('team/dashboard.html');
   const inventoryHub = await source('team/inventory-hub.html');

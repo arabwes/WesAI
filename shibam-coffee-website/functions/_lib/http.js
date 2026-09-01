@@ -74,10 +74,13 @@ export function addDays(dateValue, days) {
   return date.toISOString().slice(0, 10);
 }
 
-export function minutesBetween(start, end, breakMinutes = 0) {
+export function minutesBetween(start, end, breakMinutes = 0, allowOvernight = false) {
   const [startHour, startMinute] = normalizeTime(start, 'start_time').split(':').map(Number);
   const [endHour, endMinute] = normalizeTime(end, 'end_time').split(':').map(Number);
-  const duration = (endHour * 60 + endMinute) - (startHour * 60 + startMinute) - Number(breakMinutes || 0);
+  const startTotal = startHour * 60 + startMinute;
+  let endTotal = endHour * 60 + endMinute;
+  if (allowOvernight && endTotal < startTotal) endTotal += 24 * 60;
+  const duration = endTotal - startTotal - Number(breakMinutes || 0);
   if (duration <= 0 || duration > 24 * 60) throw new ApiError('invalid_shift_duration', 400);
   return duration;
 }

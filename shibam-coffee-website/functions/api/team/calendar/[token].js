@@ -1,4 +1,4 @@
-import { nowIso, sha256Hex } from '../../../_lib/http.js';
+import { addDays, nowIso, sha256Hex } from '../../../_lib/http.js';
 
 function escapeIcs(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
@@ -54,12 +54,13 @@ export async function onRequestGet(context) {
     `X-WR-TIMEZONE:${escapeIcs(token.timezone)}`
   ];
   shifts.forEach((shift) => {
+    const endDate = shift.end_time < shift.start_time ? addDays(shift.shift_date, 1) : shift.shift_date;
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:${escapeIcs(shift.id)}@shibamatlanta.com`);
     lines.push(`SEQUENCE:${Number(shift.version || 1)}`);
     lines.push(`DTSTAMP:${compactTimestamp(shift.updated_at || nowIso())}`);
     lines.push(`DTSTART;TZID=${escapeIcs(token.timezone)}:${localStamp(shift.shift_date, shift.start_time)}`);
-    lines.push(`DTEND;TZID=${escapeIcs(token.timezone)}:${localStamp(shift.shift_date, shift.end_time)}`);
+    lines.push(`DTEND;TZID=${escapeIcs(token.timezone)}:${localStamp(endDate, shift.end_time)}`);
     lines.push(`SUMMARY:${escapeIcs(`${shift.position_name || 'Shift'} — ${token.location_name}`)}`);
     lines.push(`LOCATION:${escapeIcs(token.location_name)}`);
     lines.push(`DESCRIPTION:${escapeIcs([shift.notes, shift.break_minutes ? `${shift.break_minutes}-minute break` : ''].filter(Boolean).join('\n'))}`);

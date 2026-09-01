@@ -230,7 +230,12 @@
   function errorMessage(result, fallback) {
     var messages = {
       forbidden: 'You do not have permission to do that.',
-      version_conflict: 'Someone else changed this item. Refresh and try again.',
+        version_conflict: 'Someone else changed this item. Refresh and try again.',
+        invalid_shift_duration: 'The shift must have a valid end time and be shorter than 24 hours after its break.',
+        invalid_shift_time_interval: 'Shift start and end times must use 15-minute intervals.',
+        repeat_not_allowed_on_edit: 'Repeating days can only be selected when creating a new shift.',
+        too_many_repeat_dates: 'A shift can repeat on no more than seven days in one schedule week.',
+        shift_outside_schedule_week: 'Every selected shift date must be in the schedule week shown.',
       database_unavailable: 'The team database is temporarily unavailable.',
       server_error: 'The server hit an unexpected problem.',
       sms_not_configured: 'SMS is not configured yet. Management can enable it after adding the provider keys.',

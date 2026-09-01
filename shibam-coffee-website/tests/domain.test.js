@@ -16,6 +16,9 @@ test('plain date arithmetic is stable across month and daylight-saving boundarie
 test('shift duration subtracts breaks', () => {
   assert.equal(minutesBetween('08:00', '16:00', 30), 450);
   assert.throws(() => minutesBetween('16:00', '08:00', 0), /invalid_shift_duration/);
+  assert.equal(minutesBetween('16:00', '00:00', 0, true), 480);
+  assert.equal(minutesBetween('22:15', '02:00', 15, true), 210);
+  assert.throws(() => minutesBetween('08:00', '08:00', 0, true), /invalid_shift_duration/);
   assert.throws(() => minutesBetween('08:00', '08:15', 30), /invalid_shift_duration/);
 });
 

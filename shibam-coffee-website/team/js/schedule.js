@@ -63,7 +63,10 @@
   function minutesFor(shift) {
     var start = shift.startTime.split(':').map(Number);
     var end = shift.endTime.split(':').map(Number);
-    return end[0] * 60 + end[1] - start[0] * 60 - start[1] - shift.breakMinutes;
+    var startTotal = start[0] * 60 + start[1];
+    var endTotal = end[0] * 60 + end[1];
+    if (endTotal < startTotal) endTotal += 24 * 60;
+    return endTotal - startTotal - shift.breakMinutes;
   }
 
   function bindWeekControls() {
@@ -179,7 +182,7 @@
     top.appendChild(date);
     top.appendChild(el('span', 'shift-card__position', shift.positionName || (assigned ? 'Team shift' : 'Open shift')));
     card.appendChild(top);
-    card.appendChild(el('p', 'shift-card__time', formatTime(shift.startTime) + '–' + formatTime(shift.endTime)));
+    card.appendChild(el('p', 'shift-card__time', formatTime(shift.startTime) + '–' + formatTime(shift.endTime) + (shift.endsNextDay ? ' · ends next day' : '')));
     var details = [];
     if (shift.breakMinutes) details.push(shift.breakMinutes + '-minute break');
     if (shift.notes) details.push(shift.notes);

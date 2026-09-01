@@ -30,6 +30,7 @@ function shiftDto(row) {
     date: row.shift_date,
     startTime: row.start_time,
     endTime: row.end_time,
+    endsNextDay: row.end_time < row.start_time,
     breakMinutes: Number(row.break_minutes || 0),
     notes: row.notes || '',
     status: row.status,
@@ -37,6 +38,29 @@ function shiftDto(row) {
     overrideReason: row.override_reason || '',
     confirmedAt: row.confirmed_at || ''
   };
+}
+
+function minuteOfDay(value) {
+  const [hour, minute] = value.split(':').map(Number);
+  return hour * 60 + minute;
+}
+
+function shiftInterval(date, startTime, endTime) {
+  const day = Math.floor(Date.parse(`${date}T00:00:00Z`) / 86400000);
+  const start = day * 1440 + minuteOfDay(startTime);
+  let end = day * 1440 + minuteOfDay(endTime);
+  if (end < start) end += 1440;
+  return { start, end };
+}
+
+function rangesOverlap(first, second) {
+  return first.start < second.end && second.start < first.end;
+}
+
+function normalizeShiftTime(value, field) {
+  const normalized = normalizeTime(value, field);
+  if (minuteOfDay(normalized) % 15 !== 0) throw new ApiError('invalid_shift_time_interval', 400);
+  return normalized;
 }
 
 async function listShifts(db, scheduleId, viewerId) {
@@ -167,29 +191,47 @@ export async function getMySchedule(request, payload, env) {
   };
 }
 
-export async function scheduleWarnings(db, input, shiftId, schedule) {
+export async function scheduleWarnings(db, input, shiftId, schedule, proposedMinutes) {
   if (!input.employeeId) return [];
   const employee = await db.prepare('SELECT * FROM users WHERE id = ? AND active = 1').bind(input.employeeId).first();
   if (!employee) throw new ApiError('invalid_employee', 400);
   const warnings = [];
-  const overlap = await db.prepare(`SELECT id FROM shifts WHERE employee_id = ? AND shift_date = ?
-    AND status = 'active' AND id != ? AND start_time < ? AND end_time > ? LIMIT 1`)
-    .bind(input.employeeId, input.date, shiftId || '', input.endTime, input.startTime).first();
-  if (overlap) warnings.push({ code: 'overlapping_shift', message: 'This employee already has an overlapping shift.' });
+  const candidateInterval = shiftInterval(input.date, input.startTime, input.endTime);
+  const shiftEndDate = input.endTime < input.startTime ? addDays(input.date, 1) : input.date;
+  const coverageEndDate = input.endTime < input.startTime && input.endTime !== '00:00' ? shiftEndDate : input.date;
+  const nearbyShifts = await db.prepare(`SELECT id, shift_date, start_time, end_time FROM shifts
+    WHERE employee_id = ? AND shift_date BETWEEN ? AND ? AND status = 'active' AND id != ?`)
+    .bind(input.employeeId, addDays(input.date, -1), shiftEndDate, shiftId || '').all();
+  if (nearbyShifts.results.some((row) => rangesOverlap(candidateInterval, shiftInterval(row.shift_date, row.start_time, row.end_time)))) {
+    warnings.push({ code: 'overlapping_shift', message: 'This employee already has an overlapping shift.' });
+  }
 
   const timeOff = await db.prepare(`SELECT id FROM time_off_requests WHERE employee_id = ? AND status = 'approved'
-    AND start_date <= ? AND end_date >= ? LIMIT 1`).bind(input.employeeId, input.date, input.date).first();
+    AND start_date <= ? AND end_date >= ? LIMIT 1`).bind(input.employeeId, coverageEndDate, input.date).first();
   if (timeOff) warnings.push({ code: 'approved_time_off', message: 'This employee has approved time off.' });
 
-  const weekday = new Date(`${input.date}T12:00:00Z`).getUTCDay();
-  const unavailable = await db.prepare(`SELECT id FROM availability_rules WHERE employee_id = ? AND weekday = ?
-    AND preference = 'unavailable' AND start_time < ? AND end_time > ?
-    AND (effective_from IS NULL OR effective_from <= ?) AND (effective_to IS NULL OR effective_to >= ?) LIMIT 1`)
-    .bind(input.employeeId, weekday, input.endTime, input.startTime, input.date, input.date).first();
-  const unavailableException = await db.prepare(`SELECT id FROM availability_exceptions WHERE employee_id = ?
-    AND exception_date = ? AND preference = 'unavailable' AND start_time < ? AND end_time > ? LIMIT 1`)
-    .bind(input.employeeId, input.date, input.endTime, input.startTime).first();
-  if (unavailable || unavailableException) warnings.push({ code: 'unavailable', message: 'This shift conflicts with the employee’s availability.' });
+  let conflictsWithAvailability = false;
+  const dates = coverageEndDate === input.date ? [input.date] : [input.date, coverageEndDate];
+  for (const date of dates) {
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+    const segment = date === input.date
+      ? { start: minuteOfDay(input.startTime), end: shiftEndDate === input.date ? minuteOfDay(input.endTime) : 1440 }
+      : { start: 0, end: minuteOfDay(input.endTime) };
+    const [rules, exceptions] = await Promise.all([
+      db.prepare(`SELECT start_time, end_time FROM availability_rules WHERE employee_id = ? AND weekday = ?
+        AND preference = 'unavailable' AND (effective_from IS NULL OR effective_from <= ?)
+        AND (effective_to IS NULL OR effective_to >= ?)`)
+        .bind(input.employeeId, weekday, date, date).all(),
+      db.prepare(`SELECT start_time, end_time FROM availability_exceptions WHERE employee_id = ?
+        AND exception_date = ? AND preference = 'unavailable'`).bind(input.employeeId, date).all()
+    ]);
+    conflictsWithAvailability = rules.results.concat(exceptions.results).some((row) => rangesOverlap(segment, {
+      start: minuteOfDay(row.start_time),
+      end: minuteOfDay(row.end_time)
+    }));
+    if (conflictsWithAvailability) break;
+  }
+  if (conflictsWithAvailability) warnings.push({ code: 'unavailable', message: 'This shift conflicts with the employee’s availability.' });
 
   if (input.positionId) {
     const qualified = await db.prepare(`SELECT 1 AS found FROM employee_positions
@@ -200,8 +242,8 @@ export async function scheduleWarnings(db, input, shiftId, schedule) {
   const { results } = await db.prepare(`SELECT start_time, end_time, break_minutes FROM shifts
     WHERE schedule_id = ? AND employee_id = ? AND status = 'active' AND id != ?`)
     .bind(schedule.id, input.employeeId, shiftId || '').all();
-  const existingMinutes = results.reduce((sum, row) => sum + minutesBetween(row.start_time, row.end_time, row.break_minutes), 0);
-  const total = existingMinutes + minutesBetween(input.startTime, input.endTime, input.breakMinutes);
+  const existingMinutes = results.reduce((sum, row) => sum + minutesBetween(row.start_time, row.end_time, row.break_minutes, true), 0);
+  const total = existingMinutes + (proposedMinutes ?? minutesBetween(input.startTime, input.endTime, input.breakMinutes, true));
   if (employee.max_weekly_minutes > 0 && total > employee.max_weekly_minutes) {
     warnings.push({ code: 'max_weekly_hours', message: `This assignment brings the employee to ${(total / 60).toFixed(1)} hours.` });
   }
@@ -214,32 +256,70 @@ export async function saveShift(request, payload, env) {
   const schedule = await env.TEAM_DB.prepare('SELECT * FROM schedules WHERE id = ?').bind(input.scheduleId).first();
   if (!schedule) throw new ApiError('schedule_not_found', 404);
   if (schedule.status === 'published' && !hasRole(actor, 'management')) throw new ApiError('published_schedule_management_only', 403);
-  const date = normalizeDate(input.date, 'shift_date');
-  if (date < schedule.week_start || date > addDays(schedule.week_start, 6)) throw new ApiError('shift_outside_schedule_week', 400);
-  const normalized = {
+  const primaryDate = normalizeDate(input.date, 'shift_date');
+  const repeatDates = Array.isArray(input.repeatDates) ? input.repeatDates : [];
+  if (input.id && repeatDates.length) throw new ApiError('repeat_not_allowed_on_edit', 400);
+  const dates = [...new Set([primaryDate, ...repeatDates.map((date) => normalizeDate(date, 'repeat_date'))])].sort();
+  if (dates.length > 7) throw new ApiError('too_many_repeat_dates', 400);
+  if (dates.some((date) => date < schedule.week_start || date > addDays(schedule.week_start, 6))) {
+    throw new ApiError('shift_outside_schedule_week', 400);
+  }
+  const normalizedBase = {
     scheduleId: schedule.id,
     employeeId: String(input.employeeId || '') || null,
     positionId: String(input.positionId || '') || null,
-    date,
-    startTime: normalizeTime(input.startTime, 'start_time'),
-    endTime: normalizeTime(input.endTime, 'end_time'),
+    startTime: normalizeShiftTime(input.startTime, 'start_time'),
+    endTime: normalizeShiftTime(input.endTime, 'end_time'),
     breakMinutes: clampInt(input.breakMinutes, 0, 720, 0),
     notes: String(input.notes || '').trim().slice(0, 350)
   };
-  minutesBetween(normalized.startTime, normalized.endTime, normalized.breakMinutes);
+  const duration = minutesBetween(normalizedBase.startTime, normalizedBase.endTime, normalizedBase.breakMinutes, true);
+  const normalizedShifts = dates.map((date) => ({ ...normalizedBase, date }));
   const existing = input.id
     ? await env.TEAM_DB.prepare('SELECT * FROM shifts WHERE id = ? AND schedule_id = ?').bind(input.id, schedule.id).first()
     : null;
   if (input.id && !existing) throw new ApiError('shift_not_found', 404);
-  const warnings = await scheduleWarnings(env.TEAM_DB, normalized, input.id, schedule);
+  const warnings = [];
+  const warningKeys = new Set();
+  if (normalizedBase.employeeId) {
+    for (let left = 0; left < normalizedShifts.length; left += 1) {
+      for (let right = left + 1; right < normalizedShifts.length; right += 1) {
+        if (rangesOverlap(
+          shiftInterval(normalizedShifts[left].date, normalizedBase.startTime, normalizedBase.endTime),
+          shiftInterval(normalizedShifts[right].date, normalizedBase.startTime, normalizedBase.endTime)
+        )) {
+          warnings.push({ code: 'overlapping_shift', message: 'Two of the selected repeat days create overlapping shifts.' });
+          warningKeys.add('repeated:overlapping_shift');
+          left = normalizedShifts.length;
+          break;
+        }
+      }
+    }
+  }
+  for (const normalized of normalizedShifts) {
+    const found = await scheduleWarnings(env.TEAM_DB, normalized, input.id, schedule, duration * normalizedShifts.length);
+    for (const warning of found) {
+      const key = warning.code === 'max_weekly_hours' ? warning.code : `${normalized.date}:${warning.code}`;
+      if (warningKeys.has(key)) continue;
+      warningKeys.add(key);
+      warnings.push({
+        ...warning,
+        date: normalized.date,
+        message: normalizedShifts.length > 1 && warning.code !== 'max_weekly_hours'
+          ? `${normalized.date}: ${warning.message}`
+          : warning.message
+      });
+    }
+  }
   const overrideReason = String(payload.overrideReason || '').trim();
   if (warnings.length && (!hasRole(actor, 'management') || !overrideReason)) {
     throw new ApiError('schedule_conflict', 409, { warnings, canOverride: hasRole(actor, 'management') });
   }
 
   const now = nowIso();
-  let shiftId = input.id;
+  const shiftIds = [];
   if (existing) {
+    const normalized = normalizedShifts[0];
     const expectedVersion = clampInt(input.version, 1, Number.MAX_SAFE_INTEGER, Number(existing.version));
     const result = await env.TEAM_DB.prepare(`UPDATE shifts SET employee_id = ?, position_id = ?, shift_date = ?,
       start_time = ?, end_time = ?, break_minutes = ?, notes = ?, version = version + 1,
@@ -247,43 +327,64 @@ export async function saveShift(request, payload, env) {
       .bind(normalized.employeeId, normalized.positionId, normalized.date, normalized.startTime, normalized.endTime,
         normalized.breakMinutes, normalized.notes, overrideReason || null, actor.id, now, existing.id, expectedVersion).run();
     if (!result.meta.changes) throw new ApiError('version_conflict', 409);
+    shiftIds.push(existing.id);
   } else {
-    shiftId = newId('shift');
-    await env.TEAM_DB.prepare(`INSERT INTO shifts
-      (id, schedule_id, employee_id, position_id, shift_date, start_time, end_time, break_minutes, notes,
-       status, version, override_reason, created_by, created_at, updated_by, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?)`)
-      .bind(shiftId, schedule.id, normalized.employeeId, normalized.positionId, normalized.date,
-        normalized.startTime, normalized.endTime, normalized.breakMinutes, normalized.notes,
-        overrideReason || null, actor.id, now, actor.id, now).run();
+    const insertStatements = normalizedShifts.map((normalized) => {
+      const shiftId = newId('shift');
+      shiftIds.push(shiftId);
+      return env.TEAM_DB.prepare(`INSERT INTO shifts
+        (id, schedule_id, employee_id, position_id, shift_date, start_time, end_time, break_minutes, notes,
+         status, version, override_reason, created_by, created_at, updated_by, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 1, ?, ?, ?, ?, ?)`)
+        .bind(shiftId, schedule.id, normalized.employeeId, normalized.positionId, normalized.date,
+          normalized.startTime, normalized.endTime, normalized.breakMinutes, normalized.notes,
+          overrideReason || null, actor.id, now, actor.id, now);
+    });
+    insertStatements.push(env.TEAM_DB.prepare('UPDATE schedules SET version = version + 1, updated_at = ? WHERE id = ?')
+      .bind(now, schedule.id));
+    await env.TEAM_DB.batch(insertStatements);
   }
-  await env.TEAM_DB.prepare('UPDATE schedules SET version = version + 1, updated_at = ? WHERE id = ?').bind(now, schedule.id).run();
-  await audit(env.TEAM_DB, actor.id, existing ? 'shift.update' : 'shift.create', 'shift', shiftId, { warnings, overrideReason });
+  if (existing) {
+    await env.TEAM_DB.prepare('UPDATE schedules SET version = version + 1, updated_at = ? WHERE id = ?').bind(now, schedule.id).run();
+  }
+  for (const shiftId of shiftIds) {
+    await audit(env.TEAM_DB, actor.id, existing ? 'shift.update' : 'shift.create', 'shift', shiftId, {
+      warnings, overrideReason, repeatedShiftCount: normalizedShifts.length
+    });
+  }
   if (schedule.status === 'published') {
-    await captureScheduleVersion(env, schedule.id, actor.id, existing ? 'Published shift updated' : 'Shift added to published schedule');
-    const affected = new Set([existing?.employee_id, normalized.employeeId].filter(Boolean));
-    for (const userId of affected) {
-      await notifyUser(env, userId, 'shift_changed', 'Your schedule changed',
-        `A shift on ${normalized.date} was updated.`, '/team/schedule.html', `${shiftId}:v${Number(existing?.version || 0) + 1}:${userId}`);
-    }
-    if (!normalized.employeeId) {
-      const eligibilityQuery = normalized.positionId
-        ? `SELECT u.id FROM users u JOIN employee_positions ep ON ep.user_id = u.id
-           WHERE u.active = 1 AND ep.position_id = ?`
-        : 'SELECT id FROM users WHERE active = 1';
-      const eligible = normalized.positionId
-        ? await env.TEAM_DB.prepare(eligibilityQuery).bind(normalized.positionId).all()
-        : await env.TEAM_DB.prepare(eligibilityQuery).all();
-      for (const user of eligible.results) {
-        await notifyUser(env, user.id, 'open_shift', 'Open shift available',
-          `An open shift is available on ${normalized.date}.`, '/team/schedule.html', `${shiftId}:open:v${Number(existing?.version || 0) + 1}:${user.id}`);
+    await captureScheduleVersion(env, schedule.id, actor.id, existing ? 'Published shift updated' : `${shiftIds.length} shift(s) added to published schedule`);
+    for (let index = 0; index < normalizedShifts.length; index += 1) {
+      const normalized = normalizedShifts[index];
+      const shiftId = shiftIds[index];
+      const affected = new Set([existing?.employee_id, normalized.employeeId].filter(Boolean));
+      for (const userId of affected) {
+        await notifyUser(env, userId, 'shift_changed', 'Your schedule changed',
+          `A shift on ${normalized.date} was ${existing ? 'updated' : 'added'}.`, '/team/schedule.html', `${shiftId}:v${Number(existing?.version || 0) + 1}:${userId}`);
+      }
+      if (!normalized.employeeId) {
+        const eligibilityQuery = normalized.positionId
+          ? `SELECT u.id FROM users u JOIN employee_positions ep ON ep.user_id = u.id
+             WHERE u.active = 1 AND ep.position_id = ?`
+          : 'SELECT id FROM users WHERE active = 1';
+        const eligible = normalized.positionId
+          ? await env.TEAM_DB.prepare(eligibilityQuery).bind(normalized.positionId).all()
+          : await env.TEAM_DB.prepare(eligibilityQuery).all();
+        for (const user of eligible.results) {
+          await notifyUser(env, user.id, 'open_shift', 'Open shift available',
+            `An open shift is available on ${normalized.date}.`, '/team/schedule.html', `${shiftId}:open:v1:${user.id}`);
+        }
       }
     }
   }
-  const row = await env.TEAM_DB.prepare(`SELECT sh.*, u.name AS employee_name, p.name AS position_name,
-    p.color AS position_color FROM shifts sh LEFT JOIN users u ON u.id = sh.employee_id
-    LEFT JOIN positions p ON p.id = sh.position_id WHERE sh.id = ?`).bind(shiftId).first();
-  return { ok: true, shift: shiftDto(row), warnings };
+  const rows = [];
+  for (const shiftId of shiftIds) {
+    rows.push(await env.TEAM_DB.prepare(`SELECT sh.*, u.name AS employee_name, p.name AS position_name,
+      p.color AS position_color FROM shifts sh LEFT JOIN users u ON u.id = sh.employee_id
+      LEFT JOIN positions p ON p.id = sh.position_id WHERE sh.id = ?`).bind(shiftId).first());
+  }
+  const shifts = rows.map(shiftDto);
+  return { ok: true, shift: shifts[0], shifts, createdCount: shifts.length, warnings };
 }
 
 export async function cancelShift(request, payload, env) {

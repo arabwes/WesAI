@@ -53,7 +53,10 @@
   function shiftMinutes(shift) {
     var start = shift.startTime.split(':').map(Number);
     var end = shift.endTime.split(':').map(Number);
-    return end[0] * 60 + end[1] - start[0] * 60 - start[1] - shift.breakMinutes;
+    var startTotal = start[0] * 60 + start[1];
+    var endTotal = end[0] * 60 + end[1];
+    if (endTotal < startTotal) endTotal += 24 * 60;
+    return endTotal - startTotal - shift.breakMinutes;
   }
 
   function bindWeekControls() {
@@ -86,14 +89,14 @@
     });
   }
 
-  function loadSchedule() {
+  function loadSchedule(successMessage) {
     setPageStatus(null, 'Loading schedule…');
     document.getElementById('manage-week-label').textContent = formatDate(state.weekStart, { month: 'long', day: 'numeric' }) + '–' + formatDate(addDays(state.weekStart, 6), { month: 'long', day: 'numeric', year: 'numeric' });
     Auth.apiCall('getManagerSchedule', { weekStart: state.weekStart, create: true }).then(function (result) {
       if (!result.ok) { setPageStatus('error', Auth.errorMessage(result, 'Could not load the schedule.')); return; }
       state.data = result;
       document.dispatchEvent(new CustomEvent('schedule:loaded', { detail: { data: result, weekStart: state.weekStart } }));
-      setPageStatus(null, '');
+      setPageStatus(successMessage ? 'success' : null, successMessage || '');
       document.getElementById('schedule-state').textContent = result.schedule.status;
       document.getElementById('schedule-state').className = 'schedule-state schedule-state--' + result.schedule.status;
       document.getElementById('publish-schedule').textContent = result.schedule.status === 'published' ? 'Republish & notify all' : 'Publish schedule';
@@ -184,7 +187,7 @@
     var button = el('button', 'grid-shift' + (!shift.employeeId ? ' grid-shift--open' : '') + (shift.overrideReason ? ' grid-shift--warning' : ''));
     button.type = 'button';
     button.style.setProperty('--shift-color', shift.positionColor || '#A56A24');
-    button.appendChild(el('strong', null, formatTime(shift.startTime) + '–' + formatTime(shift.endTime)));
+    button.appendChild(el('strong', null, formatTime(shift.startTime) + '–' + formatTime(shift.endTime) + (shift.endsNextDay ? ' (+1 day)' : '')));
     button.appendChild(el('span', null, shift.positionName || 'Shift'));
     if (shift.breakMinutes) button.appendChild(el('small', null, shift.breakMinutes + ' min break'));
     button.addEventListener('click', function () { openShiftDialog(shift, shift.date); });
@@ -194,6 +197,10 @@
   function bindShiftDialog() {
     document.getElementById('close-shift-dialog').addEventListener('click', closeDialog);
     document.getElementById('dismiss-shift').addEventListener('click', closeDialog);
+    document.getElementById('repeat-shift').addEventListener('change', function () {
+      document.getElementById('repeat-shift-days').hidden = !this.checked;
+    });
+    form.date.addEventListener('change', function () { renderRepeatDates(form.date.value); });
     document.getElementById('cancel-shift').addEventListener('click', function () {
       if (!form.id.value || !window.confirm('Cancel this shift? Published employees will be notified.')) return;
       var button = this;
@@ -222,6 +229,10 @@
     form.breakMinutes.value = String(shift ? shift.breakMinutes : 30);
     form.notes.value = shift ? shift.notes : '';
     form.overrideReason.value = '';
+    document.getElementById('shift-repeat-controls').hidden = Boolean(shift);
+    document.getElementById('repeat-shift').checked = false;
+    document.getElementById('repeat-shift-days').hidden = true;
+    renderRepeatDates(form.date.value);
     document.getElementById('shift-dialog-title').textContent = shift ? 'Edit shift' : 'Add shift';
     document.getElementById('cancel-shift').hidden = !shift;
     document.getElementById('shift-conflicts').hidden = true;
@@ -232,10 +243,32 @@
 
   function closeDialog() { dialog.close(); }
 
+  function renderRepeatDates(primaryDate) {
+    var mount = document.getElementById('repeat-shift-date-options');
+    mount.innerHTML = '';
+    for (var day = 0; day < 7; day++) {
+      var date = addDays(state.weekStart, day);
+      var label = el('label', 'checkbox-option');
+      var checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.name = 'repeatDate';
+      checkbox.value = date;
+      checkbox.checked = date === primaryDate;
+      checkbox.disabled = date === primaryDate;
+      label.appendChild(checkbox);
+      label.appendChild(el('span', null, formatDate(date, { weekday: 'short', month: 'short', day: 'numeric' })));
+      mount.appendChild(label);
+    }
+  }
+
   function saveCurrentShift() {
     var button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     setFormStatus(null, 'Saving…');
+    var repeatDates = [];
+    if (!form.id.value && document.getElementById('repeat-shift').checked) {
+      repeatDates = Array.from(form.querySelectorAll('input[name="repeatDate"]:checked:not(:disabled)')).map(function (input) { return input.value; });
+    }
     var payload = {
       shift: {
         id: form.id.value || undefined,
@@ -246,6 +279,7 @@
         date: form.date.value,
         startTime: form.startTime.value,
         endTime: form.endTime.value,
+        repeatDates: repeatDates,
         breakMinutes: Number(form.breakMinutes.value),
         notes: form.notes.value.trim()
       },
@@ -253,7 +287,11 @@
     };
     Auth.apiCall('saveShift', payload).then(function (result) {
       button.disabled = false;
-      if (result.ok) { closeDialog(); loadSchedule(); return; }
+      if (result.ok) {
+        closeDialog();
+        loadSchedule(result.createdCount > 1 ? result.createdCount + ' shifts created.' : 'Shift saved.');
+        return;
+      }
       if (result.error === 'schedule_conflict') { showConflicts(result); return; }
       setFormStatus('error', Auth.errorMessage(result, 'Could not save the shift.'));
     }).catch(function () { button.disabled = false; setFormStatus('error', 'Could not save the shift.'); });
