@@ -158,6 +158,19 @@ test('documents have a reproducible seed and visible connection failures', async
   assert.match(detailController, /Check your connection and refresh to try again/);
 });
 
+test('management can edit a document Drive ID or paste a full Drive link', async () => {
+  const page = await source('team/admin.html');
+  const controller = await source('team/js/admin.js');
+  const server = await source('functions/_lib/portal-qol.js');
+  assert.match(page, /Google Drive file ID or link/);
+  assert.match(controller, /data-document-drive-id/);
+  assert.match(controller, /driveInput\.readOnly = false/);
+  assert.match(controller, /driveFileId: driveInput\.value/);
+  assert.match(controller, /url\.searchParams\.get\('id'\)/);
+  assert.match(server, /function normalizeDriveFileId/);
+  assert.match(server, /(?:file\|document\|spreadsheets\|presentation\|forms)/);
+});
+
 test('dashboard consolidates portal navigation into five areas', async () => {
   const dashboard = await source('team/dashboard.html');
   const inventoryHub = await source('team/inventory-hub.html');

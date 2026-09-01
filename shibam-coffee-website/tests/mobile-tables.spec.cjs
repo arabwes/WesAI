@@ -33,6 +33,10 @@ function catalogItems(formType, count) {
 }
 
 async function mockBackend(page) {
+  var documents = [
+    { documentId: 'doc-1', title: 'Employee Handbook With A Fairly Long Title', description: 'Company policies and conduct.', category: 'Handbook', driveFileId: '', status: 'active', addedBy: 'TestManager', addedAt: new Date().toISOString() },
+  ];
+
   await page.route('**/api/team', async (route) => {
     var body = {};
     try { body = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
@@ -66,12 +70,11 @@ async function mockBackend(page) {
         ],
       };
     } else if (action === 'getDocuments') {
-      payload = {
-        ok: true,
-        documents: [
-          { documentId: 'doc-1', title: 'Employee Handbook With A Fairly Long Title', description: 'Company policies and conduct.', category: 'Handbook', driveFileId: '', status: 'active', addedBy: 'TestManager', addedAt: new Date().toISOString() },
-        ],
-      };
+      payload = { ok: true, documents: documents };
+    } else if (action === 'updateDocument') {
+      var document_ = documents.find((item) => item.documentId === body.documentId);
+      if (document_) Object.assign(document_, body.changes || {});
+      payload = { ok: Boolean(document_) };
     } else if (action === 'getMyEntries') {
       payload = { ok: true, submissions: [] };
     } else if (action === 'getManagerSchedule') {
@@ -171,6 +174,20 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     await page.click('.submission-row');
     await page.waitForTimeout(150);
     await assertNoHorizontalScroll(page, '/team/admin#tab-submissions (expanded)');
+  });
+
+  test('admin can edit a document Google Drive ID or link', async ({ page }) => {
+    await mockBackend(page);
+    await seedSession(page);
+    await page.goto('/team/admin');
+    await page.click('[data-tab-target="tab-documents"]');
+    await page.click('#documents-table .btn-inline-action', { force: true });
+
+    var driveInput = page.locator('[data-document-drive-id]');
+    await expect(driveInput).not.toHaveAttribute('readonly', '');
+    await driveInput.fill('https://drive.google.com/file/d/example-file-id/view');
+    await page.click('#documents-table .btn-inline-action:not([hidden])', { force: true });
+    await expect(driveInput).toHaveValue('example-file-id');
   });
 
   test('schedule editor exposes overnight, quarter-hour, and repeat controls', async ({ page }) => {

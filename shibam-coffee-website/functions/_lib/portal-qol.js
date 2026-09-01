@@ -29,6 +29,19 @@ function documentIds(payload) {
   return ids.slice(0, 100).map(String).filter(Boolean);
 }
 
+function normalizeDriveFileId(value) {
+  const input = String(value || '').trim();
+  if (!input || !/^https?:\/\//i.test(input)) return input.slice(0, 250);
+
+  try {
+    const url = new URL(input);
+    const pathMatch = url.pathname.match(/\/(?:file|document|spreadsheets|presentation|forms)\/d\/([^/]+)/i);
+    return String(pathMatch?.[1] || url.searchParams.get('id') || '').trim().slice(0, 250);
+  } catch {
+    return '';
+  }
+}
+
 export async function updateItem(request, payload, env) {
   const actor = await requireRole(request, payload, env, 'management');
   const existing = await env.TEAM_DB.prepare('SELECT * FROM catalog WHERE id = ?').bind(payload.catalogId).first();
@@ -69,7 +82,7 @@ export async function addDocument(request, payload, env) {
     (id, title, description, category, drive_file_id, status, added_by, created_at, updated_by, updated_at)
     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`)
     .bind(id, title, String(input.description || '').trim().slice(0, 500), String(input.category || '').trim().slice(0, 100),
-      String(input.driveFileId || '').trim().slice(0, 250), actor.username, now, actor.id, now).run();
+      normalizeDriveFileId(input.driveFileId), actor.username, now, actor.id, now).run();
   await audit(env.TEAM_DB, actor.id, 'document.add', 'portal_document', id, { title });
   return { ok: true, documentId: id };
 }
@@ -85,7 +98,7 @@ export async function updateDocument(request, payload, env) {
     updated_by = ?, updated_at = ? WHERE id = ?`).bind(title,
       String(changes.description === undefined ? existing.description : changes.description).trim().slice(0, 500),
       String(changes.category === undefined ? existing.category : changes.category).trim().slice(0, 100),
-      String(changes.driveFileId === undefined ? existing.drive_file_id : changes.driveFileId).trim().slice(0, 250),
+      normalizeDriveFileId(changes.driveFileId === undefined ? existing.drive_file_id : changes.driveFileId),
       actor.id, nowIso(), existing.id).run();
   await audit(env.TEAM_DB, actor.id, 'document.update', 'portal_document', existing.id, changes);
   return { ok: true };

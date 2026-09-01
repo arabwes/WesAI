@@ -1010,6 +1010,19 @@
   // Documents — add/edit/discontinue/restore the docs shown on /team/documents.
   // Same CRUD shape as Catalog: soft-delete via status, no hard removal.
   // =========================================================================
+  function normalizeDriveFileId(value) {
+    var input = String(value || '').trim();
+    if (!input || !/^https?:\/\//i.test(input)) return input;
+
+    try {
+      var url = new URL(input);
+      var pathMatch = url.pathname.match(/\/(?:file|document|spreadsheets|presentation|forms)\/d\/([^/]+)/i);
+      return pathMatch ? pathMatch[1] : (url.searchParams.get('id') || '');
+    } catch (_error) {
+      return '';
+    }
+  }
+
   function initDocumentsTab() {
     var mount = document.getElementById('documents-table');
     if (!mount) return;
@@ -1022,19 +1035,21 @@
         { label: 'Title', key: 'title' },
         { label: 'Category', key: 'category' },
         { label: 'Description', key: 'description' },
+        { label: 'Google Drive file', key: 'driveFileId' },
         { label: 'Status', key: 'status' },
         { label: 'Added By', key: 'addedBy' },
         { label: 'Actions' }
       ],
       searchPredicate: function (doc, q) {
         return (doc.title || '').toLowerCase().indexOf(q) !== -1 ||
-          (doc.category || '').toLowerCase().indexOf(q) !== -1;
+          (doc.category || '').toLowerCase().indexOf(q) !== -1 ||
+          (doc.driveFileId || '').toLowerCase().indexOf(q) !== -1;
       },
       buildRow: function (doc) { return buildDocumentRow(doc, function () { loadDocuments(controls); }); },
       csv: {
         filename: 'documents.csv',
-        headers: ['Title', 'Category', 'Description', 'Status', 'Added By'],
-        row: function (d) { return [d.title, d.category, d.description, d.status, d.addedBy]; }
+        headers: ['Title', 'Category', 'Description', 'Google Drive File ID', 'Status', 'Added By'],
+        row: function (d) { return [d.title, d.category, d.description, d.driveFileId, d.status, d.addedBy]; }
       }
     });
     loadDocuments(controls);
@@ -1048,7 +1063,7 @@
         title: form.title.value.trim(),
         category: form.category.value.trim(),
         description: form.description.value.trim(),
-        driveFileId: form.driveFileId.value.trim()
+        driveFileId: normalizeDriveFileId(form.driveFileId.value)
       };
       if (!document_.title) {
         setStatus(status, 'error', 'Title is required.');
@@ -1090,6 +1105,15 @@
     var descInput = el('input'); descInput.type = 'text'; descInput.value = doc.description || ''; descInput.readOnly = true;
     var descCell = el('td'); descCell.appendChild(descInput); row.appendChild(descCell);
 
+    var driveInput = el('input');
+    driveInput.type = 'text';
+    driveInput.value = doc.driveFileId || '';
+    driveInput.readOnly = true;
+    driveInput.placeholder = 'Paste ID or Drive link';
+    driveInput.setAttribute('data-document-drive-id', '');
+    driveInput.setAttribute('aria-label', 'Google Drive file ID or link for ' + doc.title);
+    var driveCell = el('td'); driveCell.appendChild(driveInput); row.appendChild(driveCell);
+
     row.appendChild(el('td', null, doc.status));
     row.appendChild(el('td', 'count-table__unit', doc.addedBy));
 
@@ -1105,6 +1129,7 @@
       titleInput.readOnly = false;
       categoryInput.readOnly = false;
       descInput.readOnly = false;
+      driveInput.readOnly = false;
       editBtn.hidden = true;
       saveBtn.hidden = false;
       titleInput.focus();
@@ -1112,9 +1137,15 @@
 
     saveBtn.addEventListener('click', function () {
       saveBtn.disabled = true;
+      driveInput.value = normalizeDriveFileId(driveInput.value);
       Auth.apiCall('updateDocument', {
         documentId: doc.documentId,
-        changes: { title: titleInput.value.trim(), category: categoryInput.value.trim(), description: descInput.value.trim() }
+        changes: {
+          title: titleInput.value.trim(),
+          category: categoryInput.value.trim(),
+          description: descInput.value.trim(),
+          driveFileId: driveInput.value
+        }
       }).then(function (result) {
         if (result.ok) refresh();
         else saveBtn.disabled = false;
