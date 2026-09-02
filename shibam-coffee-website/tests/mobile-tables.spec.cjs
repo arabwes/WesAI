@@ -71,6 +71,27 @@ async function mockBackend(page) {
       };
     } else if (action === 'getDocuments') {
       payload = { ok: true, documents: documents };
+    } else if (action === 'getWriteUpFormData') {
+      payload = {
+        ok: true,
+        supervisor: { id: SESSION.id, name: SESSION.name },
+        historyScope: 'all',
+        employees: [
+          { id: 'employee-1', name: 'Test Barista With A Long Name', legalName: 'Test Barista With A Long Name', role: 'barista', position: 'Barista' },
+        ],
+        writeUps: [
+          {
+            writeUpId: 'writeup-1', employeeId: 'employee-1', employeeName: 'Test Barista With A Long Name',
+            employeePosition: 'Barista', writeUpDate: '2026-09-01', supervisorName: SESSION.name,
+            warningLevel: 'strike_1', infractions: ['attendance_punctuality'], otherInfraction: '',
+            incidentDescription: 'A detailed incident description that wraps on a narrow display.',
+            correctiveActionPlan: 'A detailed corrective action plan.', followUpReviewDate: '2026-09-08',
+            employeeComments: '', employeeSignature: 'Test Barista', employeeSignatureDate: '2026-09-01',
+            employeeDeclinedToSign: false, managerSignature: SESSION.name, managerSignatureDate: '2026-09-01',
+            witnessName: '', witnessDate: '', createdByName: SESSION.name, createdAt: new Date().toISOString(),
+          },
+        ],
+      };
     } else if (action === 'updateDocument') {
       var document_ = documents.find((item) => item.documentId === body.documentId);
       if (document_) Object.assign(document_, body.changes || {});
@@ -140,6 +161,7 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     '/team/admin',
     '/team/documents',
     '/team/document?id=doc-1',
+    '/team/write-up',
   ];
 
   for (const path of protectedPages) {
@@ -206,5 +228,22 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     await page.click('label[for="repeat-shift"]', { force: true });
     await expect(page.locator('#repeat-shift-date-options input')).toHaveCount(7);
     await expect(page.locator('#repeat-shift-days')).toBeVisible();
+  });
+
+  test('write-up form fits a phone and expands submitted records', async ({ page }) => {
+    await mockBackend(page);
+    await seedSession(page);
+    await page.goto('/team/write-up');
+    await expect(page.locator('#write-up-employee option[value="employee-1"]')).toHaveCount(1);
+    await page.click('.write-up-record summary');
+    await assertNoHorizontalScroll(page, '/team/write-up (expanded record)');
+    await expect(page.locator('#write-up-supervisor')).toHaveValue(SESSION.name);
+    await expect(page.locator('#manager-signature')).toHaveValue(SESSION.name);
+    await page.check('#infraction-other');
+    await expect(page.locator('#other-infraction-wrap')).toBeVisible();
+    await expect(page.locator('#other-infraction')).toHaveAttribute('required', '');
+    await page.check('#employee-declined');
+    await expect(page.locator('#employee-signature')).toBeDisabled();
+    await expect(page.locator('#employee-signature-date')).toBeDisabled();
   });
 });

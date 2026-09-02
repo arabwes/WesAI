@@ -248,10 +248,11 @@ remote database. Read the database name before answering yes. Production must sa
 Verify key production tables:
 
 ~~~powershell
-npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','schedules','shifts','notifications','schedule_templates','portal_documents') ORDER BY name;"
+npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users','schedules','shifts','notifications','schedule_templates','portal_documents','employee_write_ups') ORDER BY name;"
 ~~~
 
-The result should contain all six table names.
+The result should contain all seven table names. `employee_write_ups` is required
+before the Lead and Management write-up page can save or display records.
 
 Migrations are deliberately separate from Pages deployment. Apply a migration
 before deploying application code that requires it.
@@ -758,9 +759,9 @@ npx wrangler d1 migrations list shibam-team --remote
 
 Before confirming, verify that Wrangler names the remote database
 `shibam-team`. The final list must report that there are no migrations to
-apply. For this release, existing installations should apply
-`0002_scheduling_high_medium.sql` and
-`0003_portal_qol_compatibility.sql`.
+apply. Existing installations should apply every migration listed as pending.
+The current sequence ends with `0006_employee_write_ups.sql`; it adds the
+confidential corrective-action records used by `/team/write-up`.
 
 5. Configure credential-dependent services before enabling their flags:
 

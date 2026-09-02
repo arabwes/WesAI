@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=10">
+  <link rel="stylesheet" href="/team/css/styles.css?v=11">
   <script src="/team/js/config.js?v=10" defer></script>
   <script src="/team/js/auth.js?v=10" defer></script>
   <script src="/team/js/documents.js?v=11" defer></script>
@@ -36,10 +36,24 @@
 
       <div class="portal-intro">
         <h1>Documents</h1>
-        <p>Employee handbook and other company guidelines. These stay live in Google Drive — this page just gives you a quick way to open them.</p>
+        <p>Employee handbook, company guidelines, and role-specific team forms.</p>
       </div>
 
       <p class="session-banner" id="session-banner"></p>
+
+      <section class="count-section" data-role="lead" hidden>
+        <div class="count-section__head">
+          <h2 class="count-section__title">Lead and Management forms</h2>
+        </div>
+        <div class="document-grid">
+          <div class="document-card document-card--confidential">
+            <span class="badge">Confidential</span>
+            <h3 class="document-card__title">Employee Write-Up</h3>
+            <p class="document-card__description">Document verbal warnings and formal strikes under the 3-strike policy.</p>
+            <a class="btn btn-outline document-card__link" href="/team/write-up">Open form</a>
+          </div>
+        </div>
+      </section>
 
       <div id="documents-list"></div>
 

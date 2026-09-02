@@ -146,7 +146,20 @@ done
 - [ ] Two simultaneous approvals cannot assign the same open shift twice.
 - [ ] The manager grid scrolls inside its container on mobile without widening the page.
 
-## 14. Cloudflare infrastructure
+## 14. Employee write-ups
+
+- [ ] The Documents hub shows the Employee Write-Up card to Lead and Management accounts but not Barista accounts.
+- [ ] A direct Barista visit to `/team/write-up` returns to the portal dashboard.
+- [ ] Employee position and supervisor fields populate from portal accounts and cannot be edited in the browser.
+- [ ] The form requires one warning level, at least one infraction, incident details, a corrective action plan, and the required acknowledgments.
+- [ ] Selecting Other requires a description; selecting Employee declined to sign disables the employee signature fields.
+- [ ] A follow-up date before the write-up date and a partially completed witness section are rejected.
+- [ ] After submission, the record appears in history with the original employee name and position snapshots.
+- [ ] Leads see only records they submitted; Management sees all submitted records.
+- [ ] A submitted write-up creates an `employee_write_up.create` audit event without copying confidential narrative text into the activity log.
+- [ ] The form and expanded history cards have no horizontal overflow at 360–390px width.
+
+## 15. Cloudflare infrastructure
 
 - [ ] `/api/team?health=1` reports healthy in preview and production.
 - [ ] Preview and production use different D1 database IDs.

@@ -158,6 +158,33 @@ test('documents have a reproducible seed and visible connection failures', async
   assert.match(detailController, /Check your connection and refresh to try again/);
 });
 
+test('employee write-ups are confidential Lead and Management records', async () => {
+  const page = await source('team/write-up.html');
+  const documents = await source('team/documents.html');
+  const controller = await source('team/js/write-up.js');
+  const router = await source('functions/api/team/index.js');
+  const server = await source('functions/_lib/write-ups.js');
+  const migration = await source('migrations/0006_employee_write_ups.sql');
+
+  assert.match(page, /data-require-role="lead"/);
+  assert.match(page, /id="write-up-form"/);
+  assert.match(page, /name="warningLevel" value="strike_3"/);
+  assert.match(page, /name="infractions" value="safety_violation"/);
+  assert.match(page, /id="employee-declined"/);
+  assert.match(documents, /data-role="lead"/);
+  assert.match(documents, /href="\/team\/write-up"/);
+  assert.match(controller, /submitWriteUp/);
+  assert.match(controller, /getWriteUpFormData/);
+  assert.match(router, /\bgetWriteUpFormData\b/);
+  assert.match(router, /\bsubmitWriteUp\b/);
+  assert.equal((server.match(/requireRole\(request, payload, env, 'lead'\)/g) || []).length, 2);
+  assert.match(server, /actor\.role === 'management'/);
+  assert.match(server, /actor\.id/);
+  assert.match(migration, /CREATE TABLE employee_write_ups/);
+  assert.match(migration, /employee_declined_to_sign/);
+  assert.match(migration, /CHECK \(warning_level IN/);
+});
+
 test('management can edit a document Drive ID or paste a full Drive link', async () => {
   const page = await source('team/admin.html');
   const controller = await source('team/js/admin.js');

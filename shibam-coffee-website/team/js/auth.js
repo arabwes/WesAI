@@ -241,7 +241,13 @@
       sms_not_configured: 'SMS is not configured yet. Management can enable it after adding the provider keys.',
       email_taken: 'That email address is already assigned to another account.',
       cannot_remove_last_management: 'At least one active Management account must remain.',
-      cannot_remove_self: 'You cannot deactivate your own account.'
+      cannot_remove_self: 'You cannot deactivate your own account.',
+      cannot_write_up_self: 'Choose another employee. You cannot submit a write-up for yourself.',
+      employee_not_found: 'That employee is no longer active. Refresh and choose another employee.',
+      invalid_infractions: 'Select at least one valid type of infraction.',
+      missing_other_infraction: 'Describe the other type of infraction.',
+      invalid_follow_up_review_date: 'The follow-up date cannot be before the write-up date.',
+      incomplete_witness: 'Enter both the witness name and witness date, or leave both blank.'
     };
     return messages[result && result.error] || fallback || 'Something went wrong.';
   }

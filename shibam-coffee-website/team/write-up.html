@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employee Write-Up — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css?v=11">
+  <script src="/team/js/config.js?v=10" defer></script>
+  <script src="/team/js/auth.js?v=11" defer></script>
+  <script src="/team/js/write-up.js?v=1" defer></script>
+</head>
+<body data-page="app" data-require-role="lead">
+
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">
+        Shibam Coffee
+        <span>Team Forms</span>
+      </div>
+      <div class="portal-header__session">
+        <a class="portal-header__back" href="/team/documents">&larr; Documents</a>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container write-up-page">
+      <div class="portal-intro">
+        <p class="eyebrow">Corrective action</p>
+        <h1>Employee Write-Up</h1>
+        <p>Document a verbal warning or formal strike under Shibam Coffee's 3-strike policy.</p>
+      </div>
+
+      <p class="session-banner" id="session-banner"></p>
+
+      <div class="portal-callout write-up-confidential">
+        <strong>Confidential employee record</strong>
+        Only leads and Management can access this page. Submitted records are permanent and recorded in the activity log.
+      </div>
+
+      <section class="form-card write-up-form-card" aria-labelledby="new-write-up-title">
+        <h2 id="new-write-up-title">New write-up</h2>
+        <form id="write-up-form" class="portal-form">
+          <fieldset class="write-up-section">
+            <legend>Employee information</legend>
+            <div class="form-grid form-grid--2">
+              <div class="form-group">
+                <label for="write-up-employee">Employee</label>
+                <select id="write-up-employee" name="employeeId" required>
+                  <option value="">Select an employee</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="write-up-position">Position</label>
+                <input id="write-up-position" type="text" readonly aria-readonly="true" placeholder="Filled from the employee profile">
+              </div>
+              <div class="form-group">
+                <label for="write-up-date">Date of write-up</label>
+                <input id="write-up-date" name="writeUpDate" type="date" required>
+              </div>
+              <div class="form-group">
+                <label for="write-up-supervisor">Supervisor</label>
+                <input id="write-up-supervisor" type="text" readonly aria-readonly="true">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="write-up-section">
+            <legend>Policy violation level</legend>
+            <p class="write-up-help">Choose one level. A verbal warning is documented but does not count as a strike.</p>
+            <div class="write-up-choice-grid write-up-choice-grid--levels">
+              <label class="write-up-choice">
+                <input type="radio" name="warningLevel" value="verbal" required>
+                <span><strong>Verbal warning</strong><small>First-time incident; documented, not a formal strike</small></span>
+              </label>
+              <label class="write-up-choice">
+                <input type="radio" name="warningLevel" value="strike_1">
+                <span><strong>Strike 1</strong><small>First written warning</small></span>
+              </label>
+              <label class="write-up-choice">
+                <input type="radio" name="warningLevel" value="strike_2">
+                <span><strong>Strike 2</strong><small>Final written warning</small></span>
+              </label>
+              <label class="write-up-choice">
+                <input type="radio" name="warningLevel" value="strike_3">
+                <span><strong>Strike 3</strong><small>Subject to termination or final review</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="write-up-section" id="infraction-group">
+            <legend>Type of infraction</legend>
+            <p class="write-up-help">Select every category that applies.</p>
+            <div class="write-up-choice-grid">
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="attendance_punctuality"> Attendance / punctuality</label>
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="performance_issues"> Performance issues</label>
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="customer_service"> Customer service issue</label>
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="failure_to_follow_procedures"> Failure to follow procedures</label>
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="policy_violation"> Policy violation</label>
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="insubordination"> Insubordination</label>
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="safety_violation"> Safety violation</label>
+              <label class="write-up-check"><input type="checkbox" name="infractions" value="other" id="infraction-other"> Other</label>
+            </div>
+            <div class="form-group write-up-other" id="other-infraction-wrap" hidden>
+              <label for="other-infraction">Describe the other infraction</label>
+              <input id="other-infraction" name="otherInfraction" type="text" maxlength="300">
+            </div>
+          </fieldset>
+
+          <fieldset class="write-up-section">
+            <legend>Incident and corrective action</legend>
+            <div class="form-group">
+              <label for="incident-description">Incident description</label>
+              <p class="write-up-help" id="incident-help">Include the date and time, what happened, who was present, and any relevant prior discussions or coaching.</p>
+              <textarea id="incident-description" name="incidentDescription" rows="7" maxlength="5000" aria-describedby="incident-help" required></textarea>
+            </div>
+            <div class="form-group">
+              <label for="corrective-action-plan">Corrective action plan</label>
+              <p class="write-up-help" id="action-help">Describe the expected change, support provided, and steps needed to avoid future write-ups.</p>
+              <textarea id="corrective-action-plan" name="correctiveActionPlan" rows="6" maxlength="5000" aria-describedby="action-help" required></textarea>
+            </div>
+            <div class="form-group write-up-date-field">
+              <label for="follow-up-review-date">Follow-up review date <span class="optional">Optional</span></label>
+              <input id="follow-up-review-date" name="followUpReviewDate" type="date">
+            </div>
+          </fieldset>
+
+          <fieldset class="write-up-section">
+            <legend>Employee comments <span class="optional">Optional</span></legend>
+            <textarea id="employee-comments" name="employeeComments" rows="5" maxlength="5000" aria-label="Employee comments"></textarea>
+          </fieldset>
+
+          <fieldset class="write-up-section">
+            <legend>Acknowledgment</legend>
+            <p class="write-up-help">A typed name represents the person's acknowledgment of this record. It does not necessarily indicate agreement.</p>
+            <label class="write-up-check write-up-declined">
+              <input type="checkbox" id="employee-declined" name="employeeDeclinedToSign">
+              Employee declined to sign
+            </label>
+            <div class="form-grid form-grid--2" id="employee-signature-fields">
+              <div class="form-group">
+                <label for="employee-signature">Employee signature</label>
+                <input id="employee-signature" name="employeeSignature" type="text" maxlength="160" required>
+              </div>
+              <div class="form-group">
+                <label for="employee-signature-date">Employee signature date</label>
+                <input id="employee-signature-date" name="employeeSignatureDate" type="date" required>
+              </div>
+            </div>
+            <div class="form-grid form-grid--2">
+              <div class="form-group">
+                <label for="manager-signature">Lead / manager signature</label>
+                <input id="manager-signature" name="managerSignature" type="text" maxlength="160" required>
+              </div>
+              <div class="form-group">
+                <label for="manager-signature-date">Signature date</label>
+                <input id="manager-signature-date" name="managerSignatureDate" type="date" required>
+              </div>
+              <div class="form-group">
+                <label for="witness-name">Witness <span class="optional">If needed</span></label>
+                <input id="witness-name" name="witnessName" type="text" maxlength="160">
+              </div>
+              <div class="form-group">
+                <label for="witness-date">Witness date</label>
+                <input id="witness-date" name="witnessDate" type="date">
+              </div>
+            </div>
+          </fieldset>
+
+          <label class="write-up-check write-up-attestation">
+            <input type="checkbox" name="attestation" required>
+            I confirm this record is accurate and ready to be added to the employee's file.
+          </label>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submit-write-up" disabled>Submit write-up</button>
+            <p class="form-status" id="write-up-status" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </section>
+
+      <section class="write-up-history" aria-labelledby="write-up-history-title">
+        <div class="count-section__head">
+          <div>
+            <h2 class="count-section__title" id="write-up-history-title">Submitted write-ups</h2>
+            <p class="count-section__note" id="write-up-history-scope"></p>
+          </div>
+        </div>
+        <div id="write-up-history-list" class="write-up-records" aria-live="polite">Loading records…</div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+</body>
+</html>
