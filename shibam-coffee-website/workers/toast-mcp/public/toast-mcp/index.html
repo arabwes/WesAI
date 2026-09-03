@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Cafe MCP</title>
+  <link rel="stylesheet" href="/toast-mcp/styles.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/toast-mcp/">Cafe MCP</a><span class="badge">Read-only Toast connector</span></header>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Private connection workspace</p>
+      <h1>Your cafe data, available to the tools you approve.</h1>
+      <p class="lede">Connect eligible Toast Standard API credentials, choose locations and scopes, then authorize a compatible MCP client. Cafe MCP cannot place orders or change Toast data.</p>
+      <div id="signed-out"><a class="button" href="/toast-mcp/auth/login">Sign in or create an account</a></div>
+    </section>
+
+    <div id="notice" class="notice hidden" role="status"></div>
+    <section id="workspace" class="hidden">
+      <div class="account-row"><div><strong id="user-name"></strong><div id="user-email" class="fine"></div></div><form id="logout-form" method="post" action="/toast-mcp/auth/logout"><input id="logout-csrf" type="hidden" name="csrf"><button class="link-button" type="submit">Sign out</button></form></div>
+
+      <section class="card">
+        <h2>Organization</h2>
+        <label>Active organization<select id="organization-select"></select></label>
+        <p>Partner claim code: <code id="claim-code">—</code></p>
+        <p class="fine">If partner mode is approved later, enter this exact opaque value as the Toast Group ID. Cafe MCP never maps installations by email.</p>
+      </section>
+
+      <section class="grid two">
+        <article class="card"><h2>Locations</h2><div id="locations" class="stack empty">No connected locations.</div></article>
+        <article class="card"><h2>MCP endpoint</h2><code class="endpoint">https://shibamatlanta.com/toast-mcp/mcp</code><p class="fine">Your MCP client will open this page for organization selection and explicit consent.</p></article>
+      </section>
+
+      <section id="owner-tools" class="hidden">
+        <section class="card">
+          <h2>Connect Toast Standard API credentials</h2>
+          <p class="warning">Pilot use only until Toast confirms that hosted third-party custody of customer Standard API credentials is permitted.</p>
+          <form id="connection-form" class="form-grid">
+            <label>Connection label<input name="label" maxlength="80" required placeholder="Main restaurant group"></label>
+            <label>Environment<select name="environment"><option value="production">Production</option><option value="sandbox">Sandbox</option></select></label>
+            <label>Client ID<input name="clientId" autocomplete="off" required></label>
+            <label>One-time client secret<input name="clientSecret" type="password" autocomplete="new-password" required minlength="8"></label>
+            <label class="wide">Restaurant GUIDs <span class="fine">one per line</span><textarea name="restaurantGuids" required rows="3"></textarea></label>
+            <div class="wide"><button type="submit">Verify and save connection</button></div>
+          </form>
+          <div id="connections" class="stack"></div>
+        </section>
+
+        <section class="grid two">
+          <article class="card"><h2>Invite a member</h2><form id="invite-form"><label>Email<input type="email" name="email" required></label><label>Location IDs <span class="fine">comma-separated</span><input name="locationIds"></label><label>OAuth scopes <span class="fine">comma-separated</span><input name="scopes" value="cafe/catalog:read,cafe/locations:read"></label><button type="submit">Send seven-day invitation</button></form></article>
+          <article class="card"><h2>Organization scopes</h2><p>Select which Toast read scopes this organization may ever grant. Sensitive scopes also require the separate activation below.</p><select id="scope-select" multiple size="9"></select><button id="save-scopes" type="button">Save scope ceiling</button><hr><p>Guest personal information and delivery addresses require all three gates: owner activation, member permission, and MCP consent.</p><label class="check"><input id="sensitive-toggle" type="checkbox"> Enable sensitive PII scopes</label></article>
+        </section>
+
+        <section class="card"><h2>Members</h2><p class="fine">Member access is explicit. Save location IDs and OAuth scopes here; current grants are rechecked against these values on every tool call.</p><div id="members" class="stack"></div></section>
+        <section class="card danger-zone"><h2>Organization deletion</h2><p>Permanently deletes this Cafe MCP organization, its credentials, permissions, temporary results, and client grants.</p><button id="delete-organization" class="danger" type="button">Delete organization</button></section>
+      </section>
+
+      <section class="card"><h2>My OAuth client grants</h2><p class="fine">Revocation is immediate. Reauthorize the client to reconnect it later.</p><div id="grants" class="stack"></div></section>
+    </section>
+  </main>
+  <footer><nav><a href="/toast-mcp/privacy.html">Privacy</a><a href="/toast-mcp/terms.html">Terms</a><a href="/toast-mcp/security.html">Security</a><a href="/toast-mcp/support.html">Support & deletion</a></nav><p>Cafe MCP is an independent service and is not endorsed by Toast, Inc.</p></footer>
+  <script type="module" src="/toast-mcp/app.js"></script>
+</body>
+</html>

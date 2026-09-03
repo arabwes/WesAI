@@ -1,0 +1,39 @@
+{
+  "name": "@wesai/cafe-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-tenant, read-only Toast API MCP server for Cloudflare Workers.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "npm run typecheck && npm run catalog:check",
+    "catalog:sync": "node scripts/sync-toast-openapi.mjs",
+    "catalog:build": "node scripts/build-operation-catalog.mjs",
+    "catalog:check": "node scripts/build-operation-catalog.mjs --check",
+    "cf-typegen": "wrangler types",
+    "db:migrate:local": "wrangler d1 migrations apply TOAST_MCP_DB --local",
+    "deploy:dry-run": "wrangler deploy --dry-run --env=",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy",
+    "dev": "wrangler dev --local",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "0.10.3",
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.22.0",
+    "jose": "6.2.10",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.1",
+    "typescript": "7.0.2",
+    "vitest": "4.1.0",
+    "wrangler": "^4.129.0",
+    "yaml": "2.9.0"
+  }
+}

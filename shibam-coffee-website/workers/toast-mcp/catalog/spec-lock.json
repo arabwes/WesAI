@@ -1,0 +1,77 @@
+{
+  "generatedAt": "2026-09-03T21:50:59.884Z",
+  "specifications": {
+    "cashmgmt": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-cashmgmt-api.yaml",
+      "sha256": "4f54b9b9cd2d2b9233762a8bc3d7b66a6a87707d5c4ecda88890c4761e50c48b",
+      "title": "Cash Management API",
+      "version": "1.1.0"
+    },
+    "config": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-config-api.yaml",
+      "sha256": "bbe43be505f41e2570cf367802c4ce16c4956d6ce69a76b36838d0c97bc5f2e8",
+      "title": "Configuration API",
+      "version": "2.5.0"
+    },
+    "labor": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-labor-api.yaml",
+      "sha256": "45c2ce1a797297e1a0772270667ab9803e28592e05e18c7a3046f02feca46a92",
+      "title": "Toast Labor API",
+      "version": "1.9.0"
+    },
+    "orders": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-orders-api.yaml",
+      "sha256": "c694b5fdc1feb762b3deaf243f448bb62d3ee9c80e66258448fd29032823f784",
+      "title": "Toast Orders API",
+      "version": "2.9.6"
+    },
+    "device-details": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/device-details-api.yaml",
+      "sha256": "a704e76a9ca4b31751b8c9f837f7a9a381e6c4bd3fc157c2b29f41e695d58e52",
+      "title": "Device details API",
+      "version": "1.0.0"
+    },
+    "kitchen": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-kitchen-api-docs.yaml",
+      "sha256": "4726fcf6d4b89c723fe5e2b42514c83589d1dd6caf0b6fb35fcbf366890f6279",
+      "title": "Kitchen API",
+      "version": "1.0.2"
+    },
+    "menus": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-menus-api.yaml",
+      "sha256": "21da65b5dfacce6b1eb3557b92f6cbf7f872a59f23bbf3c94f9d44f1669aaae3",
+      "title": "Menus API",
+      "version": "2.4.1"
+    },
+    "digital-schedule": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-ordermgmt-config-api-docs.yaml",
+      "sha256": "49afd5ee3fb64c9eac90df45c1d3336f34b40fda7c589de1fb3e41f789d57780",
+      "title": "Order Management Configuration API",
+      "version": "1.0.1"
+    },
+    "packaging": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/packaging-api.yaml",
+      "sha256": "140e4e9f38d3d9f603d900a997615cd22c6a2e6611e73305f3ebc13c5fa8e658",
+      "title": "Packaging configuration API",
+      "version": "1.0.0"
+    },
+    "restaurants": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-restaurants-api.yaml",
+      "sha256": "cc0e007deac01ad602abb030522a777580bfa350e3891cac5fc452bb3e599d05",
+      "title": "Restaurants API",
+      "version": "1.0.0"
+    },
+    "stock": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-stock-api.yaml",
+      "sha256": "fc85052d201940a1faae8c383cb97335542b3d8604e63cba8263d6ffc7cb335b",
+      "title": "Stock API",
+      "version": "1.0.0"
+    },
+    "availability": {
+      "source": "https://doc.toasttab.com/toast-api-specifications/toast-restaurant-availability-api-docs.yaml",
+      "sha256": "0440fc07d569af0fe3c0d12e7ef820483a42e41ffafac585e0a408d574d95901",
+      "title": "Restaurant Availability Service API",
+      "version": "1.0.1"
+    }
+  }
+}

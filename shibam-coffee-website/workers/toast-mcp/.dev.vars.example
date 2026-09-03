@@ -1,0 +1,10 @@
+AUTH0_CLIENT_SECRET=replace-with-auth0-client-secret
+AUTH0_DOMAIN=replace-with-your-tenant.us.auth0.com
+AUTH0_CLIENT_ID=replace-with-auth0-client-id
+SESSION_SIGNING_KEY=replace-with-32-or-more-random-bytes
+CREDENTIAL_KEK_V1=replace-with-base64-encoded-32-byte-key
+RESULT_KEK_V1=replace-with-base64-encoded-32-byte-key
+RESEND_API_KEY=replace-with-resend-api-key
+TOAST_PARTNER_CLIENT_ID=
+TOAST_PARTNER_CLIENT_SECRET=
+TOAST_PARTNER_WEBHOOK_SECRET=
