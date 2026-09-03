@@ -18,9 +18,10 @@ Create/verify the Resend sending domain and have privacy, terms, security, suppo
 Wrangler configuration defines isolated production/staging D1, KV, R2, Durable Object, queue, DLQ, static assets, and cron bindings. It does not reference the website's `TEAM_DB` or notification queue.
 
 Authenticate Wrangler, set the staging `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, and exact
-`PUBLIC_ORIGIN` in `wrangler.jsonc`, then provision/deploy staging first. Wrangler's
-automatic provisioning creates missing D1, KV, R2, and Queue resources from the
-bindings and writes their IDs back to the configuration file.
+`PUBLIC_ORIGIN` in `wrangler.jsonc`, then provision/deploy staging first. The R2
+bindings intentionally use fixed bucket names, so create those buckets explicitly.
+Wrangler's automatic provisioning creates the missing D1, KV, and Queue resources
+from their draft bindings and writes generated IDs back to the configuration file.
 
 Create a secret file outside the repository (for example,
 `C:\\secure\\cafe-mcp-staging.env`) containing:
@@ -40,18 +41,20 @@ remove the deployment file after use.
 ```sh
 npm ci
 npm run cf-typegen
+npx wrangler r2 bucket create cafe-mcp-results-staging
 npx wrangler d1 migrations apply TOAST_MCP_DB --env staging --remote
 npx wrangler deploy --env staging --secrets-file C:\secure\cafe-mcp-staging.env
+npx wrangler r2 bucket lifecycle add cafe-mcp-results-staging expire-results results/ --expire-days 1
 ```
 
 Do not put secrets in `wrangler.jsonc` or commit a deployment secret file.
 
 For production, first set the production Auth0 values in `wrangler.jsonc`, then
-repeat the migration and single-deploy sequence without `--env staging`, using a
-different secret file and different generated key values. The production deploy
-attaches the path routes, so run it only after staging acceptance. Configure an R2
-lifecycle rule as defense in depth to delete `results/` objects after one day; the
-scheduled Worker also deletes expired chunks.
+create `cafe-mcp-results` and repeat the migration and single-deploy sequence
+without `--env staging`, using a different secret file and different generated key
+values. Add the same `expire-results` lifecycle rule to the production bucket. The
+production deploy attaches the path routes, so run it only after staging
+acceptance. The scheduled Worker also deletes expired chunks.
 
 ## 3. Rollout gates
 
