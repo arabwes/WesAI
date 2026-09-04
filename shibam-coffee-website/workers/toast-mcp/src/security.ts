@@ -32,6 +32,11 @@ export function assertAllowedHost(request: Request, env: CafeEnvironment): void 
 export function assertSameOrigin(request: Request, env: CafeEnvironment): void {
   const origin = request.headers.get("Origin");
   if (!origin) return;
+  if (
+    origin === "null"
+    && request.headers.get("Sec-Fetch-Site") === "same-origin"
+    && request.headers.get("Sec-Fetch-Mode") === "navigate"
+  ) return;
   let originUrl: URL;
   try {
     originUrl = new URL(origin);
@@ -76,7 +81,7 @@ export function sessionCookie(token: string, maxAgeSeconds: number): string {
 }
 
 export function csrfCookie(token: string, maxAgeSeconds: number): string {
-  return `__Host-cafe_mcp_csrf=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAgeSeconds}; Secure; SameSite=Strict`;
+  return `__Host-cafe_mcp_csrf=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAgeSeconds}; Secure; SameSite=Lax`;
 }
 
 export function clearSessionCookie(): string {
@@ -84,7 +89,7 @@ export function clearSessionCookie(): string {
 }
 
 export function clearCsrfCookie(): string {
-  return "__Host-cafe_mcp_csrf=; Path=/; Max-Age=0; Secure; SameSite=Strict";
+  return "__Host-cafe_mcp_csrf=; Path=/; Max-Age=0; Secure; SameSite=Lax";
 }
 
 export function jsonResponse(data: unknown, status = 200, headers?: HeadersInit): Response {

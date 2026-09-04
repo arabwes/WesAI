@@ -17,7 +17,7 @@ describe("isolated Cloudflare deployment contract", () => {
     expect(config.d1_databases).toContainEqual(expect.objectContaining({ binding: "TOAST_MCP_DB", database_name: "cafe-mcp-db" }));
     expect(config.d1_databases.some((database) => database.binding === "TEAM_DB")).toBe(false);
     expect(config.queues.producers[0]?.queue).toBe("cafe-mcp-jobs");
-    expect(config.vars.TOAST_BYO_MODE).toBe("disabled");
+    expect(config.vars.TOAST_BYO_MODE).toBe("enabled");
     expect(config.vars.TOAST_PARTNER_MODE).toBe("disabled");
   });
 

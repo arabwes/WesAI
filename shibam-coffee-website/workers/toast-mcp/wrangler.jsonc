@@ -1,137 +1,196 @@
 {
-  "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "cafe-mcp",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-09-03",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "workers_dev": false,
-  "routes": [
-    { "pattern": "shibamatlanta.com/toast-mcp*", "zone_name": "shibamatlanta.com" },
-    { "pattern": "shibamatlanta.com/.well-known/oauth-protected-resource/toast-mcp*", "zone_name": "shibamatlanta.com" },
-    { "pattern": "shibamatlanta.com/.well-known/oauth-authorization-server/toast-mcp*", "zone_name": "shibamatlanta.com" }
-  ],
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "run_worker_first": true
-  },
-  "d1_databases": [
-    {
-      "binding": "TOAST_MCP_DB",
-      "database_name": "cafe-mcp-db",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "kv_namespaces": [
-    { "binding": "OAUTH_KV" }
-  ],
-  "r2_buckets": [
-    { "binding": "TOAST_RESULTS", "bucket_name": "cafe-mcp-results" }
-  ],
-  "durable_objects": {
-    "bindings": [
-      { "name": "CAFE_CREDENTIAL_BROKER", "class_name": "CafeCredentialBroker" }
-    ]
-  },
-  "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["CafeCredentialBroker"] }
-  ],
-  "queues": {
-    "producers": [
-      { "binding": "CAFE_MCP_JOBS", "queue": "cafe-mcp-jobs" }
-    ],
-    "consumers": [
-      {
-        "queue": "cafe-mcp-jobs",
-        "max_batch_size": 10,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "cafe-mcp-jobs-dead-letter"
-      }
-    ]
-  },
-  "triggers": {
-    "crons": ["0 */8 * * *", "15 * * * *"]
-  },
-  "observability": {
-    "enabled": true,
-    "logs": { "head_sampling_rate": 1 },
-    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
-  },
-  "vars": {
-    "APP_ENV": "production",
-    "PUBLIC_ORIGIN": "https://shibamatlanta.com",
-    "BASE_PATH": "/toast-mcp",
-    "AUTH0_DOMAIN": "SET_WITH_WRANGLER_VARS",
-    "AUTH0_CLIENT_ID": "SET_WITH_WRANGLER_VARS",
-    "AUTH0_SCOPE": "openid profile email",
-    "TOAST_PARTNER_MODE": "disabled",
-    "TOAST_BYO_MODE": "disabled",
-    "TOAST_PARTNER_ENVIRONMENT": "production",
-    "EMAIL_FROM": "Cafe MCP <support@shibamatlanta.com>",
-    "SESSION_TTL_SECONDS": "28800",
-    "AUDIT_RETENTION_DAYS": "90",
-    "RESULT_TTL_SECONDS": "86400",
-    "INLINE_RESULT_MAX_BYTES": "524288",
-    "RESULT_CHUNK_MAX_BYTES": "262144"
-  },
-  "env": {
-    "staging": {
-      "name": "cafe-mcp-staging",
-      "workers_dev": true,
-      "routes": [],
-      "durable_objects": {
-        "bindings": [
-          { "name": "CAFE_CREDENTIAL_BROKER", "class_name": "CafeCredentialBroker" }
-        ]
-      },
-      "d1_databases": [
-        {
-          "binding": "TOAST_MCP_DB",
-          "database_name": "cafe-mcp-db-staging",
-          "migrations_dir": "migrations"
-        }
-      ],
-      "kv_namespaces": [
-        { "binding": "OAUTH_KV" }
-      ],
-      "r2_buckets": [
-        { "binding": "TOAST_RESULTS", "bucket_name": "cafe-mcp-results-staging" }
-      ],
-      "queues": {
-        "producers": [
-          { "binding": "CAFE_MCP_JOBS", "queue": "cafe-mcp-jobs-staging" }
-        ],
-        "consumers": [
-          {
-            "queue": "cafe-mcp-jobs-staging",
-            "max_batch_size": 10,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "cafe-mcp-jobs-staging-dead-letter"
-          }
-        ]
-      },
-      "triggers": {
-        "crons": ["0 */8 * * *", "15 * * * *"]
-      },
-      "vars": {
-        "APP_ENV": "staging",
-        "PUBLIC_ORIGIN": "https://cafe-mcp-staging.workers.dev",
-        "BASE_PATH": "/toast-mcp",
-        "AUTH0_DOMAIN": "SET_WITH_WRANGLER_VARS",
-        "AUTH0_CLIENT_ID": "SET_WITH_WRANGLER_VARS",
-        "AUTH0_SCOPE": "openid profile email",
-        "TOAST_PARTNER_MODE": "disabled",
-        "TOAST_BYO_MODE": "disabled",
-        "TOAST_PARTNER_ENVIRONMENT": "sandbox",
-        "EMAIL_FROM": "Cafe MCP <support@shibamatlanta.com>",
-        "SESSION_TTL_SECONDS": "28800",
-        "AUDIT_RETENTION_DAYS": "90",
-        "RESULT_TTL_SECONDS": "86400",
-        "INLINE_RESULT_MAX_BYTES": "524288",
-        "RESULT_CHUNK_MAX_BYTES": "262144"
-      }
-    }
-  }
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "cafe-mcp",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-03",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"workers_dev": false,
+	"routes": [
+		{
+			"pattern": "shibamatlanta.com/toast-mcp*",
+			"zone_name": "shibamatlanta.com"
+		},
+		{
+			"pattern": "shibamatlanta.com/.well-known/oauth-protected-resource/toast-mcp*",
+			"zone_name": "shibamatlanta.com"
+		},
+		{
+			"pattern": "shibamatlanta.com/.well-known/oauth-authorization-server/toast-mcp*",
+			"zone_name": "shibamatlanta.com"
+		}
+	],
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"run_worker_first": true
+	},
+	"d1_databases": [
+		{
+			"binding": "TOAST_MCP_DB",
+			"database_name": "cafe-mcp-db",
+			"migrations_dir": "migrations",
+			"database_id": "5976df57-d199-4866-8f52-c41e1472ba6b"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "OAUTH_KV",
+			"id": "9f24222cf62c438db4290618d705617f"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "TOAST_RESULTS",
+			"bucket_name": "cafe-mcp-results"
+		},
+		{
+			"bucket_name": "cafe-mcp-results",
+			"binding": "cafe_mcp_results",
+			"remote": true
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "CAFE_CREDENTIAL_BROKER",
+				"class_name": "CafeCredentialBroker"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"CafeCredentialBroker"
+			]
+		}
+	],
+	"queues": {
+		"producers": [
+			{
+				"binding": "CAFE_MCP_JOBS",
+				"queue": "cafe-mcp-jobs"
+			}
+		],
+		"consumers": [
+			{
+				"queue": "cafe-mcp-jobs",
+				"max_batch_size": 10,
+				"max_batch_timeout": 5,
+				"max_retries": 5,
+				"dead_letter_queue": "cafe-mcp-jobs-dead-letter"
+			}
+		]
+	},
+	"triggers": {
+		"crons": [
+			"0 */8 * * *",
+			"15 * * * *"
+		]
+	},
+	"observability": {
+		"enabled": true,
+		"logs": {
+			"head_sampling_rate": 1
+		},
+		"traces": {
+			"enabled": true,
+			"head_sampling_rate": 0.05
+		}
+	},
+	"vars": {
+		"APP_ENV": "production",
+		"PUBLIC_ORIGIN": "https://shibamatlanta.com",
+		"BASE_PATH": "/toast-mcp",
+		"AUTH0_DOMAIN": "dev-3myhg8cj7id1l4n0.us.auth0.com",
+		"AUTH0_CLIENT_ID": "VfnqrCMpMHqZMXObCsXFPkZhwYK7Y4cc",
+		"AUTH0_SCOPE": "openid profile email",
+		"TOAST_PARTNER_MODE": "disabled",
+		"TOAST_BYO_MODE": "enabled",
+		"TOAST_PARTNER_ENVIRONMENT": "production",
+		"EMAIL_FROM": "Cafe MCP <support@shibamatlanta.com>",
+		"SESSION_TTL_SECONDS": "28800",
+		"AUDIT_RETENTION_DAYS": "90",
+		"RESULT_TTL_SECONDS": "86400",
+		"INLINE_RESULT_MAX_BYTES": "524288",
+		"RESULT_CHUNK_MAX_BYTES": "262144"
+	},
+	"env": {
+		"staging": {
+			"name": "cafe-mcp-staging",
+			"workers_dev": true,
+			"routes": [],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "CAFE_CREDENTIAL_BROKER",
+						"class_name": "CafeCredentialBroker"
+					}
+				]
+			},
+			"d1_databases": [
+				{
+					"binding": "TOAST_MCP_DB",
+					"database_name": "cafe-mcp-db-staging",
+					"migrations_dir": "migrations",
+					"database_id": "7d797f7e-0097-4c67-88bd-fe472e4fdb35"
+				}
+			],
+			"kv_namespaces": [
+				{
+					"binding": "OAUTH_KV",
+					"id": "f6d2bc9b891d4264bf88606fc28e02e3"
+				}
+			],
+			"r2_buckets": [
+				{
+					"binding": "TOAST_RESULTS",
+					"bucket_name": "cafe-mcp-results-staging"
+				}
+			],
+			"queues": {
+				"producers": [
+					{
+						"binding": "CAFE_MCP_JOBS",
+						"queue": "cafe-mcp-jobs-staging"
+					}
+				],
+				"consumers": [
+					{
+						"queue": "cafe-mcp-jobs-staging",
+						"max_batch_size": 10,
+						"max_batch_timeout": 5,
+						"max_retries": 5,
+						"dead_letter_queue": "cafe-mcp-jobs-staging-dead-letter"
+					}
+				]
+			},
+			"triggers": {
+				"crons": [
+					"0 */8 * * *",
+					"15 * * * *"
+				]
+			},
+			"vars": {
+				"APP_ENV": "staging",
+				"PUBLIC_ORIGIN": "https://cafe-mcp-staging.yemenicoffeeco.workers.dev",
+				"BASE_PATH": "/toast-mcp",
+				"AUTH0_DOMAIN": "dev-3myhg8cj7id1l4n0.us.auth0.com",
+				"AUTH0_CLIENT_ID": "VfnqrCMpMHqZMXObCsXFPkZhwYK7Y4cc",
+				"AUTH0_SCOPE": "openid profile email",
+				"TOAST_PARTNER_MODE": "disabled",
+				"TOAST_BYO_MODE": "disabled",
+				"TOAST_PARTNER_ENVIRONMENT": "sandbox",
+				"EMAIL_FROM": "Cafe MCP <support@shibamatlanta.com>",
+				"SESSION_TTL_SECONDS": "28800",
+				"AUDIT_RETENTION_DAYS": "90",
+				"RESULT_TTL_SECONDS": "86400",
+				"INLINE_RESULT_MAX_BYTES": "524288",
+				"RESULT_CHUNK_MAX_BYTES": "262144"
+			}
+		}
+	}
 }

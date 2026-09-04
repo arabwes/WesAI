@@ -4,7 +4,7 @@ import { applyResponsePolicy } from "../src/data-policy";
 import { splitUtf8Fragments } from "../src/results";
 import { storeOversizedResult } from "../src/results";
 import { intersectAuthorizationScopes, isSensitiveOAuthScope } from "../src/scopes";
-import { assertAllowedHost, assertSameOrigin, safeReturnPath, withSecurityHeaders } from "../src/security";
+import { assertAllowedHost, assertSameOrigin, clearCsrfCookie, csrfCookie, safeReturnPath, withSecurityHeaders } from "../src/security";
 import { minimumToastRequestIntervalMs } from "../src/toast/client";
 
 describe("authorization and data safety", () => {
@@ -35,6 +35,19 @@ describe("authorization and data safety", () => {
     expect(() => assertSameOrigin(new Request("http://127.0.0.1:8791/toast-mcp/api/me", {
       headers: { Origin: "http://localhost:3000" },
     }), { PUBLIC_ORIGIN: "https://shibamatlanta.com" } as never)).not.toThrow();
+    expect(() => assertSameOrigin(new Request("https://shibamatlanta.com/toast-mcp/auth/logout", {
+      method: "POST",
+      headers: { Origin: "null", "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "navigate" },
+    }), { PUBLIC_ORIGIN: "https://shibamatlanta.com" } as never)).not.toThrow();
+    expect(() => assertSameOrigin(new Request("https://shibamatlanta.com/toast-mcp/auth/logout", {
+      method: "POST",
+      headers: { Origin: "null", "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate" },
+    }), { PUBLIC_ORIGIN: "https://shibamatlanta.com" } as never)).toThrow(/origin/u);
+  });
+
+  it("issues the callback CSRF cookie with Lax same-site handling", () => {
+    expect(csrfCookie("token", 600)).toContain("SameSite=Lax");
+    expect(clearCsrfCookie()).toContain("SameSite=Lax");
   });
 
   it("chunks UTF-8 without corrupting multi-byte characters", () => {
