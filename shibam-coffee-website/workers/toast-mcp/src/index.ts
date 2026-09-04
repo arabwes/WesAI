@@ -132,7 +132,7 @@ async function sendInvitationEmail(env: CafeEnvironment, invitationId: string, t
       subject: `Join ${row.name} on Cafe MCP`,
       text: `You were invited to ${row.name}. Sign in with this email address and accept within seven days: ${env.PUBLIC_ORIGIN}${env.BASE_PATH}/?invite=${encodeURIComponent(token)}`,
     }),
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`Invitation delivery failed with HTTP ${response.status}`);

@@ -32,4 +32,18 @@ describe("isolated Cloudflare deployment contract", () => {
     expect(script).toContain("/permissions");
     expect(script).toContain("/revoke");
   });
+
+  it("uses only redirect modes supported by the Workers runtime", async () => {
+    const sourceFiles = [
+      "../src/auth0.ts",
+      "../src/index.ts",
+      "../src/partner.ts",
+      "../src/toast/client.ts",
+      "../src/toast/credential-broker.ts",
+    ];
+    const sources = await Promise.all(
+      sourceFiles.map((file) => readFile(new URL(file, import.meta.url), "utf8")),
+    );
+    expect(sources.join("\n")).not.toContain('redirect: "error"');
+  });
 });

@@ -90,7 +90,7 @@ export class CafeCredentialBroker extends DurableObject<BrokerEnvironment> {
         clientSecret: credentials.clientSecret,
         userAccessType: "TOAST_MACHINE_CLIENT",
       }),
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(15_000),
     });
     if (response.status === 401 || response.status === 403) {

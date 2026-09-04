@@ -243,7 +243,7 @@ async function executeWithCredentials(
   const init: RequestInit = {
     method,
     headers,
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(30_000),
   };
   if (method === "POST") {

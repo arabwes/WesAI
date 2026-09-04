@@ -194,11 +194,11 @@ export async function reconcilePartnerLocations(env: CafeEnvironment): Promise<v
     const url = new URL("/partners/v1/connectedRestaurants", host);
     url.searchParams.set("pageSize", "200");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    let response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "CafeMCP/0.1" }, redirect: "error", signal: AbortSignal.timeout(30_000) });
+    let response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "CafeMCP/0.1" }, redirect: "manual", signal: AbortSignal.timeout(30_000) });
     if (response.status === 401) {
       await broker.invalidateToken();
       token = await broker.getAccessToken(credentials);
-      response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "CafeMCP/0.1" }, redirect: "error", signal: AbortSignal.timeout(30_000) });
+      response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "CafeMCP/0.1" }, redirect: "manual", signal: AbortSignal.timeout(30_000) });
     }
     if (response.status === 401 || response.status === 403) {
       await broker.invalidateToken();

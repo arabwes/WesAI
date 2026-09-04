@@ -138,7 +138,7 @@ export async function handleAuth0Callback(env: CafeEnvironment, request: Request
       code_verifier: flow.codeVerifier,
       redirect_uri: `${env.PUBLIC_ORIGIN}${env.BASE_PATH}/auth/callback`,
     }),
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   });
   if (!tokenResponse.ok) {
