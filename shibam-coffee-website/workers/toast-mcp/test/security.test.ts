@@ -4,7 +4,7 @@ import { applyResponsePolicy } from "../src/data-policy";
 import { splitUtf8Fragments } from "../src/results";
 import { storeOversizedResult } from "../src/results";
 import { intersectAuthorizationScopes, isSensitiveOAuthScope } from "../src/scopes";
-import { assertAllowedHost, assertSameOrigin, clearCsrfCookie, csrfCookie, safeReturnPath, withSecurityHeaders } from "../src/security";
+import { assertAllowedHost, assertSameOrigin, clearCsrfCookie, contentSecurityPolicyForOAuthConsent, csrfCookie, safeReturnPath, withSecurityHeaders } from "../src/security";
 import { minimumToastRequestIntervalMs } from "../src/toast/client";
 
 describe("authorization and data safety", () => {
@@ -48,6 +48,18 @@ describe("authorization and data safety", () => {
   it("issues the callback CSRF cookie with Lax same-site handling", () => {
     expect(csrfCookie("token", 600)).toContain("SameSite=Lax");
     expect(clearCsrfCookie()).toContain("SameSite=Lax");
+  });
+
+  it("allows only the validated OAuth callback origin on the consent page", () => {
+    const policy = contentSecurityPolicyForOAuthConsent("https://claude.ai/api/mcp/auth_callback");
+    expect(policy).toContain("form-action 'self' https://claude.ai");
+    expect(policy).not.toContain("/api/mcp/auth_callback");
+    expect(() => contentSecurityPolicyForOAuthConsent("custom-scheme://callback"))
+      .toThrow(/not supported/u);
+    const response = withSecurityHeaders(new Response("ok", {
+      headers: { "Content-Security-Policy": policy },
+    }));
+    expect(response.headers.get("Content-Security-Policy")).toBe(policy);
   });
 
   it("chunks UTF-8 without corrupting multi-byte characters", () => {

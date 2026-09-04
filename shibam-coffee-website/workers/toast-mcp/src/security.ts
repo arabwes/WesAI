@@ -16,9 +16,28 @@ const SAFE_HEADERS: Record<string, string> = {
 
 export function withSecurityHeaders(response: Response, requestId?: string): Response {
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(SAFE_HEADERS)) headers.set(name, value);
+  for (const [name, value] of Object.entries(SAFE_HEADERS)) {
+    if (!headers.has(name)) headers.set(name, value);
+  }
   if (requestId) headers.set("X-Request-Id", requestId);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+export function contentSecurityPolicyForOAuthConsent(redirectUri: string): string {
+  const redirect = new URL(redirectUri);
+  if (redirect.protocol !== "https:" && redirect.protocol !== "http:") {
+    throw new CafeError("AUTH_REQUIRED", "The OAuth redirect URI is not supported.", 400);
+  }
+  return [
+    "default-src 'self'",
+    "connect-src 'self'",
+    "img-src 'self' data:",
+    "style-src 'self'",
+    "script-src 'self'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    `form-action 'self' ${redirect.origin}`,
+  ].join("; ");
 }
 
 export function assertAllowedHost(request: Request, env: CafeEnvironment): void {

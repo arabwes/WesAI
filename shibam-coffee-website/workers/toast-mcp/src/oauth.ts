@@ -3,7 +3,7 @@ import { beginAuth0Login, deleteConsentRequest, loadConsentRequest, storeConsent
 import { availableScopesForMembership, listOrganizations, requireMembership, requireSession, validateSessionCsrfValue } from "./db";
 import { CafeError } from "./errors";
 import { BASE_MCP_SCOPES, isSupportedOAuthScope } from "./scopes";
-import { assertSameOrigin, htmlResponse } from "./security";
+import { assertSameOrigin, contentSecurityPolicyForOAuthConsent, htmlResponse } from "./security";
 import type { CafeEnvironment } from "./runtime";
 
 function escapeHtml(value: string): string {
@@ -26,6 +26,16 @@ function authorizationFailure(env: CafeEnvironment, error: AuthorizationError): 
   if (error.state) redirect.searchParams.set("state", error.state);
   redirect.searchParams.set("iss", `${env.PUBLIC_ORIGIN}${env.BASE_PATH}`);
   return Response.redirect(redirect.toString(), 302);
+}
+
+function consentRedirect(target: string, registeredRedirectUri: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: target,
+      "Content-Security-Policy": contentSecurityPolicyForOAuthConsent(registeredRedirectUri),
+    },
+  });
 }
 
 async function listAllUserGrants(env: CafeEnvironment, userId: string): Promise<GrantSummary[]> {
@@ -72,7 +82,9 @@ export async function handleAuthorize(env: CafeEnvironment, request: Request): P
     const requested = resolved.request.scope.filter(isSupportedOAuthScope);
     const scopes = requested.length ? requested : [...BASE_MCP_SCOPES];
     const body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Authorize Cafe MCP</title><link rel="stylesheet" href="${env.BASE_PATH}/styles.css"></head><body><main class="shell narrow"><p class="eyebrow">Cafe MCP authorization</p><h1>Connect ${escapeHtml(client.clientName || "this MCP client")}</h1><p>Select the organization this grant will be permanently bound to.</p><form method="post" action="${env.BASE_PATH}/authorize"><input type="hidden" name="resume" value="${escapeHtml(resolved.resumeId)}"><input type="hidden" name="csrf" value="${escapeHtml(session.csrfToken)}"><label>Organization<select name="organization_id" required>${organizations.map((organization) => `<option value="${escapeHtml(organization.id)}"${organization.id === activeId ? " selected" : ""}>${escapeHtml(organization.name)}</option>`).join("")}</select></label><fieldset><legend>Requested access</legend>${scopes.map((scope) => `<label class="check"><input type="checkbox" name="scope" value="${escapeHtml(scope)}" checked> ${escapeHtml(scope)}</label>`).join("")}</fieldset><div class="actions"><button type="submit" name="decision" value="allow">Authorize</button><button class="secondary" type="submit" name="decision" value="deny">Deny</button></div></form><p class="fine">Cafe MCP never allows an MCP client to choose an arbitrary Toast URL, method, or header.</p></main></body></html>`;
-    return htmlResponse(body);
+    return htmlResponse(body, 200, {
+      "Content-Security-Policy": contentSecurityPolicyForOAuthConsent(resolved.request.redirectUri),
+    });
   }
 
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, POST" } });
@@ -88,7 +100,7 @@ export async function handleAuthorize(env: CafeEnvironment, request: Request): P
     denied.searchParams.set("error", "access_denied");
     denied.searchParams.set("state", oauthRequest.state);
     denied.searchParams.set("iss", `${env.PUBLIC_ORIGIN}${env.BASE_PATH}`);
-    return Response.redirect(denied.toString(), 302);
+    return consentRedirect(denied.toString(), oauthRequest.redirectUri);
   }
   const organizationId = String(form.get("organization_id") ?? "");
   const membership = await requireMembership(env, session.userId, organizationId);
@@ -123,5 +135,5 @@ export async function handleAuthorize(env: CafeEnvironment, request: Request): P
   await deleteConsentRequest(env, resumeId);
   const redirect = new URL(completed.redirectTo);
   redirect.searchParams.set("iss", `${env.PUBLIC_ORIGIN}${env.BASE_PATH}`);
-  return Response.redirect(redirect.toString(), 302);
+  return consentRedirect(redirect.toString(), oauthRequest.redirectUri);
 }
