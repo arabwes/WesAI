@@ -1038,6 +1038,20 @@ p {
   border: 0;
 }
 
+.form-embed-wrap {
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  background-color: var(--color-surface);
+}
+
+.form-embed-wrap iframe {
+  width: 100%;
+  height: 1200px;
+  border: 0;
+  display: block;
+}
+
 .info-list {
   list-style: none;
   display: flex;

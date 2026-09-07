@@ -12,6 +12,7 @@ shibam-coffee-website/
 ├── about.html                About
 ├── location.html             Location
 ├── contact.html               Contact
+├── careers.html               Careers — join our team
 ├── privacy-policy.html / terms.html
 ├── css/styles.css            Design system + all component styles
 ├── js/config.js              All environment-specific URLs & IDs
@@ -161,7 +162,11 @@ guide and the dataLayer events each CTA fires.
 - [x] Site URL set to `https://shibamatlanta.com` everywhere.
 - [ ] Set `GTM_ID` in `js/config.js` and the noscript fallback in every HTML file.
 - [ ] Set `GOOGLE_MAPS_EMBED_SRC` in `js/config.js` (Google Maps → Share → Embed a map).
-- [ ] Set `CATERING_FORM_ENDPOINT` and `CONTACT_FORM_ENDPOINT` (e.g. Formspree).
+- [ ] Set `CONTACT_FORM_ENDPOINT` (e.g. Formspree). The event/catering request
+      form and the "Join Our Team" page link straight to Google Forms
+      (`EVENT_REQUEST_FORM_URL` / `_EMBED_SRC` and `JOIN_TEAM_FORM_URL` in
+      `js/config.js`) — update those instead if either Google Form's URL
+      ever changes.
 - [ ] Verify `GEO_LAT` / `GEO_LNG` against the exact Google Business Profile coordinates.
 - [ ] Double-check business hours against the live Google Business Profile listing.
 - [ ] Add real photos (see `images/README.md`).
