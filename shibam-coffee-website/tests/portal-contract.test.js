@@ -158,31 +158,51 @@ test('documents have a reproducible seed and visible connection failures', async
   assert.match(detailController, /Check your connection and refresh to try again/);
 });
 
-test('employee write-ups are confidential Lead and Management records', async () => {
+test('employee write-ups use a private Lead-to-employee response workflow', async () => {
   const page = await source('team/write-up.html');
+  const dashboard = await source('team/dashboard.html');
+  const dashboardController = await source('team/js/dashboard.js');
   const documents = await source('team/documents.html');
   const controller = await source('team/js/write-up.js');
   const router = await source('functions/api/team/index.js');
   const server = await source('functions/_lib/write-ups.js');
-  const migration = await source('migrations/0006_employee_write_ups.sql');
+  const baseMigration = await source('migrations/0006_employee_write_ups.sql');
+  const workflowMigration = await source('migrations/0007_employee_write_up_workflow.sql');
 
-  assert.match(page, /data-require-role="lead"/);
+  assert.match(page, /data-require-role="barista"/);
+  assert.match(page, /id="employee-inbox-list"/);
+  assert.match(page, /data-role="lead"/);
   assert.match(page, /id="write-up-form"/);
   assert.match(page, /name="warningLevel" value="strike_3"/);
   assert.match(page, /name="infractions" value="safety_violation"/);
-  assert.match(page, /id="employee-declined"/);
-  assert.match(documents, /data-role="lead"/);
+  assert.doesNotMatch(page, /id="employee-declined"/);
   assert.match(documents, /href="\/team\/write-up"/);
-  assert.match(controller, /submitWriteUp/);
-  assert.match(controller, /getWriteUpFormData/);
-  assert.match(router, /\bgetWriteUpFormData\b/);
-  assert.match(router, /\bsubmitWriteUp\b/);
+  assert.match(documents, /Employee Messages/);
+  assert.match(dashboard, /id="employee-message-alert"/);
+  assert.match(dashboardController, /getEmployeeMessageSummary/);
+  assert.match(controller, /getWriteUpWorkspace/);
+  assert.match(controller, /saveWriteUpDraft/);
+  assert.match(controller, /sendWriteUp/);
+  assert.match(controller, /completeWriteUp/);
+  assert.match(router, /\bgetWriteUpWorkspace\b/);
+  assert.match(router, /\bgetEmployeeMessageSummary\b/);
+  assert.match(router, /\bsaveWriteUpDraft\b/);
+  assert.match(router, /\bsendWriteUp\b/);
+  assert.match(router, /\bcompleteWriteUp\b/);
   assert.equal((server.match(/requireRole\(request, payload, env, 'lead'\)/g) || []).length, 2);
+  assert.equal((server.match(/requireRole\(request, payload, env\)/g) || []).length, 3);
   assert.match(server, /actor\.role === 'management'/);
-  assert.match(server, /actor\.id/);
-  assert.match(migration, /CREATE TABLE employee_write_ups/);
-  assert.match(migration, /employee_declined_to_sign/);
-  assert.match(migration, /CHECK \(warning_level IN/);
+  assert.match(server, /record\.employee_id !== actor\.id/);
+  assert.match(server, /workflow_status = 'sent'/);
+  assert.match(server, /workflow_status = 'completed'/);
+  assert.match(server, /account_employee_message/);
+  assert.match(server, /Notification previews never include incident details|confidential document to review/);
+  assert.match(baseMigration, /CREATE TABLE employee_write_ups/);
+  assert.match(baseMigration, /employee_declined_to_sign/);
+  assert.match(baseMigration, /CHECK \(warning_level IN/);
+  assert.match(workflowMigration, /workflow_status/);
+  assert.match(workflowMigration, /CHECK \(workflow_status IN \('draft', 'sent', 'completed'\)\)/);
+  assert.match(workflowMigration, /version INTEGER NOT NULL DEFAULT 1/);
 });
 
 test('management can edit a document Drive ID or paste a full Drive link', async () => {

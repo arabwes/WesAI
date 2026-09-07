@@ -252,7 +252,7 @@ npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_
 ~~~
 
 The result should contain all seven table names. `employee_write_ups` is required
-before the Lead and Management write-up page can save or display records.
+before employees can open Employee Messages and before Leads can save drafts.
 
 Migrations are deliberately separate from Pages deployment. Apply a migration
 before deploying application code that requires it.
@@ -760,8 +760,17 @@ npx wrangler d1 migrations list shibam-team --remote
 Before confirming, verify that Wrangler names the remote database
 `shibam-team`. The final list must report that there are no migrations to
 apply. Existing installations should apply every migration listed as pending.
-The current sequence ends with `0006_employee_write_ups.sql`; it adds the
-confidential corrective-action records used by `/team/write-up`.
+The current sequence ends with `0007_employee_write_up_workflow.sql`. Migration
+`0006` creates the confidential records and `0007` adds Draft, Sent, and
+Completed states, version checks, and employee-response timestamps used by
+`/team/write-up`.
+
+The employee always receives an in-app notification when a Lead sends a
+write-up. No new API key is required for that. If the existing notification
+Worker and optional channels are configured, the same generic alert can also be
+delivered by email, browser push, or SMS according to the employee's Account
+notification preferences. The notification never includes the incident text;
+it links the employee back to the authenticated portal.
 
 5. Configure credential-dependent services before enabling their flags:
 

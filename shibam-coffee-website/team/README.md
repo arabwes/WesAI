@@ -21,16 +21,16 @@ The portal now uses Cloudflare Pages Functions and D1. See
 | `dessert-inventory.html` | Barista+ | Daily dessert count and vendor order |
 | `local-order.html` | Barista+ | Consolidated local market request |
 | `documents.html` / `document.html` | Barista+ | Document hub and individual Google Drive document viewer |
-| `write-up.html` | Lead+ | Confidential verbal-warning and 3-strike corrective-action records |
+| `write-up.html` | Barista+ | Private corrective-action inbox; Lead+ draft and send workspace |
 | `admin.html` | Management | Submission history, catalog, and users |
 
 ## Roles
 
 | Role | Capabilities |
 |---|---|
-| Barista | View and confirm published shifts, manage availability, request time off/open shifts, submit portal forms |
-| Lead | Barista capabilities plus create and edit draft schedules, manage catalog items, and submit confidential employee write-ups |
-| Management | Publish or change published schedules, override conflicts, approve requests, manage users/catalog/history, and review every employee write-up |
+| Barista | View and confirm published shifts, manage availability, request time off/open shifts, submit portal forms, and respond to write-ups sent to them |
+| Lead | Barista capabilities plus create and edit draft schedules, manage catalog items, and draft/send confidential employee write-ups |
+| Management | Publish or change published schedules, override conflicts, approve requests, manage users/catalog/history, and review every employee write-up and response |
 
 Every privileged action is checked by the Cloudflare API. Hiding a control in
 the browser is only a convenience and is never the security boundary.
@@ -133,7 +133,7 @@ works while the user table is empty and requires a Cloudflare secret.
 | `audit_events` | Immutable action history |
 | `catalog`, `form_entries` | Existing operational forms and admin history |
 | `portal_documents` | Management-controlled handbook and reference links |
-| `employee_write_ups` | Immutable corrective-action records, typed acknowledgments, and historical employee/position snapshots |
+| `employee_write_ups` | Draft/sent/completed corrective-action workflow, typed acknowledgments, version checks, and historical employee/position snapshots |
 | `app_settings` | Scheduling policy configuration |
 
 All relationships use stable IDs. User, shift, and catalog history remains
@@ -147,7 +147,7 @@ team/
   manage-schedule.html / js/manage-schedule.js  manager experience
   js/workforce.js                            exchanges, templates, coverage, history
   profile.html / js/profile.js               account, notifications, calendar
-  write-up.html / js/write-up.js             Lead+ corrective-action form and permitted history
+  write-up.html / js/write-up.js             employee inbox and Lead+ draft/send workspace
   accept-invitation.html                     invitation activation
   sw.js / app.webmanifest                    push display and install metadata
   js/auth.js                                 cookie-session client and role UI
@@ -160,7 +160,7 @@ functions/
   _lib/scheduling.js                         scheduling domain and workflows
   _lib/scheduling-extended.js                expanded scheduling and account workflows
   _lib/schedule-snapshots.js                 immutable schedule versions
-  _lib/write-ups.js                          confidential corrective-action validation and records
+  _lib/write-ups.js                          private corrective-action state transitions and permissions
 migrations/                                  versioned D1 schema
 workers/notifications/                       Queue email consumer and cleanup job
 scripts/build-legacy-import.mjs              CSV-to-D1 migration helper
@@ -180,3 +180,13 @@ Open `http://127.0.0.1:8788/team/`. See `CLOUDFLARE_SETUP.md` for initial
 Management bootstrap, preview/production databases, queues, secrets, and legacy
 data import. Its final blocker table lists the provider accounts and API keys
 that can be added after the application code is deployed.
+## Employee write-up workflow
+
+1. A Lead or Management user completes the lead portion and saves a private draft.
+2. The draft remains visible only to its creator and Management. It can be edited until sent.
+3. The Lead explicitly sends the record. The employee receives a generic in-app notification and a persistent dashboard reminder linking to Employee Messages; configured email, push, or SMS account notifications are also queued without incident details.
+4. The employee reviews the locked lead portion, adds optional comments, and either types a signature and date or declines to sign.
+5. The completed response becomes read-only. The originating Lead receives a generic completion notification.
+
+Employees can see only records addressed to them after those records are sent.
+Leads can see only records they created, while Management can see every record.

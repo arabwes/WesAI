@@ -8,7 +8,9 @@ import {
   addDocument, discontinueDocument, getChangelog, getDocuments, getMyEntries,
   resetPassword, restoreDocument, updateDocument, updateItem, updateMyEntries
 } from '../../_lib/portal-qol.js';
-import { getWriteUpFormData, submitWriteUp } from '../../_lib/write-ups.js';
+import {
+  completeWriteUp, getEmployeeMessageSummary, getWriteUpWorkspace, saveWriteUpDraft, sendWriteUp
+} from '../../_lib/write-ups.js';
 import {
   cancelShift, confirmShift, copySchedule, deleteAvailability, deleteAvailabilityException, getAuditLog,
   getManagerSchedule, getMySchedule, markNotificationsRead, publishSchedule,
@@ -48,8 +50,11 @@ const ACTIONS = {
   updateDocument,
   discontinueDocument,
   restoreDocument,
-  getWriteUpFormData,
-  submitWriteUp,
+  getWriteUpWorkspace,
+  getEmployeeMessageSummary,
+  saveWriteUpDraft,
+  sendWriteUp,
+  completeWriteUp,
   getUsers,
   addUser,
   removeUser,

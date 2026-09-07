@@ -54,6 +54,8 @@ async function mockBackend(page) {
           { submittedAt: new Date().toISOString(), employeeName: 'Test Barista', date: '2026-08-19', product: 'Some product with a long name', details: '{"category":"Coffee Beans","qtyKitchen":3,"qtyStorage":1,"notes":""}', entryId: 'e1', lastEditedBy: '', lastEditedAt: '' },
         ],
       };
+    } else if (action === 'getEmployeeMessageSummary') {
+      payload = { ok: true, pendingCount: 1 };
     } else if (action === 'getUsers') {
       payload = {
         ok: true,
@@ -71,7 +73,7 @@ async function mockBackend(page) {
       };
     } else if (action === 'getDocuments') {
       payload = { ok: true, documents: documents };
-    } else if (action === 'getWriteUpFormData') {
+    } else if (action === 'getWriteUpWorkspace') {
       payload = {
         ok: true,
         supervisor: { id: SESSION.id, name: SESSION.name },
@@ -79,16 +81,30 @@ async function mockBackend(page) {
         employees: [
           { id: 'employee-1', name: 'Test Barista With A Long Name', legalName: 'Test Barista With A Long Name', role: 'barista', position: 'Barista' },
         ],
-        writeUps: [
+        inbox: [
           {
-            writeUpId: 'writeup-1', employeeId: 'employee-1', employeeName: 'Test Barista With A Long Name',
+            writeUpId: 'writeup-inbox', employeeId: SESSION.id, employeeName: SESSION.name,
+            employeePosition: 'Management', writeUpDate: '2026-09-01', supervisorName: 'Another Manager',
+            warningLevel: 'strike_1', infractions: ['attendance_punctuality'], otherInfraction: '',
+            incidentDescription: 'A detailed incident description that wraps on a narrow display.',
+            correctiveActionPlan: 'A detailed corrective action plan.', followUpReviewDate: '2026-09-08',
+            employeeComments: '', employeeSignature: '', employeeSignatureDate: '',
+            employeeDeclinedToSign: false, managerSignature: 'Another Manager', managerSignatureDate: '2026-09-01',
+            witnessName: '', witnessDate: '', createdByName: SESSION.name, createdAt: new Date().toISOString(),
+            workflowStatus: 'sent', sentAt: new Date().toISOString(), employeeCompletedAt: '', updatedAt: new Date().toISOString(), version: 2,
+          },
+        ],
+        managedWriteUps: [
+          {
+            writeUpId: 'writeup-draft', employeeId: 'employee-1', employeeName: 'Test Barista With A Long Name',
             employeePosition: 'Barista', writeUpDate: '2026-09-01', supervisorName: SESSION.name,
             warningLevel: 'strike_1', infractions: ['attendance_punctuality'], otherInfraction: '',
             incidentDescription: 'A detailed incident description that wraps on a narrow display.',
             correctiveActionPlan: 'A detailed corrective action plan.', followUpReviewDate: '2026-09-08',
-            employeeComments: '', employeeSignature: 'Test Barista', employeeSignatureDate: '2026-09-01',
-            employeeDeclinedToSign: false, managerSignature: SESSION.name, managerSignatureDate: '2026-09-01',
-            witnessName: '', witnessDate: '', createdByName: SESSION.name, createdAt: new Date().toISOString(),
+            employeeComments: '', employeeSignature: '', employeeSignatureDate: '', employeeDeclinedToSign: false,
+            managerSignature: SESSION.name, managerSignatureDate: '2026-09-01', witnessName: '', witnessDate: '',
+            createdByName: SESSION.name, createdAt: new Date().toISOString(), workflowStatus: 'draft', sentAt: '',
+            employeeCompletedAt: '', updatedAt: new Date().toISOString(), version: 1,
           },
         ],
       };
@@ -230,20 +246,22 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     await expect(page.locator('#repeat-shift-days')).toBeVisible();
   });
 
-  test('write-up form fits a phone and expands submitted records', async ({ page }) => {
+  test('write-up workflow fits a phone for lead drafting and employee response', async ({ page }) => {
     await mockBackend(page);
     await seedSession(page);
     await page.goto('/team/write-up');
     await expect(page.locator('#write-up-employee option[value="employee-1"]')).toHaveCount(1);
-    await page.click('.write-up-record summary');
-    await assertNoHorizontalScroll(page, '/team/write-up (expanded record)');
+    await page.click('[data-write-up-id="writeup-draft"] summary');
+    await assertNoHorizontalScroll(page, '/team/write-up (expanded workflow records)');
     await expect(page.locator('#write-up-supervisor')).toHaveValue(SESSION.name);
     await expect(page.locator('#manager-signature')).toHaveValue(SESSION.name);
     await page.check('#infraction-other');
     await expect(page.locator('#other-infraction-wrap')).toBeVisible();
     await expect(page.locator('#other-infraction')).toHaveAttribute('required', '');
-    await page.check('#employee-declined');
-    await expect(page.locator('#employee-signature')).toBeDisabled();
-    await expect(page.locator('#employee-signature-date')).toBeDisabled();
+    const responseForm = page.locator('form[data-write-up-id="writeup-inbox"]');
+    await expect(responseForm).toBeVisible();
+    await responseForm.locator('[name="employeeDeclinedToSign"]').check();
+    await expect(responseForm.locator('[name="employeeSignature"]')).toBeDisabled();
+    await expect(responseForm.locator('[name="employeeSignatureDate"]')).toBeDisabled();
   });
 });

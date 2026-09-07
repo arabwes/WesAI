@@ -12,9 +12,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=10">
+  <link rel="stylesheet" href="/team/css/styles.css?v=12">
   <script src="/team/js/config.js?v=10" defer></script>
   <script src="/team/js/auth.js?v=10" defer></script>
+  <script src="/team/js/dashboard.js?v=1" defer></script>
 </head>
 <body data-page="app" data-require-role="barista">
 
@@ -38,6 +39,14 @@
         <h1>Team Portal</h1>
         <p>Choose an area to find the tools and information you need.</p>
       </div>
+
+      <a class="portal-callout dashboard-message-alert" id="employee-message-alert" href="/team/write-up" hidden>
+        <span class="dashboard-message-alert__icon" aria-hidden="true">!</span>
+        <span>
+          <strong id="employee-message-alert-title">You have an employee message to review</strong>
+          <small>Open the confidential record, add your comments, and send your response.</small>
+        </span>
+      </a>
 
       <ul class="form-cards">
         <li>

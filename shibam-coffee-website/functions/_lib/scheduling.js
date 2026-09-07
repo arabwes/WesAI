@@ -788,7 +788,11 @@ export async function notifyUser(env, userId, type, title, message, link, idempo
     (id, user_id, notification_type, title, message, link, idempotency_key, email_status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`)
     .bind(id, userId, type, title, message, link || null, idempotencyKey, createdAt).run();
-  if (result.meta.changes && env.NOTIFICATIONS?.send) {
+  if (result.meta.changes) await enqueueExistingNotification(env, id, userId, type, createdAt);
+}
+
+export async function enqueueExistingNotification(env, id, userId, type, createdAt = nowIso()) {
+  if (env.NOTIFICATIONS?.send) {
     try {
       const user = await env.TEAM_DB.prepare('SELECT email, phone_e164, phone_verified_at FROM users WHERE id = ?')
         .bind(userId).first();
