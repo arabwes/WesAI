@@ -120,7 +120,6 @@
   // status message instead of navigating away.
   // ---------------------------------------------------------------------
   function initForms() {
-    bindForm('catering-inquiry-form', 'CATERING_FORM_ENDPOINT');
     bindForm('contact-inquiry-form', 'CONTACT_FORM_ENDPOINT');
   }
 

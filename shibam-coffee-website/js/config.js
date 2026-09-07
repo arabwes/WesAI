@@ -34,12 +34,20 @@ const CONFIG = {
   APP_STORE_URL: "https://apps.apple.com/us/app/shibam-coffee-co/id6739554858",
   GOOGLE_PLAY_URL: "https://play.google.com/store/apps/details?id=ai.appfront.shibamcoffee",
 
-  // Form submission endpoints (Formspree, Netlify Forms, or any service
+  // Form submission endpoint (Formspree, Netlify Forms, or any service
   // that accepts a POST with FormData and an Accept: application/json
-  // header). Replace before launch — forms will not deliver mail until
-  // these are set.
-  CATERING_FORM_ENDPOINT: "YOUR_FORM_ENDPOINT",
+  // header). Replace before launch — the contact form will not deliver
+  // mail until this is set.
   CONTACT_FORM_ENDPOINT: "YOUR_FORM_ENDPOINT",
+
+  // Google Forms this site links out to / embeds directly, rather than
+  // running its own backend for them. *_URL is the shareable link (used
+  // for "open in a new tab" fallbacks); *_EMBED_SRC is the same form's
+  // full viewform URL with ?embedded=true, for the <iframe> on the page —
+  // same URL/EMBED_SRC split already used for GOOGLE_MAPS_URL above.
+  EVENT_REQUEST_FORM_URL: "https://forms.gle/frJAzdEVSvWd5Efo6",
+  EVENT_REQUEST_FORM_EMBED_SRC: "https://docs.google.com/forms/d/e/1FAIpQLSdeRd1nT60SdZDjqppt_yZH-BSfpfay_mhlkAJYYCC9NepN9w/viewform?embedded=true",
+  JOIN_TEAM_FORM_URL: "https://forms.gle/ppJVGfhi41yvguzK7",
 
   // Geo coordinates for GBP matching, kept here as the source of truth.
   // The CafeOrCoffeeShop JSON-LD on every page is static HTML (so

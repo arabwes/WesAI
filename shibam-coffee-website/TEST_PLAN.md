@@ -74,17 +74,23 @@ done
       not partially hidden behind either.
 - [ ] Mobile hamburger menu opens/closes correctly on this page too.
 
-## 6. Forms (Catering inquiry, Contact)
+## 6. Forms (Event/catering request, Contact, Join Our Team)
 
-- [ ] If `CATERING_FORM_ENDPOINT` / `CONTACT_FORM_ENDPOINT` in
-      `js/config.js` are still `"YOUR_FORM_ENDPOINT"`: submitting shows
-      "This form isn't connected yet — please call us at
-      (470) 359-6586 instead." and does **not** attempt a network
-      request.
-- [ ] Once a real endpoint is configured: submitting shows "Sending…",
-      then either the success message + form reset, or the error
-      message + phone number — never a silent failure or stuck "Sending…"
-      state.
+- [ ] Catering & Events page: the embedded Google Form loads inside the
+      page (`EVENT_REQUEST_FORM_EMBED_SRC` in `js/config.js`) and can be
+      filled out and submitted without leaving the site. The "Open it in
+      a new tab" link below it opens the same form
+      (`EVENT_REQUEST_FORM_URL`) in a new tab as a fallback.
+- [ ] Careers page: "Apply Now" (hero and bottom of page) opens the Join
+      Our Team Google Form (`JOIN_TEAM_FORM_URL`) in a new tab.
+- [ ] If `CONTACT_FORM_ENDPOINT` in `js/config.js` is still
+      `"YOUR_FORM_ENDPOINT"`: submitting the contact form shows "This
+      form isn't connected yet — please call us at (470) 359-6586
+      instead." and does **not** attempt a network request.
+- [ ] Once a real endpoint is configured: submitting the contact form
+      shows "Sending…", then either the success message + form reset, or
+      the error message + phone number — never a silent failure or stuck
+      "Sending…" state.
 
 ## 7. Images
 
