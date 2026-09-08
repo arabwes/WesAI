@@ -76,13 +76,19 @@ done
 
 ## 6. Forms (Event/catering request, Contact, Join Our Team)
 
-- [ ] Catering & Events page: the embedded Google Form loads inside the
-      page (`EVENT_REQUEST_FORM_EMBED_SRC` in `js/config.js`) and can be
-      filled out and submitted without leaving the site. The "Open it in
-      a new tab" link below it opens the same form
-      (`EVENT_REQUEST_FORM_URL`) in a new tab as a fallback.
+- [ ] Catering & Events page: the "Request a Quote" form (name, email,
+      phone, event type, date, guest count, details) submits to
+      `/api/catering-request` (`CATERING_FORM_ENDPOINT` in
+      `js/config.js`) and shows "Sending…", then either the success
+      message + form reset, or the error message + phone number.
+- [ ] A submitted catering request appears in the team portal at
+      `/team/catering-requests` (visible to Lead and Management) with the
+      submitted details and a status control (new/reviewed/closed).
 - [ ] Careers page: "Apply Now" (hero and bottom of page) opens the Join
-      Our Team Google Form (`JOIN_TEAM_FORM_URL`) in a new tab.
+      Our Team Google Form (`JOIN_TEAM_FORM_URL`) in a new tab. That
+      form's sharing setting must be "Anyone with the link" / sign-in
+      not required — otherwise applicants are bounced to a Google
+      account login instead of the application.
 - [ ] If `CONTACT_FORM_ENDPOINT` in `js/config.js` is still
       `"YOUR_FORM_ENDPOINT"`: submitting the contact form shows "This
       form isn't connected yet — please call us at (470) 359-6586

@@ -162,11 +162,13 @@ guide and the dataLayer events each CTA fires.
 - [x] Site URL set to `https://shibamatlanta.com` everywhere.
 - [ ] Set `GTM_ID` in `js/config.js` and the noscript fallback in every HTML file.
 - [ ] Set `GOOGLE_MAPS_EMBED_SRC` in `js/config.js` (Google Maps → Share → Embed a map).
-- [ ] Set `CONTACT_FORM_ENDPOINT` (e.g. Formspree). The event/catering request
-      form and the "Join Our Team" page link straight to Google Forms
-      (`EVENT_REQUEST_FORM_URL` / `_EMBED_SRC` and `JOIN_TEAM_FORM_URL` in
-      `js/config.js`) — update those instead if either Google Form's URL
-      ever changes.
+- [ ] Set `CONTACT_FORM_ENDPOINT` (e.g. Formspree). The catering/event
+      request form has its own backend (`CATERING_FORM_ENDPOINT`, a Pages
+      Function that stores submissions in D1 for the team portal) and
+      does not need this. The "Join Our Team" page links straight to a
+      Google Form (`JOIN_TEAM_FORM_URL` in `js/config.js`) — update it if
+      that form's URL changes, and make sure its sharing setting stays
+      "Anyone with the link" / sign-in not required.
 - [ ] Verify `GEO_LAT` / `GEO_LNG` against the exact Google Business Profile coordinates.
 - [ ] Double-check business hours against the live Google Business Profile listing.
 - [ ] Add real photos (see `images/README.md`).

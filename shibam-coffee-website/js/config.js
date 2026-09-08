@@ -40,13 +40,14 @@ const CONFIG = {
   // mail until this is set.
   CONTACT_FORM_ENDPOINT: "YOUR_FORM_ENDPOINT",
 
-  // Google Forms this site links out to / embeds directly, rather than
-  // running its own backend for them. *_URL is the shareable link (used
-  // for "open in a new tab" fallbacks); *_EMBED_SRC is the same form's
-  // full viewform URL with ?embedded=true, for the <iframe> on the page —
-  // same URL/EMBED_SRC split already used for GOOGLE_MAPS_URL above.
-  EVENT_REQUEST_FORM_URL: "https://forms.gle/frJAzdEVSvWd5Efo6",
-  EVENT_REQUEST_FORM_EMBED_SRC: "https://docs.google.com/forms/d/e/1FAIpQLSdeRd1nT60SdZDjqppt_yZH-BSfpfay_mhlkAJYYCC9NepN9w/viewform?embedded=true",
+  // Catering quote requests post to the site's own Pages Function, which
+  // stores them in the shibam-team D1 database for the team portal to
+  // read — no third-party form service involved.
+  CATERING_FORM_ENDPOINT: "/api/catering-request",
+
+  // Google Form for job applications. NOTE: this form's sharing setting
+  // must be "Anyone with the link" / sign-in not required, or applicants
+  // get bounced to a Google account login instead of the application.
   JOIN_TEAM_FORM_URL: "https://forms.gle/ppJVGfhi41yvguzK7",
 
   // Geo coordinates for GBP matching, kept here as the source of truth.

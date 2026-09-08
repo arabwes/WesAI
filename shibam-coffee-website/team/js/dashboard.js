@@ -6,16 +6,32 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     var alert = document.getElementById('employee-message-alert');
-    if (!alert) return;
-    Auth.apiCall('getEmployeeMessageSummary', {}).then(function (result) {
-      if (!result.ok || !Number(result.pendingCount)) return;
-      var count = Number(result.pendingCount);
-      document.getElementById('employee-message-alert-title').textContent = count === 1
-        ? 'You have 1 employee message to review'
-        : 'You have ' + count + ' employee messages to review';
-      alert.hidden = false;
-    }).catch(function () {
-      // The dashboard remains usable if the reminder cannot be loaded.
-    });
+    if (alert) {
+      Auth.apiCall('getEmployeeMessageSummary', {}).then(function (result) {
+        if (!result.ok || !Number(result.pendingCount)) return;
+        var count = Number(result.pendingCount);
+        document.getElementById('employee-message-alert-title').textContent = count === 1
+          ? 'You have 1 employee message to review'
+          : 'You have ' + count + ' employee messages to review';
+        alert.hidden = false;
+      }).catch(function () {
+        // The dashboard remains usable if the reminder cannot be loaded.
+      });
+    }
+
+    var cateringAlert = document.getElementById('catering-request-alert');
+    var session = window.Auth && Auth.getSession();
+    if (cateringAlert && session && Auth.hasRole(session, 'lead')) {
+      Auth.apiCall('getCateringRequests', { status: 'new' }).then(function (result) {
+        if (!result.ok || !Array.isArray(result.requests) || !result.requests.length) return;
+        var count = result.requests.length;
+        document.getElementById('catering-request-alert-title').textContent = count === 1
+          ? 'You have a new catering request'
+          : 'You have ' + count + ' new catering requests';
+        cateringAlert.hidden = false;
+      }).catch(function () {
+        // The dashboard remains usable if the reminder cannot be loaded.
+      });
+    }
   });
 })();

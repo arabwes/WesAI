@@ -1,4 +1,5 @@
 import { bootstrap, getSession, login, logout } from '../../_lib/auth.js';
+import { getCateringRequests, updateCateringRequestStatus } from '../../_lib/catering.js';
 import { ApiError, json, readJson } from '../../_lib/http.js';
 import {
   addItem, addUser, getCatalog, getEntries, getUsers, removeUser,
@@ -114,7 +115,9 @@ const ACTIONS = {
   revokeInvitation,
   inspectInvitation,
   acceptInvitation,
-  updateManagedUser
+  updateManagedUser,
+  getCateringRequests,
+  updateCateringRequestStatus
 };
 
 export async function onRequestGet({ request, env }) {

@@ -66,11 +66,11 @@ grep -rl 'GTM-XXXXXXX' . | xargs sed -i 's/GTM-XXXXXXX/GTM-YOUR-REAL-ID/g'
 2. Trigger: **All Pages**.
 3. For custom events (e.g. `Lead` on form submission), add a second
    Custom HTML tag firing `fbq('track', 'Lead')`, triggered on the
-   **Custom Event** trigger for `contact_form_submit` (fires on the
-   contact form's submit button) or `join_team_form_click` /
-   `catering_form_newtab_click` (fire on the "Apply Now" / "Open it in a
-   new tab" links, since the careers and event-request forms are Google
-   Forms this site links to rather than submits directly — see section 6).
+   **Custom Event** trigger for `contact_form_submit` / `catering_form_submit`
+   (fire on the contact and catering forms' submit buttons) or
+   `join_team_form_click` (fires on the "Apply Now" links, since the
+   careers page is a Google Form this site links to rather than submits
+   directly — see section 6).
 4. Publish. Verify with the Meta Pixel Helper browser extension.
 
 ## 4. How to add TikTok Pixel via GTM
@@ -81,8 +81,8 @@ grep -rl 'GTM-XXXXXXX' . | xargs sed -i 's/GTM-XXXXXXX/GTM-YOUR-REAL-ID/g'
 2. Trigger: **All Pages**.
 3. For custom events (e.g. `SubmitForm`), add a Custom HTML tag calling
    `ttq.track('SubmitForm')`, triggered on the same `contact_form_submit`
-   / `join_team_form_click` / `catering_form_newtab_click` custom events
-   used for Meta above.
+   / `catering_form_submit` / `join_team_form_click` custom events used
+   for Meta above.
 4. Publish. Verify with TikTok's Pixel Helper extension.
 
 ## 5. How to add Microsoft Clarity via GTM
@@ -110,13 +110,12 @@ window.dataLayer.push({
 });
 ```
 
-`contact_form_submit` lives on the contact form's submit **button**, so it
-fires on click the same way every other CTA does — it signals that a
-visitor attempted a submission, not that the fetch() to the form endpoint
-necessarily succeeded. `join_team_form_click` and
-`catering_form_newtab_click` fire the same way but on a plain link, since
-those two forms are embedded/linked Google Forms rather than a submit
-this site handles itself.
+`contact_form_submit` and `catering_form_submit` live on their forms'
+submit **buttons**, so they fire on click the same way every other CTA
+does — this signals that a visitor attempted a submission, not that the
+fetch() to the form endpoint necessarily succeeded. `join_team_form_click`
+fires the same way but on a plain link, since the careers page links to a
+Google Form rather than submitting it directly.
 
 All `data-cta` values currently in use, and where they fire:
 
@@ -133,8 +132,8 @@ All `data-cta` values currently in use, and where they fire:
 | `social_facebook_click` | Facebook icon links | All pages |
 | `app_download_ios` | App Store badge links | All pages |
 | `app_download_android` | Google Play badge links | All pages |
-| `catering_form_newtab_click` | "Open it in a new tab" link under the embedded event/catering Google Form | catering-events |
 | `contact_form_submit` | Contact form submit button clicked | contact |
+| `catering_form_submit` | Catering quote request form submit button clicked | catering-events |
 | `join_team_form_click` | "Apply Now" links to the Join Our Team Google Form | careers |
 
 To track a new CTA: add `id="cta-..."` and `data-cta="..."` to the

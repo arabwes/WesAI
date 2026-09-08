@@ -121,6 +121,7 @@
   // ---------------------------------------------------------------------
   function initForms() {
     bindForm('contact-inquiry-form', 'CONTACT_FORM_ENDPOINT');
+    bindForm('catering-inquiry-form', 'CATERING_FORM_ENDPOINT');
   }
 
   function bindForm(formId, configKey) {
