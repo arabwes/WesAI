@@ -534,6 +534,11 @@ schedule email. After the Resend sender test succeeds, change
 `INVITATION_EMAIL_ENABLED` to `"true"` in the appropriate root
 `wrangler.jsonc` environment and deploy Pages.
 
+Production is currently enabled with the verified `shibamatlanta.com` Resend
+domain. Preview remains disabled intentionally so test invitations cannot email
+real employees or be sent to the production notification consumer with a
+preview-database invitation ID.
+
 Invitations created while `INVITATION_EMAIL_ENABLED` is `false` are stored but
 are not queued for delivery. Revoke those pending invitations and create fresh
 ones after email is active; only token hashes are stored, so an old raw
@@ -546,7 +551,6 @@ completed without account credentials:
 
 | Capability | Blocker | Portal behavior before resolution |
 |---|---|---|
-| Email and invitations | Verified Resend domain and `RESEND_API_KEY` | In-app notifications work; ordinary email deliveries retry, while invitation email stays explicitly disabled |
 | Browser push | Generated VAPID pair and Worker secret | Push enable button remains unavailable |
 | SMS verification/alerts | Twilio account, sender, keys, webhook, and any required carrier registration | SMS setup stays disabled; no SMS is queued |
 | Login bot protection | Turnstile sitekey and secret | Login throttling remains active; Turnstile widget stays hidden |

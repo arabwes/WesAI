@@ -30,7 +30,7 @@
     "SESSION_HOURS": "12",
     "VAPID_PUBLIC_KEY": "",
     "SMS_ENABLED": "false",
-    "INVITATION_EMAIL_ENABLED": "false"
+    "INVITATION_EMAIL_ENABLED": "true"
   },
   "env": {
     "preview": {
