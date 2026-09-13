@@ -10,11 +10,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=10">
+  <link rel="stylesheet" href="/team/css/styles.css?v=11">
   <script src="/team/js/config.js?v=10" defer></script>
   <script src="/team/js/auth.js?v=10" defer></script>
-  <script src="/team/js/manage-schedule.js?v=10" defer></script>
-  <script src="/team/js/workforce.js?v=10" defer></script>
+  <script src="/team/js/manage-schedule.js?v=11" defer></script>
+  <script src="/team/js/workforce.js?v=11" defer></script>
 </head>
 <body data-page="app" data-require-role="lead">
   <header class="portal-header">
@@ -45,10 +45,25 @@
       <div class="schedule-toolbar">
         <button type="button" class="btn btn-primary" id="add-shift">+ Add shift</button>
         <button type="button" class="btn-outline" id="copy-previous">Copy previous week</button>
+        <button type="button" class="btn-outline" id="bulk-unassign" disabled>Unassign selected (0)</button>
         <button type="button" class="btn btn-primary" id="publish-schedule" data-role="management">Publish schedule</button>
         <span class="schedule-summary" id="schedule-totals"></span>
       </div>
       <p class="form-status" id="manage-status" role="status" aria-live="polite"></p>
+
+      <details class="schedule-section auto-assign-panel">
+        <summary><span><span class="schedule-eyebrow">Scheduling assistant</span><strong>Auto-assign open shifts</strong></span><span>Choose criteria and review before applying</span></summary>
+        <form id="auto-assign-form" class="compact-form inline-feature-form">
+          <div class="form-group"><label for="auto-assign-target">Open shifts</label><select id="auto-assign-target" name="target"><option value="all">All open shifts this week</option><option value="selected">Only selected open shifts</option></select></div>
+          <div class="form-group"><label for="auto-assign-position">Position</label><select id="auto-assign-position" name="positionId"><option value="">All positions</option></select></div>
+          <div class="form-group"><label for="auto-assign-limit">Maximum new shifts per employee</label><input id="auto-assign-limit" name="maxNewShiftsPerEmployee" type="number" min="1" max="14" value="7"></div>
+          <label class="availability-all-day"><input name="prioritizePreferred" type="checkbox" checked><span>Prioritize preferred availability</span></label>
+          <button class="btn-outline" type="submit">Preview assignments</button>
+          <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+        </form>
+        <div id="auto-assign-preview" class="auto-assign-preview"></div>
+        <button type="button" class="btn btn-primary" id="apply-auto-assign" hidden>Apply reviewed assignments</button>
+      </details>
 
       <section class="schedule-section schedule-section--grid" aria-labelledby="weekly-grid-heading">
         <div class="schedule-section__header">
@@ -92,7 +107,7 @@
       </section>
 
       <section class="schedule-section" aria-labelledby="coverage-heading">
-        <div class="schedule-section__header"><div><span class="schedule-eyebrow">Availability</span><h2 id="coverage-heading">Team coverage heatmap</h2><p>Available staff compared with scheduled staff in 30-minute blocks.</p></div><div class="form-group compact-control"><label for="coverage-position">Position</label><select id="coverage-position"><option value="">All positions</option></select></div></div>
+        <div class="schedule-section__header"><div><span class="schedule-eyebrow">Availability + demand</span><h2 id="coverage-heading">Team coverage heatmap</h2><p>Available and scheduled staff in 30-minute blocks, with Toast average net sales for each weekday/hour across the last three completed weeks.</p></div><div class="form-group compact-control"><label for="coverage-position">Position</label><select id="coverage-position"><option value="">All positions</option></select></div></div>
         <div id="coverage-heatmap" class="coverage-heatmap">Loading coverage…</div>
       </section>
 

@@ -29,6 +29,8 @@
     "EMAIL_FROM": "Shibam Coffee Team <schedule@shibamatlanta.com>",
     "PORTAL_ORIGIN": "https://shibamatlanta.com",
     "STORE_TIMEZONE": "America/New_York",
+    "TOAST_RESTAURANT_GUID": "3aef590e-6581-42e5-9c5b-286674596662",
+    "TOAST_SALES_SYNC_HOURS": "12",
     "VAPID_SUBJECT": "mailto:yemenicoffeeco@gmail.com",
     "VAPID_PUBLIC_KEY": ""
   },

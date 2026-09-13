@@ -259,3 +259,34 @@ test('login only resets a Turnstile widget after one was rendered', async () => 
   assert.match(browserAuth, /turnstile\.reset\(turnstileWidgetId\)/);
   assert.match(browserAuth, /turnstileWidgetId = window\.turnstile\.render/);
 });
+
+test('schedule automation, invitation resend, and Toast demand context are wired end to end', async () => {
+  const router = await source('functions/api/team/index.js');
+  const automation = await source('functions/_lib/scheduling-automation.js');
+  const extended = await source('functions/_lib/scheduling-extended.js');
+  const managerPage = await source('team/manage-schedule.html');
+  const managerController = await source('team/js/manage-schedule.js');
+  const adminController = await source('team/js/admin.js');
+  const employeeController = await source('team/js/schedule.js');
+  const notificationWorker = await source('workers/notifications/src/index.js');
+  const migration = await source('migrations/0009_scheduling_automation_and_sales.sql');
+  for (const action of ['previewAutoAssign', 'applyAutoAssign', 'bulkUnassignShifts', 'resendInvitation']) {
+    assert.match(router, new RegExp(`\\b${action}\\b`));
+  }
+  assert.match(automation, /maxNewShiftsPerEmployee/);
+  assert.match(automation, /positionIds/);
+  assert.match(automation, /availabilityState/);
+  assert.match(automation, /max_weekly_minutes/);
+  assert.match(managerPage, /id="auto-assign-form"/);
+  assert.match(managerPage, /id="bulk-unassign"/);
+  assert.match(managerController, /previewAutoAssign/);
+  assert.match(managerController, /applyAutoAssign/);
+  assert.match(managerController, /bulkUnassignShifts/);
+  assert.match(extended, /invitation\.resend/);
+  assert.match(adminController, /Resend invitation/);
+  assert.match(employeeController, /appendQuarterHourOptions/);
+  assert.match(notificationWorker, /aggregateToastHourlySales/);
+  assert.match(notificationWorker, /orders\/v2\/ordersBulk/);
+  assert.match(migration, /CREATE TABLE toast_hourly_sales/);
+  assert.match(migration, /CREATE TABLE toast_sales_sync_state/);
+});

@@ -23,6 +23,8 @@ This distinction matters when configuring secrets:
 | `TWILIO_ACCOUNT_SID` | Notification Worker | Twilio account identifier used by the SMS sender |
 | `TWILIO_AUTH_TOKEN` | Notification Worker **and** Pages | Sends SMS and validates Twilio STOP/START webhooks |
 | `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM_NUMBER` | Notification Worker | Selects the Twilio sender |
+| `TOAST_CLIENT_ID` | Notification Worker | Authenticates the read-only Toast sales sync |
+| `TOAST_CLIENT_SECRET` | Notification Worker | Authenticates the read-only Toast sales sync |
 
 ### Fast path: set only the notification Worker secret
 
@@ -253,6 +255,13 @@ npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_
 
 The result should contain all seven table names. `employee_write_ups` is required
 before employees can open Employee Messages and before Leads can save drafts.
+
+The scheduling automation release also requires `toast_hourly_sales` and
+`toast_sales_sync_state`. Verify those separately:
+
+~~~powershell
+npx wrangler d1 execute shibam-team --remote --command "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('toast_hourly_sales','toast_sales_sync_state') ORDER BY name;"
+~~~
 
 Migrations are deliberately separate from Pages deployment. Apply a migration
 before deploying application code that requires it.
@@ -540,11 +549,55 @@ real employees or be sent to the production notification consumer with a
 preview-database invitation ID.
 
 Invitations created while `INVITATION_EMAIL_ENABLED` is `false` are stored but
-are not queued for delivery. Revoke those pending invitations and create fresh
-ones after email is active; only token hashes are stored, so an old raw
-invitation link cannot be reconstructed.
+are not queued for delivery. After email is active, use **Resend invitation** in
+Admin. Resending creates a new one-time token, invalidates the old link, extends
+the expiry by 72 hours, and queues a fresh message. Only token hashes are stored.
 
-### 3G. Current credential-dependent blockers
+### 3G. Toast sales sync credentials
+
+The team-coverage heatmap reads hourly sales from Toast for the last three fully
+completed Monday-through-Sunday weeks. Toast credentials belong on the
+`shibam-team-notifications` Worker—not on Pages and never in either JSON config.
+Use a Toast machine client that can read orders for the configured restaurant.
+
+1. Confirm `workers/notifications/wrangler.jsonc` contains the correct
+   `TOAST_RESTAURANT_GUID`, `STORE_TIMEZONE`, and `TOAST_SALES_SYNC_HOURS`.
+   These are non-secret settings. The default sync interval is 12 hours; the
+   hourly cron also performs notification cleanup.
+2. Add the client ID at Wrangler's hidden prompt:
+
+~~~powershell
+npx wrangler secret put TOAST_CLIENT_ID --config workers/notifications/wrangler.jsonc
+~~~
+
+3. Add the client secret separately:
+
+~~~powershell
+npx wrangler secret put TOAST_CLIENT_SECRET --config workers/notifications/wrangler.jsonc
+~~~
+
+4. Verify only the secret names—not their values—and deploy:
+
+~~~powershell
+npx wrangler secret list --config workers/notifications/wrangler.jsonc
+npx wrangler deploy --dry-run --config workers/notifications/wrangler.jsonc
+npm run notifications:deploy
+~~~
+
+5. The next cron run imports the 21 completed business dates. Check progress:
+
+~~~powershell
+npx wrangler d1 execute shibam-team --remote --command "SELECT location_id, period_start, period_end, completed_weeks, status, last_synced_at, last_error FROM toast_sales_sync_state;"
+npx wrangler d1 execute shibam-team --remote --command "SELECT MIN(business_date) AS first_date, MAX(business_date) AS last_date, COUNT(*) AS hourly_rows, SUM(net_sales_cents) / 100.0 AS sales FROM toast_hourly_sales;"
+~~~
+
+`ready` means the coverage page can display average sales per hour. `pending`
+means the first cron has not run. `error` means `last_error` should be inspected,
+then the restaurant GUID, machine-client permissions, and Worker secrets should
+be checked. Sales use paid/closed, non-voided Toast checks; check amounts include
+discounts and service charges and exclude tax and gratuity.
+
+### 3H. Current credential-dependent blockers
 
 The code and database flows are complete, but these external actions cannot be
 completed without account credentials:

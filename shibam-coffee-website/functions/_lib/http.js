@@ -60,6 +60,22 @@ export function normalizeTime(value, field = 'time') {
   return text;
 }
 
+export function availabilityWindow(startValue, endValue) {
+  const startTime = normalizeTime(startValue, 'start_time');
+  const endTime = normalizeTime(endValue, 'end_time');
+  const toMinutes = (value) => {
+    const [hour, minute] = value.split(':').map(Number);
+    return hour * 60 + minute;
+  };
+  if (toMinutes(startTime) % 15 !== 0 || toMinutes(endTime) % 15 !== 0) {
+    throw new ApiError('invalid_availability_time_interval', 400);
+  }
+  const startMinutes = toMinutes(startTime);
+  const endMinutes = endTime === '00:00' ? 24 * 60 : toMinutes(endTime);
+  if (endMinutes <= startMinutes) throw new ApiError('invalid_shift_duration', 400);
+  return { startTime, endTime, startMinutes, endMinutes };
+}
+
 export function weekStartFor(dateValue) {
   const date = new Date(`${normalizeDate(dateValue)}T12:00:00Z`);
   const day = date.getUTCDay();

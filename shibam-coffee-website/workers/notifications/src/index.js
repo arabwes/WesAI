@@ -173,6 +173,8 @@ async function sendInvitation(message, env) {
   if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
   const token = String(message.body?.token || '');
   if (!token) throw new Error('Invitation token is missing from the queue message');
+  if (String(message.body?.tokenHash || '') !== invitation.token_hash) return false;
+  const deliveryKey = String(message.body?.deliveryKey || invitation.id).slice(0, 256);
   const link = `${env.PORTAL_ORIGIN}/team/accept-invitation.html?token=${encodeURIComponent(token)}`;
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -180,7 +182,7 @@ async function sendInvitation(message, env) {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
       'User-Agent': 'ShibamCoffeeTeam/2.0',
-      'Idempotency-Key': invitation.id
+      'Idempotency-Key': deliveryKey
     },
     body: JSON.stringify({
       from: env.EMAIL_FROM,
@@ -199,6 +201,158 @@ async function sendInvitation(message, env) {
   await env.TEAM_DB.prepare('UPDATE user_invitations SET email_sent_at = ?, email_last_error = NULL WHERE id = ?')
     .bind(new Date().toISOString(), invitation.id).run();
   return false;
+}
+
+function dateInTimezone(date, timezone) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone || 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function addDateDays(dateString, days) {
+  const date = new Date(`${dateString}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function mondayForDate(dateString) {
+  const date = new Date(`${dateString}T12:00:00Z`);
+  const weekday = date.getUTCDay();
+  return addDateDays(dateString, weekday === 0 ? -6 : 1 - weekday);
+}
+
+function toastBusinessDate(dateString) {
+  return dateString.replaceAll('-', '');
+}
+
+async function toastAccessToken(env) {
+  const response = await fetch('https://ws-api.toasttab.com/authentication/v1/authentication/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': 'ShibamCoffeeTeam/2.0' },
+    body: JSON.stringify({
+      clientId: env.TOAST_CLIENT_ID,
+      clientSecret: env.TOAST_CLIENT_SECRET,
+      userAccessType: 'TOAST_MACHINE_CLIENT'
+    }),
+    signal: AbortSignal.timeout(15_000)
+  });
+  if (!response.ok) throw new Error(`Toast authentication returned HTTP ${response.status}`);
+  const result = await response.json();
+  if (!result?.token?.accessToken) throw new Error('Toast authentication did not return an access token');
+  return result.token.accessToken;
+}
+
+async function toastOrdersForDay(env, accessToken, dateString) {
+  const orders = [];
+  for (let page = 1; page <= 50; page += 1) {
+    const url = new URL('https://ws-api.toasttab.com/orders/v2/ordersBulk');
+    url.searchParams.set('businessDate', toastBusinessDate(dateString));
+    url.searchParams.set('pageSize', '100');
+    url.searchParams.set('page', String(page));
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'Toast-Restaurant-External-ID': env.TOAST_RESTAURANT_GUID,
+        'User-Agent': 'ShibamCoffeeTeam/2.0'
+      },
+      signal: AbortSignal.timeout(30_000)
+    });
+    if (!response.ok) throw new Error(`Toast orders returned HTTP ${response.status}`);
+    const pageOrders = await response.json();
+    if (!Array.isArray(pageOrders)) throw new Error('Toast orders response was not an array');
+    orders.push(...pageOrders);
+    if (pageOrders.length < 100) break;
+    await new Promise((resolve) => setTimeout(resolve, 125));
+  }
+  return orders;
+}
+
+function hourInTimezone(value, timezone) {
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone || 'America/New_York', hour: '2-digit', hourCycle: 'h23'
+    }).formatToParts(parsed);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    if (Number.isInteger(hour) && hour >= 0 && hour <= 23) return hour;
+  }
+  const fallback = String(value || '').match(/T(\d{2}):/u);
+  return fallback ? Number(fallback[1]) : null;
+}
+
+export function aggregateToastHourlySales(dateString, orders, timezone = 'America/New_York') {
+  const hourly = new Map();
+  for (const order of Array.isArray(orders) ? orders : []) {
+    if (order?.voided === true || order?.deleted === true) continue;
+    const hour = hourInTimezone(order?.openedDate, timezone);
+    if (hour === null) continue;
+    let orderCents = 0;
+    for (const check of Array.isArray(order.checks) ? order.checks : []) {
+      if (check?.voided === true || check?.deleted === true || !['PAID', 'CLOSED'].includes(check?.paymentStatus)) continue;
+      const amount = Number(check.amount);
+      if (Number.isFinite(amount)) orderCents += Math.round(amount * 100);
+    }
+    if (!orderCents) continue;
+    const current = hourly.get(hour) || { businessDate: dateString, hour, netSalesCents: 0, orderCount: 0 };
+    current.netSalesCents += orderCents;
+    current.orderCount += 1;
+    hourly.set(hour, current);
+  }
+  return [...hourly.values()].sort((left, right) => left.hour - right.hour);
+}
+
+async function syncToastSales(env, force = false) {
+  if (!env.TOAST_CLIENT_ID || !env.TOAST_CLIENT_SECRET || !env.TOAST_RESTAURANT_GUID) {
+    console.log(JSON.stringify({ event: 'toast_sales_sync_skipped', reason: 'credentials_not_configured' }));
+    return;
+  }
+  const today = dateInTimezone(new Date(), env.STORE_TIMEZONE);
+  const currentMonday = mondayForDate(today);
+  const periodStart = addDateDays(currentMonday, -21);
+  const periodEnd = addDateDays(currentMonday, -1);
+  const existing = await env.TEAM_DB.prepare(`SELECT * FROM toast_sales_sync_state WHERE location_id = 'atlanta'`).first();
+  const syncHours = Math.max(1, Number(env.TOAST_SALES_SYNC_HOURS || 12));
+  if (!force && existing?.status === 'ready' && existing.period_start === periodStart && existing.period_end === periodEnd &&
+      Date.now() - Date.parse(existing.last_synced_at || '') < syncHours * 3600 * 1000) return;
+
+  const startedAt = new Date().toISOString();
+  await env.TEAM_DB.prepare(`INSERT INTO toast_sales_sync_state
+      (location_id, period_start, period_end, completed_weeks, status, last_synced_at, last_error, updated_at)
+    VALUES ('atlanta', ?, ?, 3, 'syncing', NULL, NULL, ?)
+    ON CONFLICT(location_id) DO UPDATE SET period_start = excluded.period_start, period_end = excluded.period_end,
+      completed_weeks = 3, status = 'syncing', last_error = NULL, updated_at = excluded.updated_at`)
+    .bind(periodStart, periodEnd, startedAt).run();
+  try {
+    const accessToken = await toastAccessToken(env);
+    const rows = [];
+    for (let offset = 0; offset < 21; offset += 1) {
+      const businessDate = addDateDays(periodStart, offset);
+      rows.push(...aggregateToastHourlySales(
+        businessDate,
+        await toastOrdersForDay(env, accessToken, businessDate),
+        env.STORE_TIMEZONE
+      ));
+      if (offset < 20) await new Promise((resolve) => setTimeout(resolve, 125));
+    }
+    const syncedAt = new Date().toISOString();
+    await env.TEAM_DB.prepare('DELETE FROM toast_hourly_sales WHERE business_date BETWEEN ? AND ?')
+      .bind(periodStart, periodEnd).run();
+    const inserts = rows.map((row) => env.TEAM_DB.prepare(`INSERT INTO toast_hourly_sales
+      (business_date, hour, net_sales_cents, order_count, synced_at) VALUES (?, ?, ?, ?, ?)`)
+      .bind(row.businessDate, row.hour, row.netSalesCents, row.orderCount, syncedAt));
+    for (let index = 0; index < inserts.length; index += 50) await env.TEAM_DB.batch(inserts.slice(index, index + 50));
+    await env.TEAM_DB.prepare(`UPDATE toast_sales_sync_state SET status = 'ready', last_synced_at = ?,
+      last_error = NULL, updated_at = ? WHERE location_id = 'atlanta'`).bind(syncedAt, syncedAt).run();
+    console.log(JSON.stringify({ event: 'toast_sales_sync_complete', periodStart, periodEnd, rows: rows.length }));
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    await env.TEAM_DB.prepare(`UPDATE toast_sales_sync_state SET status = 'error', last_error = ?, updated_at = ?
+      WHERE location_id = 'atlanta'`).bind(String(error).slice(0, 350), failedAt).run();
+    throw error;
+  }
 }
 
 export default {
@@ -231,6 +385,7 @@ export default {
       env.TEAM_DB.prepare("UPDATE shift_exchange_requests SET status = 'expired', review_note = 'The offered shift has passed.' WHERE status IN ('open', 'employee_accepted') AND offered_shift_id IN (SELECT id FROM shifts WHERE shift_date < ?)").bind(today),
       env.TEAM_DB.prepare('DELETE FROM phone_verifications WHERE expires_at < ? AND verified_at IS NULL').bind(now)
     ]);
+    await syncToastSales(env);
     console.log(JSON.stringify({ event: 'scheduled_cleanup_complete', at: now }));
   }
 };

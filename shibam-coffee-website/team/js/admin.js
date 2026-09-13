@@ -941,6 +941,18 @@
         var card = el('article', 'request-card'); card.appendChild(el('strong', null, invitation.name + ' · ' + invitation.role));
         var delivery = invitation.emailSentAt ? ' · email sent ' + formatDateTime(invitation.emailSentAt) : invitation.emailLastError ? ' · email failed: ' + invitation.emailLastError : '';
         card.appendChild(el('p', null, invitation.email + ' · ' + invitation.status + ' · expires ' + formatDateTime(invitation.expiresAt) + delivery));
+        if (invitation.status === 'pending' || invitation.status === 'expired') {
+          var resend = el('button', 'btn-outline btn-small', 'Resend invitation');
+          resend.type = 'button';
+          resend.addEventListener('click', function () {
+            resend.disabled = true;
+            Auth.apiCall('resendInvitation', { invitationId: invitation.id }).then(function (outcome) {
+              if (!outcome.ok) window.alert(Auth.errorMessage(outcome, 'Could not resend the invitation.'));
+              loadInvitations();
+            }).finally(function () { resend.disabled = false; });
+          });
+          card.appendChild(resend);
+        }
         if (invitation.status === 'pending') { var revoke = el('button', 'btn-remove-row', 'Revoke'); revoke.type = 'button'; revoke.addEventListener('click', function () { Auth.apiCall('revokeInvitation', { invitationId: invitation.id }).then(loadInvitations); }); card.appendChild(revoke); }
         mount.appendChild(card);
       });

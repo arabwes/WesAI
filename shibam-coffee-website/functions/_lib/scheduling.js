@@ -1,6 +1,6 @@
 import { audit, hasRole, requireRole } from './auth.js';
 import {
-  ApiError, addDays, asBoolean, clampInt, minutesBetween, newId, normalizeDate,
+  ApiError, addDays, asBoolean, availabilityWindow, clampInt, minutesBetween, newId, normalizeDate,
   normalizeTime, nowIso, publicUser, safeJsonParse, weekStartFor
 } from './http.js';
 import { captureScheduleVersion } from './schedule-snapshots.js';
@@ -225,10 +225,10 @@ export async function scheduleWarnings(db, input, shiftId, schedule, proposedMin
       db.prepare(`SELECT start_time, end_time FROM availability_exceptions WHERE employee_id = ?
         AND exception_date = ? AND preference = 'unavailable'`).bind(input.employeeId, date).all()
     ]);
-    conflictsWithAvailability = rules.results.concat(exceptions.results).some((row) => rangesOverlap(segment, {
-      start: minuteOfDay(row.start_time),
-      end: minuteOfDay(row.end_time)
-    }));
+    conflictsWithAvailability = rules.results.concat(exceptions.results).some((row) => {
+      const window = availabilityWindow(row.start_time, row.end_time);
+      return rangesOverlap(segment, { start: window.startMinutes, end: window.endMinutes });
+    });
     if (conflictsWithAvailability) break;
   }
   if (conflictsWithAvailability) warnings.push({ code: 'unavailable', message: 'This shift conflicts with the employee’s availability.' });
@@ -479,7 +479,7 @@ function availabilityExceptionDto(row) {
     startTime: row.start_time,
     endTime: row.end_time,
     note: row.note || '',
-    allDay: row.start_time === '00:00' && row.end_time === '23:59'
+    allDay: row.start_time === '00:00' && (row.end_time === '23:59' || row.end_time === '00:00')
   };
 }
 
@@ -493,15 +493,13 @@ export async function replaceAvailability(request, payload, env) {
     if (weekday < 0 || !['preferred', 'unavailable'].includes(input.preference)) {
       throw new ApiError('invalid_availability', 400);
     }
-    const startTime = normalizeTime(input.startTime, 'start_time');
-    const endTime = normalizeTime(input.endTime, 'end_time');
-    minutesBetween(startTime, endTime, 0);
-    return { weekday, preference: input.preference, startTime, endTime };
+    const window = availabilityWindow(input.startTime, input.endTime);
+    return { weekday, preference: input.preference, ...window };
   }).sort((left, right) => left.weekday - right.weekday || left.startTime.localeCompare(right.startTime));
 
   rules.forEach((rule, index) => {
     const previous = rules[index - 1];
-    if (previous && previous.weekday === rule.weekday && previous.endTime > rule.startTime) {
+    if (previous && previous.weekday === rule.weekday && previous.endMinutes > rule.startMinutes) {
       throw new ApiError('overlapping_availability', 400);
     }
   });
@@ -524,9 +522,7 @@ export async function saveAvailability(request, payload, env) {
   const input = payload.availability || {};
   const weekday = clampInt(input.weekday, 0, 6, -1);
   if (weekday < 0 || !['preferred', 'unavailable'].includes(input.preference)) throw new ApiError('invalid_availability', 400);
-  const startTime = normalizeTime(input.startTime, 'start_time');
-  const endTime = normalizeTime(input.endTime, 'end_time');
-  minutesBetween(startTime, endTime, 0);
+  const { startTime, endTime } = availabilityWindow(input.startTime, input.endTime);
   const id = input.id || newId('availability');
   const now = nowIso();
   if (input.id) {
@@ -559,9 +555,10 @@ export async function saveAvailabilityException(request, payload, env) {
   const date = normalizeDate(input.date, 'exception_date');
   if (!['preferred', 'unavailable'].includes(input.preference)) throw new ApiError('invalid_availability', 400);
   const allDay = asBoolean(input.allDay);
-  const startTime = allDay ? '00:00' : normalizeTime(input.startTime, 'start_time');
-  const endTime = allDay ? '23:59' : normalizeTime(input.endTime, 'end_time');
-  minutesBetween(startTime, endTime, 0);
+  const { startTime, endTime } = availabilityWindow(
+    allDay ? '00:00' : input.startTime,
+    allDay ? '00:00' : input.endTime
+  );
   const note = String(input.note || '').trim().slice(0, 350);
   const existing = input.id
     ? await env.TEAM_DB.prepare('SELECT * FROM availability_exceptions WHERE id = ? AND employee_id = ?')

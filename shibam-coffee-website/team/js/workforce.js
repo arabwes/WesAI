@@ -116,12 +116,17 @@
   function loadCoverage() {
     if (!state.weekStart) return; var mount = document.getElementById('coverage-heatmap'); mount.textContent = 'Loading coverage…';
     Auth.apiCall('getTeamCoverage', { weekStart: state.weekStart, positionId: document.getElementById('coverage-position').value }).then(function (result) {
-      if (!result.ok) { mount.textContent = 'Could not load coverage.'; return; } renderCoverage(result.slots || []);
+      if (!result.ok) { mount.textContent = 'Could not load coverage.'; return; } renderCoverage(result.slots || [], result.sales || {});
     });
   }
 
-  function renderCoverage(slots) {
+  function renderCoverage(slots, sales) {
     var mount = document.getElementById('coverage-heatmap'); mount.innerHTML = '';
+    var meta = document.createElement('p'); meta.className = 'coverage-sales-meta';
+    meta.textContent = sales.status === 'ready'
+      ? 'Toast average net sales by opened hour · ' + sales.periodStart + ' through ' + sales.periodEnd + ' · last synced ' + new Date(sales.lastSyncedAt).toLocaleString()
+      : sales.status === 'error' ? 'Toast sales are temporarily unavailable; staffing coverage is still current.' : 'Toast sales are waiting for their first sync.';
+    mount.appendChild(meta);
     var dates = Array.from(new Set(slots.map(function (slot) { return slot.date; })));
     var times = Array.from(new Set(slots.map(function (slot) { return slot.time; }))).filter(function (time) { return time.endsWith(':00'); });
     var grid = document.createElement('div'); grid.className = 'coverage-grid'; grid.style.setProperty('--coverage-columns', dates.length + 1);
@@ -131,6 +136,13 @@
       grid.appendChild(cell(formatTime(time), 'coverage-cell coverage-cell--time'));
       dates.forEach(function (date) {
         var slot = slots.find(function (item) { return item.date === date && item.time === time; }); var node = cell(slot.available + ' available · ' + slot.scheduled + ' scheduled', 'coverage-cell');
+        var weekday = new Date(date + 'T12:00:00').getDay();
+        var sale = (sales.slots || []).find(function (item) { return item.weekday === weekday && item.hour === Number(time.slice(0, 2)); });
+        if (sales.status === 'ready') {
+          var salesLine = document.createElement('span'); salesLine.className = 'coverage-cell__sales';
+          salesLine.textContent = 'Avg ' + formatCurrency((sale ? sale.averageSalesCents : 0) / 100) + '/hr';
+          node.appendChild(salesLine);
+        }
         node.dataset.coverage = slot.available <= slot.scheduled ? 'tight' : slot.scheduled ? 'covered' : 'open';
         node.tabIndex = 0; node.title = slot.people.map(function (person) { return person.name + ': ' + person.reason + (person.scheduled ? ', scheduled' : ''); }).join('\n'); grid.appendChild(node);
       });
@@ -147,6 +159,7 @@
   }
 
   function formatTime(value) { var parts = value.split(':').map(Number); return new Date(2000, 0, 1, parts[0], parts[1]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+  function formatCurrency(value) { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value); }
   function featureCard(title, copy) { var card = document.createElement('article'); card.className = 'request-card feature-card'; var strong = document.createElement('strong'); strong.textContent = title; var p = document.createElement('p'); p.textContent = copy; card.appendChild(strong); card.appendChild(p); return card; }
   function action(label, className, handler) { var button = document.createElement('button'); button.type = 'button'; button.className = className; button.textContent = label; button.addEventListener('click', function () { button.disabled = true; Promise.resolve(handler()).finally(function () { button.disabled = false; }); }); return button; }
   function empty(message) { var node = document.createElement('div'); node.className = 'schedule-empty'; node.textContent = message; return node; }

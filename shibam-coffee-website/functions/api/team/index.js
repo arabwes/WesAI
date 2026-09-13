@@ -19,6 +19,7 @@ import {
   saveAvailabilityException,
   saveShift, submitTimeOff
 } from '../../_lib/scheduling.js';
+import { applyAutoAssign, bulkUnassignShifts, previewAutoAssign } from '../../_lib/scheduling-automation.js';
 import {
   acceptInvitation, applyScheduleTemplate, cancelExchangeRequest, cancelOpenShiftRequest,
   cancelTimeOffRequest, changeMyPassword, createCalendarToken, createExchangeRequest,
@@ -27,7 +28,7 @@ import {
   getExchangeData, getMySettings, getScheduleHistory, getTeamCoverage, inspectInvitation,
   listInvitations, listScheduleTemplates, registerPushSubscription, removePushSubscription,
   requestPhoneVerification, respondSwapRequest, restoreScheduleVersion, reviewExchangeRequest,
-  revokeCalendarToken, revokeInvitation, saveAvailabilitySet, saveNotificationPreferences,
+  resendInvitation, revokeCalendarToken, revokeInvitation, saveAvailabilitySet, saveNotificationPreferences,
   saveRepeatingAvailabilityException, saveScheduleRotation, updateManagedUser, updateMyProfile,
   verifyPhone, volunteerForExchange
 } from '../../_lib/scheduling-extended.js';
@@ -63,6 +64,9 @@ const ACTIONS = {
   getManagerSchedule,
   getMySchedule,
   saveShift,
+  previewAutoAssign,
+  applyAutoAssign,
+  bulkUnassignShifts,
   cancelShift,
   copySchedule,
   publishSchedule,
@@ -112,6 +116,7 @@ const ACTIONS = {
   verifyPhone,
   listInvitations,
   createInvitation,
+  resendInvitation,
   revokeInvitation,
   inspectInvitation,
   acceptInvitation,

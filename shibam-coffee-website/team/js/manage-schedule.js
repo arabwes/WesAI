@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  var state = { weekStart: mondayFor(new Date()), data: null };
+  var state = { weekStart: mondayFor(new Date()), data: null, selectedShiftIds: new Set(), autoAssignPreview: null };
   var dialog;
   var form;
 
@@ -14,6 +14,7 @@
     bindWeekControls();
     bindToolbar();
     bindShiftDialog();
+    bindAutoAssign();
     loadSchedule();
   });
 
@@ -88,6 +89,110 @@
         else setPageStatus('error', Auth.errorMessage(result, 'Could not publish the schedule.'));
       });
     });
+    document.getElementById('bulk-unassign').addEventListener('click', bulkUnassignSelected);
+  }
+
+  function selectedShifts(assigned) {
+    return (state.data?.shifts || []).filter(function (shift) {
+      return state.selectedShiftIds.has(shift.id) && (assigned === undefined || Boolean(shift.employeeId) === assigned);
+    });
+  }
+
+  function updateSelectionActions() {
+    var assigned = selectedShifts(true);
+    var button = document.getElementById('bulk-unassign');
+    button.textContent = 'Unassign selected (' + assigned.length + ')';
+    button.disabled = !assigned.length;
+    state.autoAssignPreview = null;
+    document.getElementById('auto-assign-preview').innerHTML = '';
+    document.getElementById('apply-auto-assign').hidden = true;
+  }
+
+  function bulkUnassignSelected() {
+    var shifts = selectedShifts(true);
+    if (!shifts.length || !window.confirm('Unassign ' + shifts.length + ' selected shift' + (shifts.length === 1 ? '' : 's') + '?')) return;
+    var button = document.getElementById('bulk-unassign');
+    button.disabled = true;
+    setPageStatus(null, 'Unassigning selected shifts…');
+    Auth.apiCall('bulkUnassignShifts', {
+      expectedScheduleVersion: state.data.schedule.version,
+      shifts: shifts.map(function (shift) { return { id: shift.id, version: shift.version }; })
+    }).then(function (result) {
+      if (result.ok) loadSchedule(result.unassignedCount + ' shift' + (result.unassignedCount === 1 ? '' : 's') + ' unassigned.');
+      else { setPageStatus('error', Auth.errorMessage(result, 'Could not unassign the selected shifts.')); updateSelectionActions(); }
+    }).catch(function () { setPageStatus('error', 'Could not reach the server.'); updateSelectionActions(); });
+  }
+
+  function bindAutoAssign() {
+    var form = document.getElementById('auto-assign-form');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var criteria = autoAssignCriteria(form);
+      if (criteria === null) return;
+      var button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      setStatus(form.querySelector('[data-form-status]'), null, 'Building a conflict-free preview…');
+      Auth.apiCall('previewAutoAssign', {
+        scheduleId: state.data.schedule.id,
+        expectedScheduleVersion: state.data.schedule.version,
+        criteria: criteria
+      }).then(function (result) {
+        button.disabled = false;
+        if (!result.ok) { setStatus(form.querySelector('[data-form-status]'), 'error', Auth.errorMessage(result, 'Could not build assignments.')); return; }
+        state.autoAssignPreview = { criteria: criteria, scheduleVersion: result.scheduleVersion };
+        renderAutoAssignPreview(result);
+        setStatus(form.querySelector('[data-form-status]'), 'success', result.assignments.length + ' assignment' + (result.assignments.length === 1 ? '' : 's') + ' ready to review.');
+      }).catch(function () { button.disabled = false; setStatus(form.querySelector('[data-form-status]'), 'error', 'Could not reach the server.'); });
+    });
+    document.getElementById('apply-auto-assign').addEventListener('click', function () {
+      if (!state.autoAssignPreview || !window.confirm('Apply these reviewed assignments?')) return;
+      var button = this;
+      button.disabled = true;
+      Auth.apiCall('applyAutoAssign', {
+        scheduleId: state.data.schedule.id,
+        expectedScheduleVersion: state.autoAssignPreview.scheduleVersion,
+        criteria: state.autoAssignPreview.criteria
+      }).then(function (result) {
+        button.disabled = false;
+        if (result.ok) loadSchedule(result.assignedCount + ' open shift' + (result.assignedCount === 1 ? '' : 's') + ' assigned.');
+        else setPageStatus('error', Auth.errorMessage(result, 'Could not apply assignments. Refresh and preview again.'));
+      }).catch(function () { button.disabled = false; setPageStatus('error', 'Could not reach the server.'); });
+    });
+  }
+
+  function autoAssignCriteria(form) {
+    var shiftIds = [];
+    if (form.elements.target.value === 'selected') {
+      shiftIds = selectedShifts(false).map(function (shift) { return shift.id; });
+      if (!shiftIds.length) {
+        setStatus(form.querySelector('[data-form-status]'), 'error', 'Select at least one open shift in the schedule grid.');
+        return null;
+      }
+    }
+    return {
+      shiftIds: shiftIds,
+      positionIds: form.elements.positionId.value ? [form.elements.positionId.value] : [],
+      maxNewShiftsPerEmployee: Number(form.elements.maxNewShiftsPerEmployee.value),
+      prioritizePreferred: form.elements.prioritizePreferred.checked
+    };
+  }
+
+  function renderAutoAssignPreview(result) {
+    var mount = document.getElementById('auto-assign-preview');
+    mount.innerHTML = '';
+    (result.assignments || []).forEach(function (assignment) {
+      var card = el('article', 'request-card feature-card');
+      card.appendChild(el('strong', null, assignment.employeeName + (assignment.preferred ? ' · preferred' : '')));
+      card.appendChild(el('p', null, formatDate(assignment.date) + ' · ' + formatTime(assignment.startTime) + '–' + formatTime(assignment.endTime) + ' · ' + assignment.positionName));
+      mount.appendChild(card);
+    });
+    (result.unassigned || []).forEach(function (shift) {
+      var card = el('article', 'request-card feature-card auto-assign-unfilled');
+      card.appendChild(el('strong', null, 'Unfilled · ' + shift.positionName));
+      card.appendChild(el('p', null, formatDate(shift.date) + ' · ' + formatTime(shift.startTime) + '–' + formatTime(shift.endTime) + ' · ' + shift.reason));
+      mount.appendChild(card);
+    });
+    document.getElementById('apply-auto-assign').hidden = !(result.assignments || []).length;
   }
 
   function loadSchedule(successMessage) {
@@ -96,12 +201,15 @@
     Auth.apiCall('getManagerSchedule', { weekStart: state.weekStart, create: true }).then(function (result) {
       if (!result.ok) { setPageStatus('error', Auth.errorMessage(result, 'Could not load the schedule.')); return; }
       state.data = result;
+      state.selectedShiftIds = new Set();
+      state.autoAssignPreview = null;
       document.dispatchEvent(new CustomEvent('schedule:loaded', { detail: { data: result, weekStart: state.weekStart } }));
       setPageStatus(successMessage ? 'success' : null, successMessage || '');
       document.getElementById('schedule-state').textContent = result.schedule.status;
       document.getElementById('schedule-state').className = 'schedule-state schedule-state--' + result.schedule.status;
       document.getElementById('publish-schedule').textContent = result.schedule.status === 'published' ? 'Republish & notify all' : 'Publish schedule';
       populateShiftOptions();
+      updateSelectionActions();
       renderGrid();
       renderRequests();
     }).catch(function () { setPageStatus('error', 'Could not load the schedule.'); });
@@ -122,6 +230,15 @@
       option.value = item.id;
       position.appendChild(option);
     });
+    var autoPosition = document.getElementById('auto-assign-position');
+    var previous = autoPosition.value;
+    autoPosition.innerHTML = '<option value="">All positions</option>';
+    state.data.positions.forEach(function (item) {
+      var option = el('option', null, item.name);
+      option.value = item.id;
+      autoPosition.appendChild(option);
+    });
+    autoPosition.value = previous;
   }
 
   function renderGrid() {
@@ -185,6 +302,17 @@
   }
 
   function buildGridShift(shift) {
+    var wrap = el('div', 'grid-shift-wrap');
+    var selector = document.createElement('input');
+    selector.type = 'checkbox';
+    selector.className = 'grid-shift-select';
+    selector.checked = state.selectedShiftIds.has(shift.id);
+    selector.setAttribute('aria-label', 'Select ' + formatDate(shift.date) + ' ' + formatTime(shift.startTime) + ' shift');
+    selector.addEventListener('change', function () {
+      if (selector.checked) state.selectedShiftIds.add(shift.id); else state.selectedShiftIds.delete(shift.id);
+      updateSelectionActions();
+    });
+    wrap.appendChild(selector);
     var button = el('button', 'grid-shift' + (!shift.employeeId ? ' grid-shift--open' : '') + (shift.overrideReason ? ' grid-shift--warning' : ''));
     button.type = 'button';
     button.style.setProperty('--shift-color', shift.positionColor || '#A56A24');
@@ -192,7 +320,8 @@
     button.appendChild(el('span', null, shift.positionName || 'Shift'));
     if (shift.breakMinutes) button.appendChild(el('small', null, shift.breakMinutes + ' min break'));
     button.addEventListener('click', function () { openShiftDialog(shift, shift.date); });
-    return button;
+    wrap.appendChild(button);
+    return wrap;
   }
 
   function bindShiftDialog() {

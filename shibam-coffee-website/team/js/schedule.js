@@ -16,6 +16,7 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('footer-year').textContent = new Date().getFullYear();
+    populateAvailabilityExceptionTimeOptions();
     bindWeekControls();
     bindAvailabilityEditor();
     bindTimeOffForm();
@@ -58,6 +59,28 @@
   function formatTime(value) {
     var parts = value.split(':').map(Number);
     return new Date(2000, 0, 1, parts[0], parts[1]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function timeBoundary(value, isEnd) {
+    var parts = String(value).split(':').map(Number);
+    if (isEnd && parts[0] === 0 && parts[1] === 0) return 24 * 60;
+    return parts[0] * 60 + parts[1];
+  }
+
+  function appendQuarterHourOptions(select) {
+    select.innerHTML = '';
+    for (var minutes = 0; minutes < 24 * 60; minutes += 15) {
+      var value = String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
+      var option = el('option', null, formatTime(value));
+      option.value = value;
+      select.appendChild(option);
+    }
+  }
+
+  function populateAvailabilityExceptionTimeOptions() {
+    ['availability-exception-start', 'availability-exception-end'].forEach(function (id) {
+      appendQuarterHourOptions(document.getElementById(id));
+    });
   }
 
   function minutesFor(shift) {
@@ -464,7 +487,7 @@
         var allDay = el('button', 'availability-add-window', 'Set all day');
         allDay.type = 'button';
         allDay.addEventListener('click', function () {
-          day.windows = [{ startTime: '00:00', endTime: '23:59' }];
+          day.windows = [{ startTime: '00:00', endTime: '00:00' }];
           renderWeeklyAvailability();
         });
         windowActions.appendChild(allDay);
@@ -477,8 +500,8 @@
   function buildAvailabilityWindow(day, windowValue, index) {
     var row = el('div', 'availability-window');
     var startLabel = el('label', null, 'From');
-    var start = document.createElement('input');
-    start.type = 'time';
+    var start = document.createElement('select');
+    appendQuarterHourOptions(start);
     start.value = windowValue.startTime;
     start.setAttribute('aria-label', DAYS[day.weekday] + ' window ' + (index + 1) + ' start time');
     start.addEventListener('change', function () { windowValue.startTime = start.value; });
@@ -486,8 +509,8 @@
     row.appendChild(startLabel);
     row.appendChild(el('span', 'availability-window__dash', '—'));
     var endLabel = el('label', null, 'To');
-    var end = document.createElement('input');
-    end.type = 'time';
+    var end = document.createElement('select');
+    appendQuarterHourOptions(end);
     end.value = windowValue.endTime;
     end.setAttribute('aria-label', DAYS[day.weekday] + ' window ' + (index + 1) + ' end time');
     end.addEventListener('change', function () { windowValue.endTime = end.value; });
@@ -525,10 +548,11 @@
       if (day.mode === 'available') return;
       var sorted = day.windows.slice().sort(function (left, right) { return left.startTime.localeCompare(right.startTime); });
       sorted.forEach(function (windowValue, index) {
-        if (!windowValue.startTime || !windowValue.endTime || windowValue.startTime >= windowValue.endTime) {
+        if (!windowValue.startTime || !windowValue.endTime ||
+            timeBoundary(windowValue.endTime, true) <= timeBoundary(windowValue.startTime, false)) {
           throw new Error(DAYS[day.weekday] + ' has an invalid time window.');
         }
-        if (index && sorted[index - 1].endTime > windowValue.startTime) {
+        if (index && timeBoundary(sorted[index - 1].endTime, true) > timeBoundary(windowValue.startTime, false)) {
           throw new Error(DAYS[day.weekday] + ' has overlapping time windows.');
         }
         rules.push({
@@ -668,7 +692,7 @@
     var form = event.currentTarget;
     var button = form.querySelector('button[type="submit"]');
     var status = form.querySelector('[data-form-status]');
-    if (!form.allDay.checked && form.startTime.value >= form.endTime.value) {
+    if (!form.allDay.checked && timeBoundary(form.endTime.value, true) <= timeBoundary(form.startTime.value, false)) {
       setStatus(status, 'error', 'The end time must be after the start time.');
       return;
     }

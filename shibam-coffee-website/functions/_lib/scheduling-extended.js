@@ -1,6 +1,6 @@
 import { audit, hasRole, makePassword, requireRole } from './auth.js';
 import {
-  ApiError, addDays, clampInt, minutesBetween, newId, normalizeDate, normalizeTime,
+  ApiError, addDays, availabilityWindow, clampInt, minutesBetween, newId, normalizeDate, normalizeTime,
   nowIso, publicUser, safeJsonParse, sha256Hex, weekStartFor
 } from './http.js';
 import { captureScheduleVersion } from './schedule-snapshots.js';
@@ -23,7 +23,11 @@ function normalizePhone(value) {
 }
 
 function timeOverlaps(start, end, slotStart, slotEnd) {
-  return start < slotEnd && end > slotStart;
+  const minutes = (value, endBoundary = false) => {
+    const [hour, minute] = String(value).split(':').map(Number);
+    return endBoundary && hour === 0 && minute === 0 ? 24 * 60 : hour * 60 + minute;
+  };
+  return minutes(start) < minutes(slotEnd, true) && minutes(end, true) > minutes(slotStart);
 }
 
 function shiftOverlapsDateSlot(shift, date, slotStart, slotEnd) {
@@ -518,15 +522,13 @@ export async function saveAvailabilitySet(request, payload, env) {
   const rules = Array.isArray(input.rules) ? input.rules.slice(0, 35).map((rule) => {
     const weekday = clampInt(rule.weekday, 0, 6, -1);
     if (weekday < 0 || !['preferred', 'unavailable'].includes(rule.preference)) throw new ApiError('invalid_availability', 400);
-    const startTime = normalizeTime(rule.startTime, 'start_time');
-    const endTime = normalizeTime(rule.endTime, 'end_time');
-    minutesBetween(startTime, endTime, 0);
-    return { weekday, preference: rule.preference, startTime, endTime };
+    const window = availabilityWindow(rule.startTime, rule.endTime);
+    return { weekday, preference: rule.preference, ...window };
   }) : [];
   rules.sort((a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime));
   rules.forEach((rule, index) => {
     const previous = rules[index - 1];
-    if (previous && previous.weekday === rule.weekday && previous.endTime > rule.startTime) throw new ApiError('overlapping_availability', 400);
+    if (previous && previous.weekday === rule.weekday && previous.endMinutes > rule.startMinutes) throw new ApiError('overlapping_availability', 400);
   });
   const id = input.id || newId('availability_set');
   const now = nowIso();
@@ -577,9 +579,10 @@ export async function saveRepeatingAvailabilityException(request, payload, env) 
   if (occurrences > 104) throw new ApiError('too_many_occurrences', 400);
   if (!['preferred', 'unavailable'].includes(input.preference)) throw new ApiError('invalid_availability', 400);
   const allDay = input.allDay === true;
-  const startTime = allDay ? '00:00' : normalizeTime(input.startTime, 'start_time');
-  const endTime = allDay ? '23:59' : normalizeTime(input.endTime, 'end_time');
-  minutesBetween(startTime, endTime, 0);
+  const { startTime, endTime } = availabilityWindow(
+    allDay ? '00:00' : input.startTime,
+    allDay ? '00:00' : input.endTime
+  );
   const note = String(input.note || '').trim().slice(0, 350);
   const id = newId('availability_series');
   const now = nowIso();
@@ -627,8 +630,8 @@ export async function getTeamCoverage(request, payload, env) {
   const positionId = String(payload.positionId || '');
   const teamQuery = positionId
     ? `SELECT DISTINCT u.id, u.name FROM users u JOIN employee_positions ep ON ep.user_id = u.id
-       WHERE u.active = 1 AND ep.position_id = ? ORDER BY u.name`
-    : 'SELECT id, name FROM users WHERE active = 1 ORDER BY name';
+       WHERE u.active = 1 AND LOWER(u.username) <> 'admin' AND ep.position_id = ? ORDER BY u.name`
+    : "SELECT id, name FROM users WHERE active = 1 AND LOWER(username) <> 'admin' ORDER BY name";
   const team = positionId ? await env.TEAM_DB.prepare(teamQuery).bind(positionId).all() : await env.TEAM_DB.prepare(teamQuery).all();
   const [rules, exceptions, timeOff, schedules] = await Promise.all([
     env.TEAM_DB.prepare(`SELECT * FROM availability_rules WHERE (effective_from IS NULL OR effective_from <= ?)
@@ -669,7 +672,23 @@ export async function getTeamCoverage(request, payload, env) {
         preferred: people.filter((item) => item.preferred).length, scheduled: people.filter((item) => item.scheduled).length, people });
     }
   }
-  return { ok: true, weekStart, slots };
+  const salesState = await env.TEAM_DB.prepare(`SELECT period_start, period_end, completed_weeks, status, last_synced_at
+    FROM toast_sales_sync_state WHERE location_id = 'atlanta'`).first();
+  let salesSlots = [];
+  if (salesState?.status === 'ready' && salesState.period_start && salesState.period_end) {
+    const sales = await env.TEAM_DB.prepare(`SELECT CAST(strftime('%w', business_date) AS INTEGER) AS weekday, hour,
+        ROUND(SUM(net_sales_cents) * 1.0 / ?) AS average_sales_cents,
+        ROUND(SUM(order_count) * 1.0 / ?, 1) AS average_orders
+      FROM toast_hourly_sales WHERE business_date BETWEEN ? AND ? GROUP BY weekday, hour ORDER BY weekday, hour`)
+      .bind(Number(salesState.completed_weeks || 3), Number(salesState.completed_weeks || 3),
+        salesState.period_start, salesState.period_end).all();
+    salesSlots = sales.results.map((row) => ({ weekday: Number(row.weekday), hour: Number(row.hour),
+      averageSalesCents: Number(row.average_sales_cents || 0), averageOrders: Number(row.average_orders || 0) }));
+  }
+  return { ok: true, weekStart, slots, sales: {
+    status: salesState?.status || 'pending', periodStart: salesState?.period_start || '',
+    periodEnd: salesState?.period_end || '', lastSyncedAt: salesState?.last_synced_at || '', slots: salesSlots
+  } };
 }
 
 export async function getScheduleHistory(request, payload, env) {
@@ -926,6 +945,7 @@ export async function createInvitation(request, payload, env) {
   await env.TEAM_DB.prepare("UPDATE user_invitations SET status = 'revoked', revoked_at = ? WHERE email = ? COLLATE NOCASE AND status = 'pending'")
     .bind(nowIso(), email).run();
   const rawToken = randomToken(32);
+  const tokenHash = await sha256Hex(rawToken);
   const id = newId('invite');
   const now = nowIso();
   const expiresAt = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
@@ -933,11 +953,43 @@ export async function createInvitation(request, payload, env) {
     (id, email, name, role, position_ids_json, max_weekly_minutes, token_hash, status, expires_at, created_by, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
     .bind(id, email, name, role, JSON.stringify(Array.isArray(payload.positionIds) ? payload.positionIds.slice(0, 20) : []),
-      clampInt(payload.maxWeeklyMinutes, 0, 10080, 2400), await sha256Hex(rawToken), expiresAt, actor.id, now).run();
+      clampInt(payload.maxWeeklyMinutes, 0, 10080, 2400), tokenHash, expiresAt, actor.id, now).run();
   const deliveryConfigured = env.INVITATION_EMAIL_ENABLED === 'true' && !!env.NOTIFICATIONS?.send;
-  if (deliveryConfigured) await env.NOTIFICATIONS.send({ kind: 'invitation', invitationId: id, token: rawToken });
+  if (deliveryConfigured) await env.NOTIFICATIONS.send({
+    kind: 'invitation', invitationId: id, token: rawToken, tokenHash, deliveryKey: `${id}:initial`
+  });
   await audit(env.TEAM_DB, actor.id, 'invitation.create', 'user_invitation', id, { email, role });
   return { ok: true, id, expiresAt, deliveryConfigured };
+}
+
+export async function resendInvitation(request, payload, env) {
+  const actor = await requireRole(request, payload, env, 'management');
+  if (env.INVITATION_EMAIL_ENABLED !== 'true' || !env.NOTIFICATIONS?.send) {
+    throw new ApiError('invitation_email_not_configured', 503);
+  }
+  const invitation = await env.TEAM_DB.prepare(`SELECT * FROM user_invitations
+    WHERE id = ? AND status IN ('pending', 'expired')`).bind(payload.invitationId).first();
+  if (!invitation) throw new ApiError('invitation_not_resendable', 409);
+  const existingUser = await env.TEAM_DB.prepare('SELECT id FROM users WHERE email = ? COLLATE NOCASE')
+    .bind(invitation.email).first();
+  if (existingUser) throw new ApiError('email_taken', 409);
+
+  const rawToken = randomToken(32);
+  const tokenHash = await sha256Hex(rawToken);
+  const expiresAt = new Date(Date.now() + 72 * 3600 * 1000).toISOString();
+  const result = await env.TEAM_DB.prepare(`UPDATE user_invitations SET token_hash = ?, status = 'pending',
+      expires_at = ?, email_sent_at = NULL, email_last_error = NULL, accepted_at = NULL, revoked_at = NULL
+    WHERE id = ? AND status IN ('pending', 'expired')`)
+    .bind(tokenHash, expiresAt, invitation.id).run();
+  if (!result.meta.changes) throw new ApiError('invitation_not_resendable', 409);
+  await env.NOTIFICATIONS.send({
+    kind: 'invitation', invitationId: invitation.id, token: rawToken, tokenHash,
+    deliveryKey: `${invitation.id}:${tokenHash.slice(0, 16)}`
+  });
+  await audit(env.TEAM_DB, actor.id, 'invitation.resend', 'user_invitation', invitation.id, {
+    email: invitation.email, expiresAt
+  });
+  return { ok: true, expiresAt };
 }
 
 export async function revokeInvitation(request, payload, env) {

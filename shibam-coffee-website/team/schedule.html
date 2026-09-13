@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=10">
+  <link rel="stylesheet" href="/team/css/styles.css?v=11">
   <script src="/team/js/config.js?v=10" defer></script>
   <script src="/team/js/auth.js?v=10" defer></script>
-  <script src="/team/js/schedule.js?v=10" defer></script>
+  <script src="/team/js/schedule.js?v=11" defer></script>
 </head>
 <body data-page="app" data-require-role="barista">
   <header class="portal-header">
@@ -171,8 +171,8 @@
       </fieldset>
       <label class="availability-all-day"><input type="checkbox" name="allDay" checked><span>All day</span></label>
       <div class="form-row availability-exception-times" id="availability-exception-times" hidden>
-        <div class="form-group"><label for="availability-exception-start">From</label><input id="availability-exception-start" name="startTime" type="time" value="09:00"></div>
-        <div class="form-group"><label for="availability-exception-end">To</label><input id="availability-exception-end" name="endTime" type="time" value="17:00"></div>
+        <div class="form-group"><label for="availability-exception-start">From</label><select id="availability-exception-start" name="startTime"></select></div>
+        <div class="form-group"><label for="availability-exception-end">To</label><select id="availability-exception-end" name="endTime"></select></div>
       </div>
       <div class="form-group"><label for="availability-exception-note">Note <span class="optional">optional</span></label><textarea id="availability-exception-note" name="note" rows="3" maxlength="350"></textarea></div>
       <label class="availability-all-day"><input type="checkbox" name="repeats"><span>Repeat weekly</span></label>
