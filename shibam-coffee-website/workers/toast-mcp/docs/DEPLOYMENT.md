@@ -88,3 +88,36 @@ npm run deploy:dry-run
 ```
 
 Then use Auth0 test users and MCP Inspector to validate signup, email verification, multi-organization selection, consent, refresh, revocation, member scope/location denial, a small read, an oversized operational read, and cross-tenant denial. Production deployment is intentionally not performed by the repository test suite.
+
+## 6. BankCafeMCP (read-only Plaid bank data)
+
+BankCafeMCP is served by this Worker at `/bankcafemcp` with its own MCP endpoint
+(`/bankcafemcp/mcp`), its own OAuth authorization server, and its own OAuth KV
+namespace (`BANK_OAUTH_KV`). It shares only Auth0 sign-in and the D1 identity tables
+with the Toast connector; no Toast route, scope, grant, or tool changes.
+
+No Plaid credential is stored in this repository or as a Worker secret. The owner
+enters the Plaid client ID, secret, and an existing access token on the BankCafeMCP
+page; they are encrypted in D1 with the existing `CREDENTIAL_KEK_V1`, and the pasted
+access token is immediately rotated with Plaid's `/item/access_token/invalidate`.
+
+1. In Auth0, add these allowed URLs (do not replace the Toast ones):
+   - Callback: `https://shibamatlanta.com/bankcafemcp/auth/callback`
+   - Logout: `https://shibamatlanta.com/bankcafemcp/`
+   - Staging: the same two paths on the staging `workers.dev` origin.
+2. Apply the additive migration: `npx wrangler d1 migrations apply TOAST_MCP_DB --env staging --remote`
+   (then without `--env staging` for production).
+3. Deploy. Wrangler provisions the `BANK_OAUTH_KV` namespace from its draft binding and
+   writes the generated ID back to `wrangler.jsonc`; commit that ID (it is not a secret).
+4. Staging has `BANK_MODE=enabled`: sign in at `/bankcafemcp/`, connect a Plaid sandbox
+   Item, turn on bank access, and authorize MCP Inspector against `/bankcafemcp/mcp`.
+5. Production ships with `BANK_MODE=disabled`. After staging acceptance, set it to
+   `enabled` in `wrangler.jsonc`, redeploy, then connect the production Item.
+6. After connecting, delete any local copy of the old token (for example
+   `~/.bank-mcp/config.json`) and rotate the Plaid secret in the Plaid dashboard,
+   then use "Rotate secret" on the BankCafeMCP page.
+
+Access requires all of: `BANK_MODE=enabled`, the organization owner role, bank access
+turned on for the organization, and explicit per-scope consent (scopes are unticked by
+default). Bank tool results are never written to R2; audit rows record only the tool,
+outcome, status, and duration.

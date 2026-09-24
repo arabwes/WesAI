@@ -1,6 +1,9 @@
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { createMcpHandler } from "agents/mcp/server";
+import { handleBankRequest, isBankPath } from "./bank";
+import { cleanupBankRecords } from "./bank/store";
+import { clientMetadataIsSafe } from "./client-metadata";
 import { cleanupExpiredRecords } from "./db";
 import { CafeError, toErrorResponse } from "./errors";
 import { createCafeMcpServer } from "./mcp";
@@ -45,24 +48,6 @@ const defaultHandler: ExportedHandler<CafeEnvironment> = {
     return handlePortalRequest(env, request);
   },
 };
-
-function clientMetadataIsSafe(metadata: Record<string, unknown>): boolean {
-  if (metadata.software_statement !== undefined) return false;
-  if (typeof metadata.client_name === "string" && metadata.client_name.length > 100) return false;
-  if (Array.isArray(metadata.redirect_uris) && metadata.redirect_uris.length > 10) return false;
-  if (Array.isArray(metadata.contacts) && metadata.contacts.length > 5) return false;
-  for (const field of ["client_uri", "logo_uri", "tos_uri", "policy_uri"]) {
-    const value = metadata[field];
-    if (value === undefined) continue;
-    if (typeof value !== "string" || value.length > 500) return false;
-    try {
-      if (new URL(value).protocol !== "https:") return false;
-    } catch {
-      return false;
-    }
-  }
-  return true;
-}
 
 function createProvider(env: CafeEnvironment): OAuthProvider<CafeEnvironment> {
   return new OAuthProvider<CafeEnvironment>({
@@ -150,6 +135,8 @@ const worker: ExportedHandler<CafeEnvironment, CafeJob> = {
       let response: Response;
       if (pathname === `/.well-known/oauth-authorization-server${env.BASE_PATH}`) {
         response = routedRequest.method === "GET" ? authorizationMetadata(env) : new Response(null, { status: 405, headers: { Allow: "GET" } });
+      } else if (isBankPath(pathname, env)) {
+        response = await handleBankRequest(routedRequest, env, ctx);
       } else {
         response = await createProvider(env).fetch(routedRequest, env, ctx);
       }
@@ -184,6 +171,7 @@ const worker: ExportedHandler<CafeEnvironment, CafeJob> = {
     const jobs: Promise<unknown>[] = [
       cleanupExpiredRecords(env),
       createProvider(env).purgeExpiredData(env, { batchSize: 100 }),
+      cleanupBankRecords(env),
     ];
     if (controller.cron === "0 */8 * * *") jobs.push(reconcilePartnerLocations(env));
     ctx.waitUntil(Promise.all(jobs).then(() => undefined));

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>BankCafeMCP</title>
+  <link rel="stylesheet" href="/bankcafemcp/styles.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/bankcafemcp/">BankCafeMCP</a><span class="badge">Read-only bank connector</span></header>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Cafe MCP · Bank data</p>
+      <h1>Your bank balances and transactions, for the tools you approve.</h1>
+      <p class="lede">Connect a bank through your own Plaid account, then authorize an MCP client. BankCafeMCP is read-only: it cannot move money, pay anyone, or change anything at your bank.</p>
+      <div id="signed-out"><a class="button" href="/bankcafemcp/auth/login">Sign in</a></div>
+    </section>
+
+    <div id="notice" class="notice hidden" role="status" aria-live="polite"></div>
+
+    <section id="workspace" class="hidden">
+      <div class="account-row">
+        <div><strong id="user-name"></strong><div id="user-email" class="fine"></div><div id="organization-name" class="fine"></div></div>
+        <form id="logout-form" method="post" action="/bankcafemcp/auth/logout"><input id="logout-csrf" type="hidden" name="csrf"><button class="link-button" type="submit">Sign out</button></form>
+      </div>
+
+      <p id="mode-disabled" class="warning hidden">BankCafeMCP is turned off for this deployment.</p>
+      <p id="not-owner" class="warning hidden">Only the organization owner can manage BankCafeMCP.</p>
+
+      <section class="grid two">
+        <article class="card">
+          <h2>Bank access</h2>
+          <p>When this is off, MCP clients cannot read any bank data, even with an existing grant.</p>
+          <label class="check"><input id="enabled-toggle" type="checkbox"> Allow authorized MCP clients to read bank data</label>
+        </article>
+        <article class="card">
+          <h2>MCP endpoint</h2>
+          <code id="endpoint" class="endpoint"></code>
+          <p class="fine">Add this URL as a custom connector in your MCP client. It opens a consent page where you pick exactly which bank data it may read.</p>
+        </article>
+      </section>
+
+      <section id="owner-tools" class="hidden">
+        <section class="card">
+          <h2>Connect a bank</h2>
+          <p>Enter your Plaid keys and an existing Plaid access token. BankCafeMCP verifies it and immediately swaps it for a new token, so the copy you paste here stops working.</p>
+          <form id="connection-form" class="form-grid" autocomplete="off">
+            <label>Label<input name="label" maxlength="80" required placeholder="Business checking"></label>
+            <label>Environment<select name="environment"><option value="production">Production</option><option value="sandbox">Sandbox</option></select></label>
+            <label>Plaid client ID<input name="clientId" required spellcheck="false"></label>
+            <label>Plaid secret<input name="clientSecret" type="password" autocomplete="new-password" required></label>
+            <label class="wide">Plaid access token<input name="accessToken" type="password" autocomplete="new-password" required spellcheck="false"></label>
+            <div class="wide actions"><button type="submit">Verify and connect</button></div>
+          </form>
+        </section>
+        <section class="card"><h2>Connected banks</h2><div id="connections" class="stack empty">No banks connected.</div></section>
+      </section>
+
+      <section class="card"><h2>MCP client grants</h2><p class="fine">Revocation is immediate. Reauthorize the client to reconnect it later.</p><div id="grants" class="stack"></div></section>
+    </section>
+  </main>
+  <footer><nav><a href="/toast-mcp/privacy.html">Privacy</a><a href="/toast-mcp/security.html">Security</a><a href="/toast-mcp/support.html">Support &amp; deletion</a></nav><p>BankCafeMCP uses Plaid for read-only bank access and is not endorsed by Plaid or your bank.</p></footer>
+  <script type="module" src="/bankcafemcp/app.js"></script>
+</body>
+</html>

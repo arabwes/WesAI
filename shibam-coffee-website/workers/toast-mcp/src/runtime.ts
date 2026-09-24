@@ -31,8 +31,9 @@ export interface WorkerSecrets {
 
 export type BrokerEnvironment = Env & WorkerSecrets;
 
-export type CafeEnvironment = Omit<Env, keyof WorkerSecrets | "CAFE_CREDENTIAL_BROKER" | "CAFE_MCP_JOBS" | "TOAST_PARTNER_MODE" | "TOAST_BYO_MODE"> &
+export type CafeEnvironment = Omit<Env, keyof WorkerSecrets | "CAFE_CREDENTIAL_BROKER" | "CAFE_MCP_JOBS" | "TOAST_PARTNER_MODE" | "TOAST_BYO_MODE" | "BASE_PATH"> &
   WorkerSecrets & {
+    BASE_PATH: string;
     TOAST_PARTNER_MODE: "disabled" | "enabled";
     TOAST_BYO_MODE: "disabled" | "enabled";
     OAUTH_PROVIDER: OAuthHelpers;

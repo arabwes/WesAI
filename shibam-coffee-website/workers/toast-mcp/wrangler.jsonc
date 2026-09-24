@@ -20,6 +20,18 @@
 		{
 			"pattern": "shibamatlanta.com/.well-known/oauth-authorization-server/toast-mcp*",
 			"zone_name": "shibamatlanta.com"
+		},
+		{
+			"pattern": "shibamatlanta.com/bankcafemcp*",
+			"zone_name": "shibamatlanta.com"
+		},
+		{
+			"pattern": "shibamatlanta.com/.well-known/oauth-protected-resource/bankcafemcp*",
+			"zone_name": "shibamatlanta.com"
+		},
+		{
+			"pattern": "shibamatlanta.com/.well-known/oauth-authorization-server/bankcafemcp*",
+			"zone_name": "shibamatlanta.com"
 		}
 	],
 	"assets": {
@@ -39,6 +51,9 @@
 		{
 			"binding": "OAUTH_KV",
 			"id": "9f24222cf62c438db4290618d705617f"
+		},
+		{
+			"binding": "BANK_OAUTH_KV"
 		}
 	],
 	"r2_buckets": [
@@ -116,7 +131,9 @@
 		"AUDIT_RETENTION_DAYS": "90",
 		"RESULT_TTL_SECONDS": "86400",
 		"INLINE_RESULT_MAX_BYTES": "524288",
-		"RESULT_CHUNK_MAX_BYTES": "262144"
+		"RESULT_CHUNK_MAX_BYTES": "262144",
+		"BANK_BASE_PATH": "/bankcafemcp",
+		"BANK_MODE": "disabled"
 	},
 	"env": {
 		"staging": {
@@ -143,6 +160,9 @@
 				{
 					"binding": "OAUTH_KV",
 					"id": "f6d2bc9b891d4264bf88606fc28e02e3"
+				},
+				{
+					"binding": "BANK_OAUTH_KV"
 				}
 			],
 			"r2_buckets": [
@@ -189,7 +209,9 @@
 				"AUDIT_RETENTION_DAYS": "90",
 				"RESULT_TTL_SECONDS": "86400",
 				"INLINE_RESULT_MAX_BYTES": "524288",
-				"RESULT_CHUNK_MAX_BYTES": "262144"
+				"RESULT_CHUNK_MAX_BYTES": "262144",
+				"BANK_BASE_PATH": "/bankcafemcp",
+				"BANK_MODE": "enabled"
 			}
 		}
 	}
