@@ -23,6 +23,8 @@ The portal now uses Cloudflare Pages Functions and D1. See
 | `documents.html` / `document.html` | Barista+ | Document hub and individual Google Drive document viewer |
 | `write-up.html` | Barista+ | Private corrective-action inbox; Lead+ draft and send workspace |
 | `admin.html` | Management | Submission history, catalog, and users |
+| `catering-requests.html` | Lead+ | Catering quote requests from the public site |
+| `contact-requests.html` | Lead+ | Contact messages from the public site |
 
 ## Roles
 

@@ -6,41 +6,11 @@ container — no analytics or pixel code is hardcoded into the HTML.
 
 ## 1. Where the GTM ID lives and how to update it
 
-The GTM container ID is a single value: `CONFIG.GTM_ID` in `js/config.js`.
-
-```js
-GTM_ID: "GTM-XXXXXXX",
-```
-
-Every page loads `js/config.js` synchronously in `<head>`, immediately
-before the GTM bootstrap snippet, so the snippet can read `CONFIG.GTM_ID`
-as a real variable when it fires:
-
-```html
-<script src="/js/config.js"></script>
-<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer',CONFIG.GTM_ID);</script>
-```
-
-There's also a `<noscript>` fallback immediately after `<body>` on every
-page, for visitors with JavaScript disabled:
-
-```html
-<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX"
-height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-```
-
-**Important:** the noscript fallback cannot read `config.js` (JS is off by
-definition when it renders), so its `id=GTM-XXXXXXX` is a literal string.
-Whenever you change `CONFIG.GTM_ID`, you must also find-and-replace the
-literal `GTM-XXXXXXX` in this noscript tag across all 8 HTML files:
-
-```bash
-grep -rl 'GTM-XXXXXXX' . | xargs sed -i 's/GTM-XXXXXXX/GTM-YOUR-REAL-ID/g'
-```
+Set `CONFIG.GTM_ID` in `js/config.js` to your real container ID, for example
+`GTM-ABC1234`. It is empty by default. Every page loads the container only
+when this value matches the GTM ID format, so the site sends no request to a
+placeholder container. The no-JavaScript fallback is omitted because a
+runtime configuration value cannot be read when JavaScript is disabled.
 
 ## 2. How to publish a GA4 tag via GTM
 

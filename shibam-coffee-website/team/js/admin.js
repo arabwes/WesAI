@@ -361,11 +361,25 @@
     loadSubmissions(select.value, controls, expanded);
   }
 
+  var submissionLoadVersion = 0;
+
   function loadSubmissions(formType, controls, expanded) {
-    Auth.apiCall('getEntries', { formType: formType, limit: 200 }).then(function (result) {
-      if (!result.ok) { controls.setData([]); return; }
-      assignSubmissionBadges(result.entries);
-      controls.setData(groupSubmissions(result.entries));
+    var version = ++submissionLoadVersion;
+    var entries = [];
+    function loadPage() {
+      if (version !== submissionLoadVersion) return Promise.resolve();
+      return Auth.apiCall('getEntries', { formType: formType, limit: 500, offset: entries.length }).then(function (result) {
+        if (version !== submissionLoadVersion) return;
+        if (!result.ok || !Array.isArray(result.entries)) throw new Error('Could not load submissions');
+        entries = entries.concat(result.entries);
+        if (result.hasMore) return loadPage();
+        if (version !== submissionLoadVersion) return;
+        assignSubmissionBadges(entries);
+        controls.setData(groupSubmissions(entries));
+      });
+    }
+    loadPage().catch(function () {
+      if (version === submissionLoadVersion) controls.setData([]);
     });
   }
 

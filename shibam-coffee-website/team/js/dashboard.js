@@ -33,5 +33,19 @@
         // The dashboard remains usable if the reminder cannot be loaded.
       });
     }
+
+    var contactAlert = document.getElementById('contact-request-alert');
+    if (contactAlert && session && Auth.hasRole(session, 'lead')) {
+      Auth.apiCall('getContactRequests', { status: 'new' }).then(function (result) {
+        if (!result.ok || !Array.isArray(result.requests) || !result.requests.length) return;
+        var count = result.requests.length;
+        document.getElementById('contact-request-alert-title').textContent = count === 1
+          ? 'You have a new contact message'
+          : 'You have ' + count + ' new contact messages';
+        contactAlert.hidden = false;
+      }).catch(function () {
+        // The dashboard remains usable if the reminder cannot be loaded.
+      });
+    }
   });
 })();

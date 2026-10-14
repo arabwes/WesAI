@@ -82,15 +82,13 @@
   </script>
 
   <script src="/js/config.js"></script>
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  <script>if (/^GTM-[A-Z0-9]+$/.test(CONFIG.GTM_ID || '')) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer',CONFIG.GTM_ID);</script>
 </head>
 <body>
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   <header class="site-header" id="site-header">
     <div class="container nav">
@@ -117,7 +115,7 @@
 
   <main>
     <section class="hero hero--page">
-      <img src="/images/hero-careers.jpg" alt="Shibam Coffee Atlanta team at the counter" class="hero-bg-image" onerror="this.remove()">
+      <img src="/images/barista-at-counter.webp" alt="Barista at the Shibam Coffee counter" class="hero-bg-image" onerror="this.remove()">
       <div class="hero-overlay" aria-hidden="true"></div>
       <div class="container hero-content">
         <span class="tagline-badge">We're Hiring</span>

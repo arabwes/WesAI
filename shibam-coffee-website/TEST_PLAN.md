@@ -89,14 +89,11 @@ done
       form's sharing setting must be "Anyone with the link" / sign-in
       not required — otherwise applicants are bounced to a Google
       account login instead of the application.
-- [ ] If `CONTACT_FORM_ENDPOINT` in `js/config.js` is still
-      `"YOUR_FORM_ENDPOINT"`: submitting the contact form shows "This
-      form isn't connected yet — please call us at (470) 359-6586
-      instead." and does **not** attempt a network request.
-- [ ] Once a real endpoint is configured: submitting the contact form
-      shows "Sending…", then either the success message + form reset, or
-      the error message + phone number — never a silent failure or stuck
-      "Sending…" state.
+- [ ] Contact page: required fields and email format are validated before
+      submission. A valid message posts to `/api/contact-request`, shows
+      "Sending…", then a success message and form reset.
+- [ ] A submitted contact message appears at `/team/contact-requests` for
+      Lead and Management, with a status control (new/reviewed/closed).
 
 ## 7. Images
 

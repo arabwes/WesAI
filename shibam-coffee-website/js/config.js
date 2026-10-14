@@ -8,10 +8,8 @@
 // -----------------------------------------------------------------------------
 
 const CONFIG = {
-  // Google Tag Manager container ID. Drives GA4, Meta Pixel, and TikTok
-  // Pixel — see /tracking-notes.md. Also update the <noscript> fallback
-  // GTM ID in each HTML file's <body> to match this value.
-  GTM_ID: "GTM-XXXXXXX",
+  // Set to a real Google Tag Manager container ID to enable tracking.
+  GTM_ID: "",
 
   // Where "Order Online" CTAs send customers.
   ONLINE_ORDER_URL: "https://shibamcoffee.appfront.app/",
@@ -34,11 +32,8 @@ const CONFIG = {
   APP_STORE_URL: "https://apps.apple.com/us/app/shibam-coffee-co/id6739554858",
   GOOGLE_PLAY_URL: "https://play.google.com/store/apps/details?id=ai.appfront.shibamcoffee",
 
-  // Form submission endpoint (Formspree, Netlify Forms, or any service
-  // that accepts a POST with FormData and an Accept: application/json
-  // header). Replace before launch — the contact form will not deliver
-  // mail until this is set.
-  CONTACT_FORM_ENDPOINT: "YOUR_FORM_ENDPOINT",
+  // Contact messages are stored in D1 and visible to leads in the team portal.
+  CONTACT_FORM_ENDPOINT: "/api/contact-request",
 
   // Catering quote requests post to the site's own Pages Function, which
   // stores them in the shibam-team D1 database for the team portal to
@@ -48,19 +43,5 @@ const CONFIG = {
   // Google Form for job applications. NOTE: this form's sharing setting
   // must be "Anyone with the link" / sign-in not required, or applicants
   // get bounced to a Google account login instead of the application.
-  JOIN_TEAM_FORM_URL: "https://forms.gle/ppJVGfhi41yvguzK7",
-
-  // Geo coordinates for GBP matching, kept here as the source of truth.
-  // The CafeOrCoffeeShop JSON-LD on every page is static HTML (so
-  // crawlers see it without running JS) and hardcodes these same
-  // values directly — if you update GEO_LAT/GEO_LNG here, also update
-  // the "geo" block in every HTML file's JSON-LD to match. Pull exact
-  // values from the Google Business Profile listing, not an approximation.
-  GEO_LAT: "34.0432",
-  GEO_LNG: "-84.2778",
-
-  // Reference value for CafeOrCoffeeShop structured data. Like GEO_LAT/
-  // GEO_LNG above, the JSON-LD "priceRange" is static per page — update
-  // both here and in every HTML file's JSON-LD if pricing tier changes.
-  PRICE_RANGE: "$$"
+  JOIN_TEAM_FORM_URL: "https://forms.gle/ppJVGfhi41yvguzK7"
 };

@@ -1117,7 +1117,6 @@
       var payload = Object.assign({
         formType: formType,
         store: (typeof CONFIG !== 'undefined' && CONFIG.STORE_NAME) || '',
-        submittedAt: new Date().toISOString()
       }, buildPayload(form));
       if (editingId) payload.submissionId = editingId;
 

@@ -100,14 +100,12 @@ This site lives in the `shibam-coffee-website/` directory of the
 Edit `js/config.js`:
 
 ```js
-GTM_ID: "GTM-XXXXXXX",
+GTM_ID: "GTM-ABC1234",
 ```
 
-This value drives the GTM container loaded in every page's `<head>`. You
-also need to manually update the **noscript fallback** GTM ID, since it
-sits inside a `<noscript>` tag and can't read from `config.js` (JS is
-disabled by definition when that fallback renders). Update the literal
-`GTM-XXXXXXX` immediately after `<body>` in every HTML file to match.
+This value drives the GTM container loaded in every page's `<head>`. Leave
+it empty until the real container ID is available; no placeholder request
+will be sent.
 
 ## 5. How to update business hours
 
@@ -127,12 +125,8 @@ to stay accurate.
 
 ## 6. How to add photos
 
-See `images/README.md` for the full list of expected filenames and
-suggested shots/sizes. In short: drop a file into `/images/` with the
-exact name an `<img src>` already references (e.g. `hero-storefront.jpg`)
-and it appears automatically — no HTML changes needed. Until then, every
-placeholder image fails gracefully (it removes itself via `onerror`,
-leaving the warm gradient background visible).
+See `images/README.md` for the photos currently used. When replacing one,
+keep the HTML path and alt text accurate and verify the asset in the build.
 
 ## 7. How to update the sitemap after URL changes
 
@@ -160,15 +154,14 @@ guide and the dataLayer events each CTA fires.
 ## Before you go live
 
 - [x] Site URL set to `https://shibamatlanta.com` everywhere.
-- [ ] Set `GTM_ID` in `js/config.js` and the noscript fallback in every HTML file.
+- [ ] Set the real `GTM_ID` in `js/config.js` if analytics is required.
 - [ ] Set `GOOGLE_MAPS_EMBED_SRC` in `js/config.js` (Google Maps → Share → Embed a map).
-- [ ] Set `CONTACT_FORM_ENDPOINT` (e.g. Formspree). The catering/event
-      request form has its own backend (`CATERING_FORM_ENDPOINT`, a Pages
-      Function that stores submissions in D1 for the team portal) and
-      does not need this. The "Join Our Team" page links straight to a
+- [x] Contact and catering requests use Pages Functions and D1; Leads can
+      review both from the team portal. Apply migrations before deploying.
+      The "Join Our Team" page links straight to a
       Google Form (`JOIN_TEAM_FORM_URL` in `js/config.js`) — update it if
       that form's URL changes, and make sure its sharing setting stays
       "Anyone with the link" / sign-in not required.
-- [ ] Verify `GEO_LAT` / `GEO_LNG` against the exact Google Business Profile coordinates.
+- [ ] Verify the JSON-LD geo coordinates against the Google Business Profile.
 - [ ] Double-check business hours against the live Google Business Profile listing.
-- [ ] Add real photos (see `images/README.md`).
+- [x] Add real photos (see `images/README.md`).

@@ -619,7 +619,6 @@
 
 .portal-header__brand a { color: inherit; text-decoration: none; }
 .form-card-link--schedule { border-color: #8aa892; background: linear-gradient(145deg, var(--color-surface), #f3f8f4); }
-.form-card-link--schedule-admin { border-color: var(--color-gold); background: linear-gradient(145deg, var(--color-surface), var(--color-cream)); }
 .form-card-link--profile { border-color: #8aa0b8; background: linear-gradient(145deg, var(--color-surface), #f2f6fa); }
 
 .schedule-shell { display: grid; gap: var(--space-5); }

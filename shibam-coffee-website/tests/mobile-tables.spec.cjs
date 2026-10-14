@@ -50,10 +50,17 @@ async function mockBackend(page) {
     } else if (action === 'getEntries') {
       payload = {
         ok: true,
-        entries: [
+        entries: body.offset ? [
+          { submittedAt: new Date(Date.now() - 3600000).toISOString(), employeeName: 'Earlier Barista', date: '2026-08-18', product: 'Another product', details: '{"category":"Tea","qtyKitchen":2}', entryId: 'e2', lastEditedBy: '', lastEditedAt: '' },
+        ] : [
           { submittedAt: new Date().toISOString(), employeeName: 'Test Barista', date: '2026-08-19', product: 'Some product with a long name', details: '{"category":"Coffee Beans","qtyKitchen":3,"qtyStorage":1,"notes":""}', entryId: 'e1', lastEditedBy: '', lastEditedAt: '' },
         ],
+        hasMore: !body.offset,
       };
+    } else if (action === 'getContactRequests') {
+      payload = { ok: true, requests: [
+        { id: 'contact-test', name: 'Customer Example', email: 'customer@example.com', phone: '4705550100', message: 'I have a question about a large order.', status: 'new', createdAt: new Date().toISOString() },
+      ] };
     } else if (action === 'getEmployeeMessageSummary') {
       payload = { ok: true, pendingCount: 1 };
     } else if (action === 'getUsers') {
@@ -178,6 +185,7 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     '/team/documents',
     '/team/document?id=doc-1',
     '/team/write-up',
+    '/team/contact-requests',
   ];
 
   for (const path of protectedPages) {
@@ -190,6 +198,15 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
       await assertNoHorizontalScroll(page, path);
     });
   }
+
+  test('contact messages can be reviewed from the portal', async ({ page }) => {
+    await mockBackend(page);
+    await seedSession(page);
+    await page.goto('/team/contact-requests');
+    await expect(page.getByText('I have a question about a large order.')).toBeVisible();
+    await page.locator('#contact-requests-list select').selectOption('reviewed');
+    await expect(page.locator('#contact-requests-list .badge')).toHaveText('reviewed');
+  });
 
   test('admin dashboard — all five tabs stay within viewport', async ({ page }) => {
     await mockBackend(page);
@@ -208,6 +225,7 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
     await mockBackend(page);
     await seedSession(page);
     await page.goto('/team/admin');
+    await expect(page.locator('.submission-row')).toHaveCount(2);
     await page.waitForTimeout(300);
     await page.click('.submission-row');
     await page.waitForTimeout(150);

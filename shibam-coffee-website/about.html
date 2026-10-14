@@ -82,15 +82,13 @@
   </script>
 
   <script src="/js/config.js"></script>
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  <script>if (/^GTM-[A-Z0-9]+$/.test(CONFIG.GTM_ID || '')) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer',CONFIG.GTM_ID);</script>
 </head>
 <body>
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   <header class="site-header" id="site-header">
     <div class="container nav">
@@ -117,7 +115,7 @@
 
   <main>
     <section class="hero hero--page">
-      <img src="/images/hero-about.jpg" alt="Interior of Shibam Coffee Atlanta" class="hero-bg-image" onerror="this.remove()">
+      <img src="/images/hero-storefront.webp" alt="Interior of Shibam Coffee Atlanta" class="hero-bg-image" onerror="this.remove()">
       <div class="hero-overlay" aria-hidden="true"></div>
       <div class="container hero-content">
         <span class="tagline-badge">Our Story</span>
@@ -139,7 +137,7 @@
             <p>More than anything, we built Shibam Coffee Atlanta to be a gathering place — for study sessions and first dates, family visits and community events, the quiet morning regulars and the Friday-night crowd staying until close. Halal certified, organic Yemeni beans, and a warm room: that's the whole idea.</p>
           </div>
           <div class="editorial-image">
-            <img src="/images/about-interior.jpg" alt="Warm interior seating area at Shibam Coffee Atlanta" onerror="this.remove()">
+            <img src="/images/hero-storefront.webp" alt="Coffee shop interior at Shibam Coffee Atlanta" onerror="this.remove()">
           </div>
         </div>
       </div>
@@ -149,7 +147,7 @@
       <div class="container">
         <div class="editorial editorial--reverse">
           <div class="editorial-image">
-            <img src="/images/about-yemen-coffee.jpg" alt="Traditional Yemeni qahwa coffee service" onerror="this.remove()">
+            <img src="/images/coffee-service.webp" alt="Coffee cups and serving pot" onerror="this.remove()">
           </div>
           <div class="editorial-text">
             <span class="eyebrow">Heritage</span>
@@ -202,12 +200,12 @@
           <h2 id="gallery-heading">Shibam Coffee Atlanta</h2>
         </div>
         <div class="photo-grid">
-          <div class="photo-grid-item"><img src="/images/about-storefront-exterior.jpg" alt="Shibam Coffee Atlanta storefront exterior" onerror="this.parentElement.removeChild(this)"></div>
-          <div class="photo-grid-item"><img src="/images/about-interior-atmosphere.jpg" alt="Interior atmosphere at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
-          <div class="photo-grid-item"><img src="/images/about-coffee-bar.jpg" alt="Coffee bar at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
-          <div class="photo-grid-item"><img src="/images/about-drinks.jpg" alt="Signature drinks at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
-          <div class="photo-grid-item"><img src="/images/about-community-gathering.jpg" alt="Community gathering at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
-          <div class="photo-grid-item"><img src="/images/about-desserts.jpg" alt="Halal desserts at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
+          <div class="photo-grid-item"><img src="/images/hero-storefront.webp" alt="Coffee shop interior at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
+          <div class="photo-grid-item"><img src="/images/hero-storefront.webp" alt="Coffee shop interior at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
+          <div class="photo-grid-item"><img src="/images/barista-at-counter.webp" alt="Barista preparing drinks at the coffee bar" onerror="this.parentElement.removeChild(this)"></div>
+          <div class="photo-grid-item"><img src="/images/signature-pastry-drink.webp" alt="Specialty drinks and cake" onerror="this.parentElement.removeChild(this)"></div>
+          <div class="photo-grid-item"><img src="/images/shibam-cover.webp" alt="Shibam Coffee drinks and pastries" onerror="this.parentElement.removeChild(this)"></div>
+          <div class="photo-grid-item"><img src="/images/dessert-spread.webp" alt="Selection of desserts" onerror="this.parentElement.removeChild(this)"></div>
         </div>
       </div>
     </section>

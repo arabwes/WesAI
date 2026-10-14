@@ -13,10 +13,27 @@ export function json(data, status = 200, headers = {}) {
 }
 
 export async function readJson(request) {
+  const maxBytes = 1_000_000;
   const contentLength = Number(request.headers.get('content-length') || 0);
-  if (contentLength > 1_000_000) throw new ApiError('payload_too_large', 413);
+  if (contentLength > maxBytes) throw new ApiError('payload_too_large', 413);
   try {
-    const value = await request.json();
+    const reader = request.body?.getReader();
+    if (!reader) throw new Error('Missing body');
+    const decoder = new TextDecoder();
+    let body = '';
+    let bytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > maxBytes) {
+        await reader.cancel();
+        throw new ApiError('payload_too_large', 413);
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+    body += decoder.decode();
+    const value = JSON.parse(body);
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('Expected an object');
     }

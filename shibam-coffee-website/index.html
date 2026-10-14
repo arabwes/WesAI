@@ -94,7 +94,7 @@
 
   <!-- Google Tag Manager — GTM ID lives in /js/config.js (CONFIG.GTM_ID) -->
   <script src="/js/config.js"></script>
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  <script>if (/^GTM-[A-Z0-9]+$/.test(CONFIG.GTM_ID || '')) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
@@ -102,10 +102,6 @@
   <!-- End Google Tag Manager -->
 </head>
 <body>
-  <!-- Google Tag Manager (noscript) — keep this ID in sync with CONFIG.GTM_ID -->
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-  <!-- End Google Tag Manager (noscript) -->
 
   <header class="site-header" id="site-header">
     <div class="container nav">
@@ -133,7 +129,7 @@
   <main>
     <!-- Hero -->
     <section class="hero">
-      <img src="/images/hero-storefront.jpg" alt="Shibam Coffee Atlanta storefront and coffee bar" class="hero-bg-image" onerror="this.remove()">
+      <img src="/images/hero-storefront.webp" alt="Interior of Shibam Coffee Atlanta" class="hero-bg-image" onerror="this.remove()">
       <div class="hero-overlay" aria-hidden="true"></div>
       <div class="container hero-content">
         <span class="tagline-badge">Premium &bull; Yemeni &bull; Organic &bull; Halal Certified</span>
@@ -158,7 +154,7 @@
         </div>
         <div class="grid grid--4">
           <article class="card">
-            <div class="card-media"><img src="/images/menu-pistachio-latte.jpg" alt="Pistachio Latte at Shibam Coffee Atlanta" onerror="this.parentElement.removeChild(this)"></div>
+            <div class="card-media"><img src="/images/signature-pastry-drink.webp" alt="Specialty drinks and cake at Shibam Coffee" onerror="this.parentElement.removeChild(this)"></div>
             <div class="card-body">
               <span class="badge">Popular</span>
               <h3>Pistachio Latte</h3>
@@ -166,7 +162,7 @@
             </div>
           </article>
           <article class="card">
-            <div class="card-media"><img src="/images/menu-shibam-latte.jpg" alt="Shibam Latte with traditional Yemeni spices" onerror="this.parentElement.removeChild(this)"></div>
+            <div class="card-media"><img src="/images/coffee-service.webp" alt="Coffee cups and serving pot at Shibam Coffee" onerror="this.parentElement.removeChild(this)"></div>
             <div class="card-body">
               <span class="badge">Signature</span>
               <h3>Shibam Latte</h3>
@@ -174,7 +170,7 @@
             </div>
           </article>
           <article class="card">
-            <div class="card-media"><img src="/images/menu-adeni-chai.jpg" alt="Adeni Chai Yemeni spiced tea" onerror="this.parentElement.removeChild(this)"></div>
+            <div class="card-media"><img src="/images/shibam-cover.webp" alt="Shibam Coffee drinks and pastries" onerror="this.parentElement.removeChild(this)"></div>
             <div class="card-body">
               <span class="badge">Signature</span>
               <h3>Adeni Chai</h3>
@@ -182,7 +178,7 @@
             </div>
           </article>
           <article class="card">
-            <div class="card-media"><img src="/images/dessert-honeycomb-bread.jpg" alt="Honeycomb bread dessert" onerror="this.parentElement.removeChild(this)"></div>
+            <div class="card-media"><img src="/images/dessert-spread.webp" alt="Selection of desserts at Shibam Coffee" onerror="this.parentElement.removeChild(this)"></div>
             <div class="card-body">
               <span class="badge">Popular</span>
               <h3>Honeycomb Bread</h3>
@@ -281,7 +277,7 @@
             </div>
           </div>
           <div class="editorial-image">
-            <img src="/images/app-preview.jpg" alt="Shibam Coffee Atlanta rewards app preview" onerror="this.remove()">
+            <img src="/images/app-preview.webp" alt="Shibam Coffee Atlanta rewards app preview" onerror="this.remove()">
           </div>
         </div>
       </div>

@@ -115,8 +115,7 @@
   }
 
   // ---------------------------------------------------------------------
-  // Form submission — posts as FormData to the endpoint configured in
-  // CONFIG (Formspree / Netlify Forms compatible) and shows an inline
+  // Form submission — posts as FormData to the site API and shows an inline
   // status message instead of navigating away.
   // ---------------------------------------------------------------------
   function initForms() {
@@ -134,7 +133,9 @@
     form.addEventListener('submit', function (e) {
       e.preventDefault();
 
-      if (!endpoint || endpoint === 'YOUR_FORM_ENDPOINT') {
+      if (!form.reportValidity()) return;
+
+      if (!endpoint) {
         setStatus(status, 'error', 'This form isn’t connected yet — please call us at (470) 359-6586 instead.');
         return;
       }

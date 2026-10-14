@@ -58,7 +58,7 @@ export async function setItemStatus(request, payload, env, status) {
 export async function submitForm(request, payload, env) {
   const user = await requireRole(request, payload, env);
   if (!VALID_LOG_TYPES.has(payload.formType)) throw new ApiError('invalid_formType', 400);
-  const submittedAt = String(payload.submittedAt || nowIso());
+  const submittedAt = nowIso();
   const entryDate = String(payload.weekOf || payload.date || payload.orderDate || '');
   const items = Array.isArray(payload.items) ? payload.items : [];
   const unlisted = Array.isArray(payload.unlistedItems) ? payload.unlistedItems : [];
@@ -90,10 +90,11 @@ export async function submitForm(request, payload, env) {
 export async function getEntries(request, payload, env) {
   await requireRole(request, payload, env, 'management');
   if (!VALID_LOG_TYPES.has(payload.formType)) throw new ApiError('invalid_formType', 400);
-  const limit = clampInt(payload.limit, 1, 500, 200);
+  const limit = clampInt(payload.limit, 1, 500, 500);
+  const offset = clampInt(payload.offset, 0, 2_147_483_647, 0);
   const { results } = await env.TEAM_DB.prepare(`SELECT * FROM form_entries
-    WHERE form_type = ? ORDER BY submitted_at DESC LIMIT ?`).bind(payload.formType, limit).all();
-  return { ok: true, entries: results.map((row) => ({
+    WHERE form_type = ? ORDER BY submitted_at DESC, id DESC LIMIT ? OFFSET ?`).bind(payload.formType, limit + 1, offset).all();
+  return { ok: true, hasMore: results.length > limit, entries: results.slice(0, limit).map((row) => ({
     submittedAt: row.submitted_at,
     employeeName: row.employee_name,
     date: row.entry_date,

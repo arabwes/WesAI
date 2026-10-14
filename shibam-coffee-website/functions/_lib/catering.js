@@ -42,6 +42,7 @@ export async function submitCateringRequest(request, payload, env) {
     ? null
     : clampInt(payload.guestCount, 1, 5000, null);
   const details = String(payload.details || '').trim().slice(0, 2000);
+  if (!details) throw new ApiError('missing_details', 400);
 
   const id = newId('catering');
   const now = nowIso();

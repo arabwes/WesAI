@@ -82,15 +82,13 @@
   </script>
 
   <script src="/js/config.js"></script>
-  <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+  <script>if (/^GTM-[A-Z0-9]+$/.test(CONFIG.GTM_ID || '')) (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
   new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
   j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
   'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
   })(window,document,'script','dataLayer',CONFIG.GTM_ID);</script>
 </head>
 <body>
-  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX"
-  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
   <header class="site-header" id="site-header">
     <div class="container nav">
@@ -117,7 +115,7 @@
 
   <main>
     <section class="hero hero--page">
-      <img src="/images/hero-contact.jpg" alt="Shibam Coffee Atlanta counter" class="hero-bg-image" onerror="this.remove()">
+      <img src="/images/barista-at-counter.webp" alt="Barista at the Shibam Coffee counter" class="hero-bg-image" onerror="this.remove()">
       <div class="hero-overlay" aria-hidden="true"></div>
       <div class="container hero-content">
         <span class="tagline-badge">We'd Love to Hear From You</span>
@@ -164,7 +162,7 @@
 
           <div class="form-card">
             <h2 class="mt-0">Send Us a Message</h2>
-            <form id="contact-inquiry-form" novalidate>
+            <form id="contact-inquiry-form">
               <div class="form-grid">
                 <div class="form-group">
                   <label for="contact-name">Name <span class="required">*</span></label>
@@ -183,6 +181,7 @@
                   <textarea id="contact-message" name="message" rows="5" required></textarea>
                 </div>
               </div>
+              <input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;" aria-hidden="true">
               <div class="form-actions">
                 <button type="submit" class="btn btn-primary" id="form-contact-submit" data-cta="contact_form_submit">Send Message</button>
                 <span class="form-status" data-form-status role="status" aria-live="polite"></span>
