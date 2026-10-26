@@ -3,6 +3,10 @@ import { getCateringRequests, updateCateringRequestStatus } from '../../_lib/cat
 import { getContactRequests, updateContactRequestStatus } from '../../_lib/contact.js';
 import { ApiError, json, readJson } from '../../_lib/http.js';
 import {
+  discardInventoryDraft, getInventoryCount, getInventorySections, saveInventoryDraft, saveInventorySection,
+  submitInventoryCount
+} from '../../_lib/inventory.js';
+import {
   addItem, addUser, getCatalog, getEntries, getUsers, removeUser,
   setItemStatus, submitForm, updateEntry
 } from '../../_lib/legacy.js';
@@ -125,7 +129,13 @@ const ACTIONS = {
   getCateringRequests,
   updateCateringRequestStatus,
   getContactRequests,
-  updateContactRequestStatus
+  updateContactRequestStatus,
+  getInventoryCount,
+  saveInventoryDraft,
+  submitInventoryCount,
+  discardInventoryDraft,
+  getInventorySections,
+  saveInventorySection
 };
 
 export async function onRequestGet({ request, env }) {

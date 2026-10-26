@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Weekly Inventory Count — Shibam Coffee Atlanta</title>
   <meta name="robots" content="noindex, nofollow">
 
@@ -11,70 +11,78 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=10">
+  <link rel="stylesheet" href="/team/css/styles.css?v=13">
   <script src="/team/js/config.js?v=10" defer></script>
-  <script src="/team/js/auth.js?v=10" defer></script>
-  <script src="/team/js/data.js?v=10" defer></script>
-  <script src="/team/js/forms.js?v=10" defer></script>
+  <script src="/team/js/auth.js?v=11" defer></script>
+  <script src="/team/js/count-ui.js?v=1" defer></script>
+  <script src="/team/js/inventory-count.js?v=1" defer></script>
 </head>
-<body data-page="app" data-require-role="barista">
+<body class="count-page" data-page="app" data-require-role="barista">
 
-  <header class="portal-header">
+  <header class="portal-header portal-header--compact">
     <div class="container portal-header__inner">
-      <div class="portal-header__brand">
-        Shibam Coffee
-        <span>Team Forms</span>
-      </div>
-      <div class="portal-header__session">
-        <a class="portal-header__back" href="/team/inventory-hub">&larr; Inventory</a>
-        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
-      </div>
+      <a class="portal-header__back" href="/team/inventory-hub">&larr; Inventory</a>
+      <div class="portal-header__brand">Shibam Coffee</div>
+      <button type="button" id="logout-btn" class="portal-header__logout">Log out</button>
     </div>
   </header>
 
-  <main class="portal-main">
-    <div class="container">
-
-      <div class="portal-intro">
-        <h1>Weekly Inventory Count</h1>
-        <p>Count what's physically on the shelf right now — not what we've ordered. Sections are grouped by where the items live, so work through the kitchen first, then storage.</p>
-      </div>
-
-      <p class="session-banner" id="session-banner"></p>
-
-      <div class="portal-callout">
-        <strong>Every line needs a number.</strong>
-        If we have none of something, enter 0 rather than leaving it blank — a blank tells us nobody checked.
-      </div>
-
-      <form id="inventory-form" class="portal-form" novalidate>
-
-        <fieldset class="portal-fieldset">
-          <div class="form-grid form-grid--2">
-            <div class="form-group">
-              <label for="weekOf">Week of <span class="required">*</span></label>
-              <input type="date" id="weekOf" name="weekOf" required data-today>
-            </div>
-          </div>
-        </fieldset>
-
-        <div id="inventory-items"></div>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Submit Count</button>
-          <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+  <div class="count-bar" id="count-bar">
+    <div class="container count-bar__inner">
+      <h1 class="visually-hidden">Weekly inventory count</h1>
+      <div class="count-bar__row">
+        <div class="count-progress" aria-live="polite">
+          <span class="count-progress__text" id="progress-text">Loading…</span>
+          <div class="count-progress__track"><div class="count-progress__fill" id="progress-fill"></div></div>
         </div>
+        <div class="date-toggle" role="group" aria-label="Count date">
+          <button type="button" class="date-toggle__option is-active" data-date-option="today" aria-pressed="true">Today</button>
+          <button type="button" class="date-toggle__option" data-date-option="yesterday" aria-pressed="false">Yesterday</button>
+        </div>
+      </div>
+      <div class="count-bar__reason" id="date-reason-wrap" hidden>
+        <label for="date-reason">Why is this count for yesterday? <span class="required">*</span></label>
+        <input type="text" id="date-reason" maxlength="300" placeholder="e.g. Finished the count after midnight">
+      </div>
+      <div class="count-bar__row count-bar__row--nav">
+        <label class="visually-hidden" for="section-jump">Jump to section</label>
+        <select id="section-jump" class="count-bar__jump"></select>
+        <button type="button" class="btn-outline count-bar__next" id="next-empty">Next empty ↓</button>
+      </div>
+    </div>
+  </div>
 
-      </form>
+  <main class="portal-main count-main">
+    <div class="container count-container">
+
+      <details class="count-help">
+        <summary>How to count</summary>
+        <ul>
+          <li>Count what's physically on the shelf right now — not what we've ordered.</li>
+          <li>Sections follow the walk order. Work through them top to bottom.</li>
+          <li>Enter whole containers in the box. For an opened container, pick ¼, ½, or ¾.</li>
+          <li>Count in the unit shown under each item (it matches how we buy it).</li>
+          <li>If there's none of something, tap <strong>None</strong> — that records 0 and shows it was checked. A blank means nobody checked.</li>
+          <li>Your count saves as a draft as you go. Anyone can pick it up on another device, and it's submitted once, when every item is counted.</li>
+        </ul>
+      </details>
+
+      <div class="draft-status" id="draft-status" hidden></div>
+
+      <div id="inventory-sections" class="count-sections">Loading the count…</div>
 
     </div>
   </main>
 
-  <footer class="portal-footer">
-    <div class="container">
-      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+  <div class="count-footer" id="count-footer">
+    <div class="container count-footer__inner">
+      <p class="count-footer__status" id="save-status" role="status" aria-live="polite"></p>
+      <div class="count-footer__actions">
+        <button type="button" class="btn btn-outline" id="save-draft">Save draft</button>
+        <button type="button" class="btn btn-primary" id="submit-count" aria-disabled="true">Submit</button>
+      </div>
     </div>
-  </footer>
+  </div>
 
 </body>
 </html>

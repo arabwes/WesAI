@@ -136,11 +136,13 @@ test('shift editor supports quarter-hour overnight and repeated shifts', async (
 test('all inventory catalogs have a reproducible seed and visible load failures', async () => {
   const migration = await source('migrations/0004_seed_inventory_catalog.sql');
   const forms = await source('team/js/forms.js');
+  const inventoryCount = await source('team/js/inventory-count.js');
   assert.equal((migration.match(/^INSERT INTO catalog/gm) || []).length, 177);
   for (const formType of ['inventory', 'dessert', 'local-order']) {
     assert.match(migration, new RegExp(`'${formType}'`));
   }
-  assert.match(forms, /No inventory items are configured yet/);
+  assert.match(inventoryCount, /No inventory items are configured yet/);
+  assert.match(inventoryCount, /Check your connection and refresh to try again/);
   assert.match(forms, /No dessert items are configured yet/);
   assert.match(forms, /No local-order items are configured yet/);
   assert.match(forms, /Check your connection and refresh to try again/);

@@ -12,10 +12,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=11">
+  <link rel="stylesheet" href="/team/css/styles.css?v=13">
   <script src="/team/js/config.js?v=10" defer></script>
   <script src="/team/js/auth.js?v=10" defer></script>
-  <script src="/team/js/admin.js?v=12" defer></script>
+  <script src="/team/js/count-ui.js?v=1" defer></script>
+  <script src="/team/js/admin.js?v=13" defer></script>
 </head>
 <body data-page="app" data-require-role="management">
 
@@ -73,7 +74,8 @@
             <option value="local-order">Local Order List</option>
           </select>
         </div>
-        <p class="count-section__note">Rows highlighted amber were flagged by a Lead for review. Discontinuing an item removes it from the active form immediately but keeps its submission history intact.</p>
+        <p class="count-section__note">Rows highlighted amber were flagged by a Lead for review. Discontinuing (retiring) an item removes it from the active form immediately but keeps its submission history intact. Renaming an item changes only its display name — its history stays attached.</p>
+        <div id="inventory-sections-admin" hidden></div>
         <div id="catalog-table"></div>
       </section>
 

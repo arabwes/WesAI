@@ -4,8 +4,27 @@
     {
       "name": "opsvision-frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "operations-vision/frontend"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "operations-vision/frontend"
+      ],
       "port": 5173
+    },
+    {
+      "name": "shibam-portal",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "shibam-coffee-website",
+        "--",
+        "--port",
+        "8788"
+      ],
+      "port": 8788
     }
   ]
 }

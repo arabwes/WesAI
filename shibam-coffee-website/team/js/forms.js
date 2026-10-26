@@ -13,7 +13,6 @@
     setFooterYear();
     setTodayDefaults();
     renderSessionBanner();
-    renderInventoryForm();
     renderDessertDailyForm();
     renderDessertOrderForm();
     renderLocalOrderForm();
@@ -173,7 +172,7 @@
   // `fields` maps a short key to the CSS selector for that input in a row.
   function collectRowFields(mount, idAttrs, fields) {
     var byId = {};
-    mount.querySelectorAll('tbody tr').forEach(function (row) {
+    mount.querySelectorAll('tbody tr, .count-row').forEach(function (row) {
       var id = idAttrs.map(function (a) { return row.dataset[a] || ''; }).join('|');
       if (!id.trim()) return;
       var values = {};
@@ -189,7 +188,7 @@
   function applyRowFields(mount, idAttrs, fields, byId) {
     if (!byId) return false;
     var applied = false;
-    mount.querySelectorAll('tbody tr').forEach(function (row) {
+    mount.querySelectorAll('tbody tr, .count-row').forEach(function (row) {
       var id = idAttrs.map(function (a) { return row.dataset[a] || ''; }).join('|');
       var saved = byId[id];
       if (!saved) return;
@@ -330,47 +329,6 @@
     });
   }
 
-  // ---------------------------------------------------------------------
-  // Role-gated "flag / discontinue" actions cell, appended to a table row
-  // for any catalog-backed item. Lead can flag, Management can discontinue
-  // outright — both act immediately and re-render on success.
-  // ---------------------------------------------------------------------
-  function appendActionsCell(row, item, onChange) {
-    var session = window.Auth && Auth.getSession();
-    if (!Auth.hasRole(session, 'lead')) return;
-
-    var cell = el('td', 'count-table__actions');
-
-    if (Auth.hasRole(session, 'lead')) {
-      var flagBtn = el('button', 'btn-inline-action', item.status === 'flagged' ? 'Flagged' : 'Flag');
-      flagBtn.type = 'button';
-      flagBtn.disabled = item.status === 'flagged';
-      flagBtn.addEventListener('click', function () {
-        flagBtn.disabled = true;
-        Auth.apiCall('flagItem', { catalogId: item.catalogId }).then(function (result) {
-          if (result.ok) { flagBtn.textContent = 'Flagged'; }
-          else { flagBtn.disabled = false; }
-        });
-      });
-      cell.appendChild(flagBtn);
-    }
-
-    if (Auth.hasRole(session, 'management')) {
-      var discontinueBtn = el('button', 'btn-inline-action btn-inline-action--danger', 'Discontinue');
-      discontinueBtn.type = 'button';
-      discontinueBtn.addEventListener('click', function () {
-        if (!window.confirm('Discontinue "' + item.name + '"? It will disappear from this form immediately.')) return;
-        discontinueBtn.disabled = true;
-        Auth.apiCall('discontinueItem', { catalogId: item.catalogId }).then(function (result) {
-          if (result.ok && onChange) onChange();
-        });
-      });
-      cell.appendChild(discontinueBtn);
-    }
-
-    row.appendChild(cell);
-  }
-
   // "+ Add item" affordance shown under a section for Lead+. Posts addItem
   // and re-renders the whole form so the new row appears in place.
   function appendAddItemRow(container, formType, defaults, fields, onAdded) {
@@ -434,122 +392,131 @@
   }
 
   // ---------------------------------------------------------------------
-  // Form 1 — weekly count. One section per catalog group, labeled with the
-  // room it's counted in so the sheet can be worked through room by room.
+  // Shared count-row pieces for the dessert and local-order forms — the
+  // same compact mobile layout as the weekly inventory page (count-ui.js).
+  // Values live in hidden inputs (data-count, data-stock, …) so autosave,
+  // recall, and the payload builders read them like any other field.
   // ---------------------------------------------------------------------
-  function renderInventoryForm() {
-    var mount = document.getElementById('inventory-items');
-    if (!mount) return;
-    mount.textContent = 'Loading catalog…';
+  function buildCountHead(item, metaNodes, onNone, onChange) {
+    var head = el('div', 'count-row__head');
+    var label = el('div', 'count-row__label');
+    label.appendChild(el('span', 'count-row__name', item.name));
+    if (metaNodes) {
+      var meta = el('span', 'count-row__meta');
+      metaNodes.forEach(function (node) { meta.appendChild(typeof node === 'string' ? document.createTextNode(node) : node); });
+      label.appendChild(meta);
+    }
+    head.appendChild(label);
 
-    Auth.apiCall('getCatalog', { formType: 'inventory' }).then(function (result) {
-      mount.innerHTML = '';
-      if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
-      if (!result.items.length) { mount.textContent = 'No inventory items are configured yet. Ask Management to add catalog items.'; return; }
+    var tools = el('div', 'count-row__tools');
+    var none = null;
+    if (onNone) {
+      none = CountUI.button('count-row__none', 'None', { 'aria-label': 'None of ' + item.name + ' — record 0 as checked' });
+      none.addEventListener('click', onNone);
+      tools.appendChild(none);
+    }
+    var actions = catalogActions(item, onChange);
+    if (actions.length) tools.appendChild(CountUI.rowMenu(item.name, actions));
+    head.appendChild(tools);
+    return { root: head, none: none };
+  }
 
-      var session = Auth.getSession();
-      var showActions = Auth.hasRole(session, 'lead');
-      var groups = groupBy(result.items, 'group');
-
-      groups.forEach(function (items, groupName) {
-        var section = el('section', 'count-section');
-        var head = el('div', 'count-section__head');
-        head.appendChild(el('h3', 'count-section__title', groupName));
-        head.appendChild(el('span', 'count-section__location', items[0].location || ''));
-        section.appendChild(head);
-
-        var wrap = el('div', 'table-scroll');
-        var table = el('table', 'count-table');
-        var thead = el('thead');
-        var headRow = el('tr');
-        var headers = ['Item', 'Unit', 'Qty in Kitchen', 'Qty in Storage', 'Notes'];
-        if (showActions) headers.push('Actions');
-        headers.forEach(function (label) { headRow.appendChild(el('th', null, label)); });
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-
-        var tbody = el('tbody');
-        items.forEach(function (item) {
-          var row = el('tr');
-          row.dataset.product = item.name;
-          row.dataset.category = groupName;
-          row.dataset.catalogId = item.catalogId;
-          row.dataset.unit = item.unit || '';
-
-          row.appendChild(el('th', 'count-table__item', item.name));
-          row.appendChild(el('td', 'count-table__unit', item.unit));
-
-          var qtyKitchenCell = el('td');
-          qtyKitchenCell.appendChild(numberInput({ 'data-qty-kitchen': '', 'required': '', 'value': '0', 'aria-label': 'Quantity in the kitchen for ' + item.name }));
-          row.appendChild(qtyKitchenCell);
-
-          var qtyStorageCell = el('td');
-          qtyStorageCell.appendChild(numberInput({ 'data-qty-storage': '', 'required': '', 'value': '0', 'aria-label': 'Quantity in storage for ' + item.name }));
-          row.appendChild(qtyStorageCell);
-
-          var noteCell = el('td');
-          var note = el('input');
-          note.type = 'text';
-          note.setAttribute('data-note', '');
-          note.setAttribute('aria-label', 'Notes for ' + item.name);
-          note.placeholder = 'Optional';
-          noteCell.appendChild(note);
-          row.appendChild(noteCell);
-
-          if (showActions) appendActionsCell(row, item, renderInventoryForm);
-
-          applyDataLabels(row, headers);
-          tbody.appendChild(row);
-        });
-
-        initSortableColumns(headRow, tbody, [
-          { index: 0, getValue: function (row) { return row.dataset.product || ''; } },
-          { index: 1, getValue: function (row) { return row.dataset.unit || ''; } }
-        ]);
-
-        table.appendChild(tbody);
-        wrap.appendChild(table);
-        section.appendChild(wrap);
-
-        appendAddItemRow(section, 'inventory',
-          { group: groupName, location: items[0].location || '' },
-          [{ key: 'name', label: 'Item name' }, { key: 'unit', label: 'Unit (lb, Box, Tray…)' }],
-          renderInventoryForm);
-
-        mount.appendChild(section);
-      });
-
-      var form = mount.closest('form');
-      if (form) {
-        initAutosave('inventory', form,
-          function collect() {
-            return {
-              weekOf: form.querySelector('[name="weekOf"]').value,
-              items: collectRowFields(mount, ['catalogId'], { qtyKitchen: '[data-qty-kitchen]', qtyStorage: '[data-qty-storage]', note: '[data-note]' })
-            };
-          },
-          function restore(draft) {
-            if (draft.weekOf) form.querySelector('[name="weekOf"]').value = draft.weekOf;
-            return applyRowFields(mount, ['catalogId'], { qtyKitchen: '[data-qty-kitchen]', qtyStorage: '[data-qty-storage]', note: '[data-note]' }, draft.items);
-          });
-
-        initRecall('inventory', form, mount, function applyItems(sub) {
-          form.querySelector('[name="weekOf"]').value = sub.date;
-          var byProduct = {};
-          sub.items.forEach(function (item) {
-            var parsed = JSON.parse(item.details);
-            byProduct[item.product] = { qtyKitchen: parsed.qtyKitchen, qtyStorage: parsed.qtyStorage, note: parsed.notes || '' };
-          });
-          applyRowFields(mount, ['product'], { qtyKitchen: '[data-qty-kitchen]', qtyStorage: '[data-qty-storage]', note: '[data-note]' }, byProduct);
+  // Lead can flag; Management can retire (with a confirmation sheet). Both
+  // live in the row's "⋯" menu, away from the count boxes.
+  function catalogActions(item, onChange) {
+    var session = window.Auth && Auth.getSession();
+    var actions = [];
+    if (!Auth.hasRole(session, 'lead')) return actions;
+    actions.push({
+      label: item.status === 'flagged' ? 'Flagged for review' : 'Flag for review',
+      onSelect: function () {
+        Auth.apiCall('flagItem', { catalogId: item.catalogId }).then(function (result) {
+          if (result.ok) item.status = 'flagged';
         });
       }
-    }).catch(function () {
-      mount.textContent = 'Could not load the item list. Check your connection and refresh to try again.';
     });
+    if (Auth.hasRole(session, 'management')) {
+      actions.push({
+        label: 'Retire item (inactive)…',
+        danger: true,
+        onSelect: function () {
+          CountUI.confirmSheet({
+            title: 'Retire "' + item.name + '"?',
+            message: 'It leaves this form but keeps its history. You can restore it from Admin → Catalog.',
+            confirmLabel: 'Retire item',
+            danger: true
+          }).then(function (ok) {
+            if (!ok) return;
+            Auth.apiCall('discontinueItem', { catalogId: item.catalogId }).then(function (result) {
+              if (result.ok && onChange) onChange();
+            });
+          });
+        }
+      });
+    }
+    return actions;
+  }
+
+  function rowComplete(row) {
+    var values = Array.prototype.slice.call(row.querySelectorAll('[data-qty-hidden]'));
+    return values.length > 0 && values.every(function (input) { return input.value !== ''; });
+  }
+
+  function updateCountRow(row) {
+    var values = Array.prototype.slice.call(row.querySelectorAll('[data-qty-hidden]'));
+    var complete = rowComplete(row);
+    var zero = complete && values.every(function (input) { return Number(input.value) === 0; });
+    row.classList.toggle('is-complete', complete);
+    row.classList.toggle('is-zero', zero);
+    if (complete) row.classList.remove('is-missing');
+    var none = row.querySelector('.count-row__none');
+    if (none) {
+      var some = values.some(function (input) { return input.value !== ''; });
+      none.textContent = zero ? '0 ✓' : (!complete && some && values.length > 1) ? 'Rest is 0' : 'None';
+    }
+  }
+
+  function fillEmptyWithZero(row) {
+    row.querySelectorAll('.qty-field').forEach(function (root) {
+      var field = root.__qtyField;
+      if (field && field.get() === null) field.set(0);
+    });
+    row.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  // Footer progress ("12 of 32 counted") and a Submit that stays disabled,
+  // with the reason, until every row has a value.
+  function initCountProgress(form, mount) {
+    var text = form.querySelector('[data-progress-text]');
+    var fill = form.querySelector('[data-progress-fill]');
+    function update() {
+      var rows = Array.prototype.slice.call(mount.querySelectorAll('.count-row'));
+      rows.forEach(updateCountRow);
+      var done = rows.filter(rowComplete).length;
+      var left = rows.length - done;
+      if (text) text.textContent = done + ' of ' + rows.length + ' counted';
+      if (fill) fill.style.width = rows.length ? (done / rows.length * 100) + '%' : '0';
+      var submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.setAttribute('aria-disabled', left ? 'true' : 'false');
+        if (!submitBtn.dataset.label) submitBtn.dataset.label = submitBtn.textContent;
+        submitBtn.textContent = left ? 'Submit · ' + left + ' left' : submitBtn.dataset.label;
+      }
+    }
+    form.addEventListener('input', update);
+    form.addEventListener('change', update);
+    form.addEventListener('count:refresh', update);
+    update();
+  }
+
+  function refreshCountForm(form, mount) {
+    CountUI.refreshFields(mount);
+    form.dispatchEvent(new Event('count:refresh'));
   }
 
   // ---------------------------------------------------------------------
-  // Form 2, Tab A — daily dessert count plus deliveries received.
+  // Form 2, Tab A — daily dessert count plus deliveries received. Boxes
+  // start empty; "None" records 0 on purpose, so a blank means unchecked.
   // ---------------------------------------------------------------------
   function renderDessertDailyForm() {
     var mount = document.getElementById('dessert-daily-items');
@@ -561,51 +528,23 @@
       if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
       if (!result.items.length) { mount.textContent = 'No dessert items are configured yet. Ask Management to add catalog items.'; return; }
 
-      var session = Auth.getSession();
-      var showActions = Auth.hasRole(session, 'lead');
-
-      var wrap = el('div', 'table-scroll');
-      var table = el('table', 'count-table');
-      var thead = el('thead');
-      var headRow = el('tr');
-      var headers = ['Dessert', 'Group', 'Count on Hand', 'New Delivery Received'];
-      if (showActions) headers.push('Actions');
-      headers.forEach(function (label) { headRow.appendChild(el('th', null, label)); });
-      thead.appendChild(headRow);
-      table.appendChild(thead);
-
-      var tbody = el('tbody');
+      var list = el('div', 'count-group__body');
       result.items.forEach(function (item) {
-        var row = el('tr');
+        var row = el('div', 'count-row');
         row.dataset.product = item.name;
         row.dataset.catalogId = item.catalogId;
         row.dataset.group = item.group || '';
 
-        row.appendChild(el('th', 'count-table__item', item.name));
-        row.appendChild(el('td', 'count-table__unit', item.group || '—'));
+        row.appendChild(buildCountHead(item, item.group ? [item.group] : null,
+          function () { fillEmptyWithZero(row); }, renderDessertDailyForm).root);
 
-        var countCell = el('td');
-        countCell.appendChild(numberInput({ 'data-count': '', 'required': '', 'value': '0', 'aria-label': 'Count on hand for ' + item.name }));
-        row.appendChild(countCell);
-
-        var deliveryCell = el('td');
-        deliveryCell.appendChild(numberInput({ 'data-delivery': '', 'required': '', 'value': '0', 'aria-label': 'New delivery received for ' + item.name }));
-        row.appendChild(deliveryCell);
-
-        if (showActions) appendActionsCell(row, item, renderDessertDailyForm);
-
-        applyDataLabels(row, headers);
-        tbody.appendChild(row);
+        var fields = el('div', 'count-row__fields');
+        fields.appendChild(CountUI.quantityField({ label: 'On hand', ariaName: item.name, allowFraction: false, dataAttr: 'data-count' }).root);
+        fields.appendChild(CountUI.quantityField({ label: 'Delivered today', ariaName: item.name, allowFraction: false, dataAttr: 'data-delivery' }).root);
+        row.appendChild(fields);
+        list.appendChild(row);
       });
-
-      initSortableColumns(headRow, tbody, [
-        { index: 0, getValue: function (row) { return row.dataset.product || ''; } },
-        { index: 1, getValue: function (row) { return row.dataset.group || ''; } }
-      ]);
-
-      table.appendChild(tbody);
-      wrap.appendChild(table);
-      mount.appendChild(wrap);
+      mount.appendChild(list);
 
       appendAddItemRow(mount, 'dessert', { group: '', location: '' },
         [{ key: 'name', label: 'Dessert name' }],
@@ -613,6 +552,8 @@
 
       var form = mount.closest('form');
       if (form) {
+        CountUI.initKeyboardFlow(mount);
+        initCountProgress(form, mount);
         initAutosave('dessert-daily', form,
           function collect() {
             return {
@@ -622,7 +563,9 @@
           },
           function restore(draft) {
             if (draft.date) form.querySelector('[name="date"]').value = draft.date;
-            return applyRowFields(mount, ['catalogId'], { count: '[data-count]', delivery: '[data-delivery]' }, draft.items);
+            var applied = applyRowFields(mount, ['catalogId'], { count: '[data-count]', delivery: '[data-delivery]' }, draft.items);
+            refreshCountForm(form, mount);
+            return applied;
           });
 
         initRecall('dessert-daily', form, mount, function applyItems(sub) {
@@ -633,6 +576,7 @@
             byProduct[item.product] = { count: parsed.countOnHand, delivery: parsed.deliveryReceived };
           });
           applyRowFields(mount, ['product'], { count: '[data-count]', delivery: '[data-delivery]' }, byProduct);
+          refreshCountForm(form, mount);
         });
       }
     }).catch(function () {
@@ -741,71 +685,33 @@
       if (!result.ok || !Array.isArray(result.items)) { mount.textContent = 'Could not load the item list. Refresh to try again.'; return; }
       if (!result.items.length) { mount.textContent = 'No local-order items are configured yet. Ask Management to add catalog items.'; return; }
 
-      var session = Auth.getSession();
-      var showActions = Auth.hasRole(session, 'lead');
       var groups = groupBy(result.items, 'group');
-
       groups.forEach(function (items, groupName) {
-        var section = el('section', 'count-section');
-        var head = el('div', 'count-section__head');
-        head.appendChild(el('h3', 'count-section__title', groupName));
+        var section = el('section', 'count-group');
+        var head = el('div', 'count-group__head');
+        head.appendChild(el('span', 'count-group__title', groupName));
         section.appendChild(head);
+        if (LOCAL_ORDER_NOTES[groupName]) section.appendChild(el('p', 'count-group__note', LOCAL_ORDER_NOTES[groupName]));
 
-        if (LOCAL_ORDER_NOTES[groupName]) {
-          section.appendChild(el('p', 'count-section__note', LOCAL_ORDER_NOTES[groupName]));
-        }
-
-        var wrap = el('div', 'table-scroll');
-        var table = el('table', 'count-table');
-        var thead = el('thead');
-        var headRow = el('tr');
-        var headers = ['Item', 'Unit', 'Order Below', 'How Many Do We Have?', 'Order?'];
-        if (showActions) headers.push('Actions');
-        headers.forEach(function (label) { headRow.appendChild(el('th', null, label)); });
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-
-        var tbody = el('tbody');
         items.forEach(function (item) {
-          var row = el('tr');
+          var row = el('div', 'count-row');
           row.dataset.product = item.name;
           row.dataset.threshold = item.threshold;
           row.dataset.unit = item.unit;
           row.dataset.catalogId = item.catalogId;
 
-          row.appendChild(el('th', 'count-table__item', item.name));
-          row.appendChild(el('td', 'count-table__unit', item.unit));
-          row.appendChild(el('td', 'count-table__threshold', String(item.threshold)));
+          var meta = [];
+          if (item.unit) { meta.push('In '); meta.push(el('strong', null, item.unit)); }
+          if (item.threshold !== '' && item.threshold !== undefined) meta.push((item.unit ? ' · ' : '') + 'order below ' + item.threshold);
+          row.appendChild(buildCountHead(item, meta.length ? meta : null,
+            function () { fillEmptyWithZero(row); }, renderLocalOrderForm).root);
 
-          var stockCell = el('td');
-          stockCell.appendChild(numberInput({ 'data-stock': '', 'required': '', 'aria-label': 'Current stock of ' + item.name }));
-          row.appendChild(stockCell);
-
-          var orderCell = el('td');
-          var order = el('select');
-          order.setAttribute('data-order', '');
-          order.setAttribute('aria-label', 'Order ' + item.name + '?');
-          ['No', 'Yes'].forEach(function (value) {
-            var option = el('option', null, value);
-            option.value = value;
-            order.appendChild(option);
-          });
-          orderCell.appendChild(order);
-          row.appendChild(orderCell);
-
-          if (showActions) appendActionsCell(row, item, renderLocalOrderForm);
-
-          applyDataLabels(row, headers);
-          tbody.appendChild(row);
+          var fields = el('div', 'count-row__fields');
+          fields.appendChild(CountUI.quantityField({ label: 'How many do we have?', ariaName: item.name, unit: item.unit, dataAttr: 'data-stock' }).root);
+          fields.appendChild(buildOrderToggle(item));
+          row.appendChild(fields);
+          section.appendChild(row);
         });
-
-        initSortableColumns(headRow, tbody, [
-        { index: 0, getValue: function (row) { return row.dataset.product || ''; } }
-      ]);
-
-        table.appendChild(tbody);
-        wrap.appendChild(table);
-        section.appendChild(wrap);
 
         appendAddItemRow(section, 'local-order',
           { group: groupName },
@@ -819,6 +725,8 @@
 
       var form = mount.closest('form');
       if (form) {
+        CountUI.initKeyboardFlow(mount);
+        initCountProgress(form, mount);
         initAutosave('local-order', form,
           function collect() {
             var unlistedMount = document.getElementById('unlisted-items');
@@ -839,13 +747,8 @@
           function restore(draft) {
             if (draft.date) form.querySelector('[name="date"]').value = draft.date;
             var applied = applyRowFields(mount, ['catalogId'], { stock: '[data-stock]', order: '[data-order]' }, draft.items);
-
-            // Setting .value programmatically doesn't fire an input event,
-            // so the threshold-highlight listener (initThresholdLogic)
-            // never sees these restored values — nudge it explicitly.
-            mount.querySelectorAll('[data-stock]').forEach(function (input) {
-              if (input.value !== '') input.dispatchEvent(new Event('input', { bubbles: true }));
-            });
+            syncLocalOrderRows(mount);
+            refreshCountForm(form, mount);
 
             var unlistedMount = document.getElementById('unlisted-items');
             if (unlistedMount && Array.isArray(draft.unlisted) && draft.unlisted.length) {
@@ -875,12 +778,8 @@
             }
           });
           applyRowFields(mount, ['product'], { stock: '[data-stock]', order: '[data-order]' }, byProduct);
-
-          // Setting .value programmatically doesn't fire an input event, so
-          // the threshold-highlight listener never sees these — nudge it.
-          mount.querySelectorAll('[data-stock]').forEach(function (input) {
-            if (input.value !== '') input.dispatchEvent(new Event('input', { bubbles: true }));
-          });
+          syncLocalOrderRows(mount);
+          refreshCountForm(form, mount);
 
           var unlistedMount = document.getElementById('unlisted-items');
           if (unlistedMount) {
@@ -903,25 +802,76 @@
     });
   }
 
-  // A row whose stock has been typed and sits below the threshold turns red
-  // and auto-selects Yes. The employee can still override the dropdown.
+  // Order? as a two-button No / Yes toggle (easier to hit than a dropdown),
+  // backed by a hidden input so autosave and recall treat it like a field.
+  function buildOrderToggle(item) {
+    var wrap = el('div', 'count-row__order');
+    wrap.appendChild(el('span', 'qty-field__label', 'Order?'));
+    var toggle = el('div', 'seg-toggle');
+    toggle.setAttribute('role', 'group');
+    toggle.setAttribute('aria-label', 'Order ' + item.name + '?');
+    var hidden = el('input');
+    hidden.type = 'hidden';
+    hidden.value = 'No';
+    hidden.setAttribute('data-order', '');
+    ['No', 'Yes'].forEach(function (value) {
+      var option = CountUI.button('seg-toggle__option' + (value === 'No' ? ' is-active' : ''), value,
+        { 'aria-pressed': value === 'No' ? 'true' : 'false', 'data-order-option': value });
+      option.addEventListener('click', function () {
+        setOrderValue(wrap.closest('.count-row'), value);
+        hidden.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      toggle.appendChild(option);
+    });
+    wrap.appendChild(toggle);
+    wrap.appendChild(hidden);
+    return wrap;
+  }
+
+  function setOrderValue(row, value) {
+    if (!row) return;
+    var hidden = row.querySelector('[data-order]');
+    if (hidden) hidden.value = value;
+    row.querySelectorAll('[data-order-option]').forEach(function (option) {
+      var active = option.getAttribute('data-order-option') === value;
+      option.classList.toggle('is-active', active);
+      option.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
+  // After restore/recall: show each row's saved Order? choice and its
+  // below-threshold highlight without overriding the saved choice.
+  function syncLocalOrderRows(mount) {
+    mount.querySelectorAll('.count-row').forEach(function (row) {
+      var hidden = row.querySelector('[data-order]');
+      setOrderValue(row, hidden && hidden.value === 'Yes' ? 'Yes' : 'No');
+      updateThreshold(row, false);
+    });
+  }
+
+  function updateThreshold(row, autoSelect) {
+    var stock = row.querySelector('[data-stock]');
+    var threshold = parseFloat(row.dataset.threshold);
+    if (!stock || stock.value === '' || isNaN(threshold)) {
+      row.classList.remove('below-threshold');
+      return;
+    }
+    var below = parseFloat(stock.value) < threshold;
+    row.classList.toggle('below-threshold', below);
+    if (autoSelect) setOrderValue(row, below ? 'Yes' : 'No');
+  }
+
+  // A row whose stock has been entered and sits below the threshold turns
+  // amber and auto-selects Yes. The employee can still flip it back.
   function initThresholdLogic(mount) {
     mount.addEventListener('input', function (e) {
-      var stock = e.target.closest('[data-stock]');
-      if (!stock) return;
-
-      var row = stock.closest('tr');
-      var order = row.querySelector('[data-order]');
-      var threshold = parseFloat(row.dataset.threshold);
-
-      if (stock.value === '') {
-        row.classList.remove('below-threshold');
-        return;
-      }
-
-      var below = parseFloat(stock.value) < threshold;
-      row.classList.toggle('below-threshold', below);
-      if (order) order.value = below ? 'Yes' : 'No';
+      if (e.target.matches('[data-order]')) return;
+      var row = e.target.closest('.count-row');
+      if (row && row.querySelector('[data-stock]')) updateThreshold(row, true);
+    });
+    mount.addEventListener('change', function (e) {
+      var row = e.target.closest('.count-row');
+      if (row && e.target.matches('.qty-field__fraction')) updateThreshold(row, true);
     });
   }
 
@@ -1022,35 +972,24 @@
   // session on the backend, so what's shown here is display-only.
   // ---------------------------------------------------------------------
   function initForms() {
-    bindForm('inventory-form', 'inventory', buildInventoryPayload);
     bindForm('dessert-daily-form', 'dessert-daily', buildDessertDailyPayload);
     bindForm('dessert-order-form', 'dessert-order', buildDessertOrderPayload);
     bindForm('local-order-form', 'local-order', buildLocalOrderPayload);
   }
 
-  function buildInventoryPayload(form) {
-    return {
-      weekOf: form.querySelector('[name="weekOf"]').value,
-      items: Array.from(form.querySelectorAll('#inventory-items tbody tr')).map(function (row) {
-        return {
-          product: row.dataset.product,
-          category: row.dataset.category,
-          qtyKitchen: Number(row.querySelector('[data-qty-kitchen]').value),
-          qtyStorage: Number(row.querySelector('[data-qty-storage]').value),
-          notes: row.querySelector('[data-note]').value.trim()
-        };
-      })
-    };
+  // A blank box is sent as null, never silently as 0.
+  function valueOrNull(input) {
+    return !input || input.value === '' ? null : Number(input.value);
   }
 
   function buildDessertDailyPayload(form) {
     return {
       date: form.querySelector('[name="date"]').value,
-      items: Array.from(form.querySelectorAll('#dessert-daily-items tbody tr')).map(function (row) {
+      items: Array.from(form.querySelectorAll('#dessert-daily-items .count-row')).map(function (row) {
         return {
           product: row.dataset.product,
-          countOnHand: Number(row.querySelector('[data-count]').value),
-          deliveryReceived: Number(row.querySelector('[data-delivery]').value)
+          countOnHand: valueOrNull(row.querySelector('[data-count]')),
+          deliveryReceived: valueOrNull(row.querySelector('[data-delivery]'))
         };
       })
     };
@@ -1084,7 +1023,7 @@
 
     return {
       date: form.querySelector('[name="date"]').value,
-      items: Array.from(form.querySelectorAll('#local-order-items tbody tr')).map(function (row) {
+      items: Array.from(form.querySelectorAll('#local-order-items .count-row')).map(function (row) {
         return {
           product: row.dataset.product,
           unit: row.dataset.unit,
@@ -1105,9 +1044,14 @@
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      var submitBtn = form.querySelector('button[type="submit"]');
+      if (submitBtn && submitBtn.dataset.busy === 'true') return; // a double tap never sends twice
 
       if (!validateForm(form)) {
-        setStatus(status, 'error', 'Some fields are missing or invalid — they’re highlighted above. Every count needs a number, even if it’s 0.');
+        var missingRows = form.querySelectorAll('.count-row.is-missing').length;
+        setStatus(status, 'error', missingRows
+          ? missingRows + (missingRows === 1 ? ' item still needs' : ' items still need') + ' a number or None.'
+          : 'Some fields are missing or invalid — they’re highlighted above. Every count needs a number, even if it’s 0.');
         var firstInvalid = form.querySelector('.invalid');
         if (firstInvalid) firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
@@ -1119,13 +1063,28 @@
         store: (typeof CONFIG !== 'undefined' && CONFIG.STORE_NAME) || '',
       }, buildPayload(form));
       if (editingId) payload.submissionId = editingId;
+      send(payload, editingId);
+    });
 
+    function send(payload, editingId) {
       var submitBtn = form.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.disabled = true;
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset.busy = 'true'; }
       setStatus(status, null, editingId ? 'Saving…' : 'Submitting…');
 
-      Auth.apiCall(editingId ? 'updateMyEntries' : 'submitForm', payload)
+      return Auth.apiCall(editingId ? 'updateMyEntries' : 'submitForm', payload)
         .then(function (result) {
+          if (!result.ok && result.error === 'edit_reason_required') {
+            // Edits more than an hour after submitting are logged with a reason.
+            return CountUI.promptSheet({
+              title: 'Why are you changing this?',
+              message: 'It was submitted more than an hour ago, so the change is logged with a reason.',
+              label: 'Reason for the change',
+              confirmLabel: 'Save changes'
+            }).then(function (reason) {
+              if (reason === null) { setStatus(status, 'error', 'Changes not saved.'); return; }
+              return send(Object.assign({}, payload, { reason: reason }), editingId);
+            });
+          }
           if (result.ok) {
             var session = Auth.getSession();
             setStatus(status, 'success', editingId
@@ -1136,6 +1095,8 @@
             clearEditingBanner(form);
             form.reset();
             resetFormState(form);
+          } else if (result.error === 'incomplete') {
+            setStatus(status, 'error', (result.missingCount || 'Some') + ' items still need a number or None.');
           } else {
             setStatus(status, 'error', editingId
               ? 'Could not save your changes. Try again, or let a manager know.'
@@ -1146,16 +1107,26 @@
           setStatus(status, 'error', 'Something went wrong submitting that. Try again, or let a manager know.');
         })
         .finally(function () {
-          if (submitBtn) submitBtn.disabled = false;
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.dataset.busy = 'false'; }
           syncReviewGate(form);
+          form.dispatchEvent(new Event('count:refresh'));
         });
-    });
+    }
   }
 
   // A count isn't complete until every required field has a value, so a
   // blank quantity is treated as an error rather than an implied zero.
   function validateForm(form) {
     var valid = true;
+
+    // Count rows: every item needs a value (0 entered on purpose counts).
+    var firstMissing = null;
+    form.querySelectorAll('.count-row').forEach(function (row) {
+      var missing = !rowComplete(row);
+      row.classList.toggle('is-missing', missing);
+      if (missing) { valid = false; if (!firstMissing) firstMissing = row; }
+    });
+    if (firstMissing) CountUI.focusRow(firstMissing);
 
     form.querySelectorAll('[required]').forEach(function (field) {
       var value = field.value.trim();
@@ -1176,6 +1147,13 @@
   function resetFormState(form) {
     form.querySelectorAll('.invalid').forEach(function (field) { field.classList.remove('invalid'); });
     form.querySelectorAll('.below-threshold').forEach(function (row) { row.classList.remove('below-threshold'); });
+    // form.reset() leaves hidden inputs alone, so clear the count boxes explicitly.
+    form.querySelectorAll('.qty-field').forEach(function (root) { if (root.__qtyField) root.__qtyField.set(null); });
+    form.querySelectorAll('.count-row').forEach(function (row) {
+      row.classList.remove('is-missing');
+      if (row.querySelector('[data-order]')) setOrderValue(row, 'No');
+    });
+    form.dispatchEvent(new Event('count:refresh'));
     setTodayDefaults();
   }
 

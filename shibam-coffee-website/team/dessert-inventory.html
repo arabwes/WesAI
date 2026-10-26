@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Dessert Inventory — Shibam Coffee Atlanta</title>
   <meta name="robots" content="noindex, nofollow">
 
@@ -11,108 +11,102 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="/team/css/styles.css?v=10">
+  <link rel="stylesheet" href="/team/css/styles.css?v=13">
   <script src="/team/js/config.js?v=10" defer></script>
-  <script src="/team/js/auth.js?v=10" defer></script>
+  <script src="/team/js/auth.js?v=11" defer></script>
   <script src="/team/js/data.js?v=10" defer></script>
-  <script src="/team/js/forms.js?v=10" defer></script>
+  <script src="/team/js/count-ui.js?v=1" defer></script>
+  <script src="/team/js/forms.js?v=11" defer></script>
 </head>
-<body data-page="app" data-require-role="barista">
+<body class="count-page" data-page="app" data-require-role="barista">
 
-  <header class="portal-header">
+  <header class="portal-header portal-header--compact">
     <div class="container portal-header__inner">
-      <div class="portal-header__brand">
-        Shibam Coffee
-        <span>Team Forms</span>
-      </div>
-      <div class="portal-header__session">
-        <a class="portal-header__back" href="/team/inventory-hub">&larr; Inventory</a>
-        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
-      </div>
+      <a class="portal-header__back" href="/team/inventory-hub">&larr; Inventory</a>
+      <div class="portal-header__brand">Shibam Coffee</div>
+      <button type="button" id="logout-btn" class="portal-header__logout">Log out</button>
     </div>
   </header>
 
-  <main class="portal-main">
-    <div class="container">
+  <!-- HIDDEN: Standing Vendor Order tab — the tab switcher + second
+       panel are commented out below. To re-enable, restore this block
+       (the "Two tabs" version) and the .portal-tabs row above it.
+  <div class="portal-tabs" role="tablist">
+    <button type="button" class="portal-tab is-active" role="tab" aria-selected="true" data-tab-target="tab-daily">Daily Count</button>
+    <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-order">Standing Vendor Order</button>
+  </div>
+  -->
 
-      <div class="portal-intro">
-        <h1>Dessert Inventory</h1>
-        <p>Log today's dessert counts and any deliveries that came in.</p>
-      </div>
+  <section id="tab-daily" data-tab-panel role="tabpanel">
+    <form id="dessert-daily-form" class="portal-form" novalidate>
 
-      <p class="session-banner" id="session-banner"></p>
-
-      <!-- HIDDEN: Standing Vendor Order tab — the tab switcher + second
-           panel are commented out below. To re-enable, restore this block
-           (the "Two tabs" version) and the .portal-tabs row above it, and
-           put back the "second tab" sentence in the intro <p> above.
-      <div class="portal-tabs" role="tablist">
-        <button type="button" class="portal-tab is-active" role="tab" aria-selected="true" data-tab-target="tab-daily">Daily Count</button>
-        <button type="button" class="portal-tab" role="tab" aria-selected="false" data-tab-target="tab-order">Standing Vendor Order</button>
-      </div>
-      -->
-
-      <section id="tab-daily" data-tab-panel role="tabpanel">
-        <div class="portal-callout">
-          <strong>Count first, then log deliveries.</strong>
-          "Count on Hand" is what's in the case before today's delivery. "New Delivery Received" is what arrived today. Enter 0 for anything we don't have.
-        </div>
-
-        <form id="dessert-daily-form" class="portal-form" novalidate>
-          <fieldset class="portal-fieldset">
-            <div class="form-grid form-grid--2">
-              <div class="form-group">
-                <label for="daily-date">Date <span class="required">*</span></label>
-                <input type="date" id="daily-date" name="date" required data-today>
-              </div>
+      <div class="count-bar">
+        <div class="container count-bar__inner">
+          <h1 class="visually-hidden">Dessert inventory — daily count</h1>
+          <div class="count-bar__row">
+            <div class="count-progress" aria-live="polite">
+              <span class="count-progress__text" data-progress-text>Loading…</span>
+              <div class="count-progress__track"><div class="count-progress__fill" data-progress-fill></div></div>
             </div>
-          </fieldset>
+            <label class="visually-hidden" for="daily-date">Date</label>
+            <input type="date" id="daily-date" name="date" class="count-bar__date" required data-today>
+          </div>
+        </div>
+      </div>
+
+      <main class="portal-main count-main">
+        <div class="container count-container">
+          <details class="count-help">
+            <summary>How to count desserts</summary>
+            <ul>
+              <li><strong>On hand</strong> is what's in the case before today's delivery.</li>
+              <li><strong>Delivered today</strong> is what arrived today.</li>
+              <li>If there's none, tap <strong>None</strong> — that records 0 and shows it was checked. A blank means nobody checked.</li>
+            </ul>
+          </details>
 
           <div id="dessert-daily-items"></div>
-
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Submit Daily Count</button>
-            <p class="form-status" data-form-status role="status" aria-live="polite"></p>
-          </div>
-        </form>
-      </section>
-
-      <!-- HIDDEN: Standing Vendor Order panel — see the note above the
-           tab switcher for how to bring this back.
-      <section id="tab-order" data-tab-panel role="tabpanel" hidden>
-        <div class="portal-callout">
-          <strong>Standing quantities are what we normally order.</strong>
-          Change the "New Mon" and "New Fri" numbers only where this week differs. Leave the rest as they are.
         </div>
+      </main>
 
-        <form id="dessert-order-form" class="portal-form" novalidate>
-          <fieldset class="portal-fieldset">
-            <div class="form-grid form-grid--2">
-              <div class="form-group">
-                <label for="order-date">Order date <span class="required">*</span></label>
-                <input type="date" id="order-date" name="orderDate" required data-today>
-              </div>
-            </div>
-          </fieldset>
-
-          <div id="dessert-order-items"></div>
-
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Submit Vendor Order</button>
-            <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+      <div class="count-footer">
+        <div class="container count-footer__inner">
+          <p class="count-footer__status" data-form-status role="status" aria-live="polite"></p>
+          <div class="count-footer__actions">
+            <button type="submit" class="btn btn-primary">Submit daily count</button>
           </div>
-        </form>
-      </section>
-      -->
+        </div>
+      </div>
+    </form>
+  </section>
 
+  <!-- HIDDEN: Standing Vendor Order panel — see the note above the
+       tab switcher for how to bring this back.
+  <section id="tab-order" data-tab-panel role="tabpanel" hidden>
+    <div class="portal-callout">
+      <strong>Standing quantities are what we normally order.</strong>
+      Change the "New Mon" and "New Fri" numbers only where this week differs. Leave the rest as they are.
     </div>
-  </main>
 
-  <footer class="portal-footer">
-    <div class="container">
-      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
-    </div>
-  </footer>
+    <form id="dessert-order-form" class="portal-form" novalidate>
+      <fieldset class="portal-fieldset">
+        <div class="form-grid form-grid--2">
+          <div class="form-group">
+            <label for="order-date">Order date <span class="required">*</span></label>
+            <input type="date" id="order-date" name="orderDate" required data-today>
+          </div>
+        </div>
+      </fieldset>
+
+      <div id="dessert-order-items"></div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Submit Vendor Order</button>
+        <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+      </div>
+    </form>
+  </section>
+  -->
 
 </body>
 </html>

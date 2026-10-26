@@ -1,5 +1,7 @@
 import { audit, makePassword, requireRole } from './auth.js';
 import { ApiError, asBoolean, clampInt, newId, nowIso } from './http.js';
+import { diffFields, editNeedsReason } from './inventory-rules.js';
+import { editLogStatements, entryFields, optionalMaxQty } from './legacy.js';
 
 const VALID_LOG_TYPES = new Set(['inventory', 'dessert-daily', 'dessert-order', 'local-order']);
 
@@ -49,17 +51,26 @@ export async function updateItem(request, payload, env) {
   const changes = payload.changes || {};
   const name = String(changes.name === undefined ? existing.name : changes.name).trim().slice(0, 160);
   if (!name) throw new ApiError('missing_name', 400);
+  const unit = String(changes.unit === undefined ? existing.unit : changes.unit).trim().slice(0, 80);
+  if (existing.form_type === 'inventory' && !unit) throw new ApiError('missing_unit', 400);
+  const maxQty = changes.maxQty === undefined ? existing.max_qty : optionalMaxQty(changes.maxQty);
+  const sectionId = changes.sectionId === undefined ? existing.section_id : (String(changes.sectionId || '') || null);
+  const sortOrder = changes.sortOrder === undefined ? existing.sort_order : Math.round(Number(changes.sortOrder) || 0);
   const duplicate = await env.TEAM_DB.prepare(`SELECT id FROM catalog WHERE form_type = ? AND id != ?
     AND status != 'discontinued' AND name = ? COLLATE NOCASE`).bind(existing.form_type, existing.id, name).first();
   if (duplicate) throw new ApiError('duplicate_name', 409);
-  await env.TEAM_DB.prepare(`UPDATE catalog SET name = ?, group_name = ?, unit = ?, threshold = ?, location = ?, target = ?
-    WHERE id = ?`).bind(name,
+  // Renaming changes only the display name: submitted rows are linked by
+  // catalog_id, so an item's history follows it through any rename.
+  await env.TEAM_DB.prepare(`UPDATE catalog SET name = ?, group_name = ?, unit = ?, threshold = ?, location = ?, target = ?,
+    max_qty = ?, section_id = ?, sort_order = ? WHERE id = ?`).bind(name,
       String(changes.group === undefined ? existing.group_name : changes.group).trim().slice(0, 160),
-      String(changes.unit === undefined ? existing.unit : changes.unit).trim().slice(0, 80),
+      unit,
       String(changes.threshold === undefined ? existing.threshold : changes.threshold).trim().slice(0, 80),
       String(changes.location === undefined ? existing.location : changes.location).trim().slice(0, 160),
-      String(changes.target === undefined ? existing.target : changes.target).trim().slice(0, 80), existing.id).run();
-  await audit(env.TEAM_DB, actor.id, 'catalog.update', 'catalog', existing.id, changes);
+      String(changes.target === undefined ? existing.target : changes.target).trim().slice(0, 80),
+      maxQty, sectionId, sortOrder, existing.id).run();
+  await audit(env.TEAM_DB, actor.id, 'catalog.update', 'catalog', existing.id,
+    { ...changes, ...(name !== existing.name ? { previousName: existing.name } : {}) });
   return { ok: true };
 }
 
@@ -158,6 +169,9 @@ export async function getChangelog(request, payload, env) {
 export async function getMyEntries(request, payload, env) {
   const actor = await requireRole(request, payload, env);
   if (!VALID_LOG_TYPES.has(payload.formType)) throw new ApiError('invalid_formType', 400);
+  // Inventory counts are resumed from the shared draft; corrections after
+  // submission go through Management's audited edit.
+  if (payload.formType === 'inventory') return { ok: true, submissions: [] };
   const today = localDate(new Date(), env.STORE_TIMEZONE);
   const { results } = await env.TEAM_DB.prepare(`SELECT * FROM form_entries WHERE form_type = ? AND employee_id = ?
     AND submission_id IS NOT NULL ORDER BY submitted_at DESC LIMIT 500`).bind(payload.formType, actor.id).all();
@@ -188,6 +202,7 @@ function inputRows(payload) {
 export async function updateMyEntries(request, payload, env) {
   const actor = await requireRole(request, payload, env);
   if (!VALID_LOG_TYPES.has(payload.formType)) throw new ApiError('invalid_formType', 400);
+  if (payload.formType === 'inventory') throw new ApiError('use_inventory_count', 400);
   const submissionId = String(payload.submissionId || '');
   if (!submissionId) throw new ApiError('missing_submissionId', 400);
   const { results: existing } = await env.TEAM_DB.prepare(`SELECT * FROM form_entries
@@ -199,6 +214,8 @@ export async function updateMyEntries(request, payload, env) {
   const incoming = inputRows(payload);
   if (!incoming.length) throw new ApiError('empty_submission', 400);
   const now = nowIso();
+  const reason = String(payload.reason || '').trim().slice(0, 300);
+  if (!reason && editNeedsReason(existing[0].submitted_at, now)) throw new ApiError('edit_reason_required', 400);
   const entryDate = String(payload.weekOf || payload.date || payload.orderDate || existing[0].entry_date || '');
   const available = [...existing];
   const statements = [];
@@ -206,8 +223,11 @@ export async function updateMyEntries(request, payload, env) {
     const index = available.findIndex((row) => row.product === item.product);
     if (index >= 0) {
       const row = available.splice(index, 1)[0];
+      const diff = diffFields(entryFields(row, row.details_json), entryFields({ entry_date: entryDate, product: row.product }, item.details));
+      if (!diff.length) return;
       statements.push(env.TEAM_DB.prepare(`UPDATE form_entries SET entry_date = ?, details_json = ?, last_edited_by = ?,
         last_edited_at = ? WHERE id = ?`).bind(entryDate, item.details, actor.name, now, row.id));
+      statements.push(...editLogStatements(env, row, diff, actor, reason, now));
     } else {
       statements.push(env.TEAM_DB.prepare(`INSERT INTO form_entries
         (id, form_type, submitted_at, employee_id, employee_name, entry_date, product, details_json, last_edited_by, last_edited_at, submission_id)
@@ -216,8 +236,12 @@ export async function updateMyEntries(request, payload, env) {
           item.details, actor.name, now, submissionId));
     }
   });
-  available.forEach((row) => statements.push(env.TEAM_DB.prepare(`UPDATE form_entries SET details_json = '{"removed":true}',
-    last_edited_by = ?, last_edited_at = ? WHERE id = ?`).bind(actor.name, now, row.id)));
+  available.forEach((row) => {
+    statements.push(env.TEAM_DB.prepare(`UPDATE form_entries SET details_json = '{"removed":true}',
+      last_edited_by = ?, last_edited_at = ? WHERE id = ?`).bind(actor.name, now, row.id));
+    statements.push(...editLogStatements(env, row, [{ field: 'row', oldValue: row.details_json, newValue: 'removed' }], actor, reason, now));
+  });
+  if (!statements.length) return { ok: true, unchanged: true };
   await env.TEAM_DB.batch(statements);
   await audit(env.TEAM_DB, actor.id, 'form.update_own_submission', 'form_submission', submissionId, { formType: payload.formType });
   return { ok: true };

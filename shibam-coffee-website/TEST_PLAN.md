@@ -175,7 +175,22 @@ done
 - [ ] State changes create draft, send, and employee-complete audit events without copying confidential narrative text into the activity log.
 - [ ] The Lead form, employee response, and expanded records have no horizontal overflow at 360–390px width.
 
-## 15. Cloudflare infrastructure
+## 15. Weekly inventory count
+
+Automated: `npm test` (tests/inventory-count.test.js — outlier check, draft/resume, blank-submission blocking, dates, double-submit, audited edits, renames, units migration) and `npx playwright test` (phone-width layout, Submit blocking, 44px touch targets; add `--config playwright.local-chrome.config.cjs` to use the installed Chrome).
+
+- [ ] Quantity boxes start empty; "None" records 0 and the row turns green with "0 ✓".
+- [ ] Each item shows its count unit; each box takes whole numbers plus a ¼ / ½ / ¾ picker.
+- [ ] Submit reads "Submit · N left" until every item is counted; tapping it jumps to the next empty item.
+- [ ] Numbers save as a draft within a couple of seconds; reloading or opening on a second device resumes the same count, and both people's numbers are kept.
+- [ ] Only Today or Yesterday can be chosen; Yesterday requires a reason.
+- [ ] An item more than 3× / less than ⅓ of its last count, or above its max, appears in the review sheet and must be confirmed or fixed.
+- [ ] A second count for a date that already has one is refused.
+- [ ] Admin → Submissions: an edit more than an hour after submitting asks for a reason; the edit history shows old → new; Export CSV includes an Edit History column.
+- [ ] Admin → Catalog (weekly count): Section, Order, and Max qty are editable; a blank count unit is refused; renaming keeps the item's history.
+- [ ] Dessert and local-order pages use the same compact rows, sticky footer, and None buttons, with no horizontal scroll at 375px.
+
+## 16. Cloudflare infrastructure
 
 - [ ] `/api/team?health=1` reports healthy in preview and production.
 - [ ] Preview and production use different D1 database IDs.

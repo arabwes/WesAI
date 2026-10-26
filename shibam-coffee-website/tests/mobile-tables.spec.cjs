@@ -32,6 +32,23 @@ function catalogItems(formType, count) {
   return items;
 }
 
+// Long section names, item names, and count units on purpose: a long
+// unwrapped label once widened the whole count page past 375px.
+function inventoryCount() {
+  var sections = ['Back storage — shelving by the walk-in door', 'Warehouse — Glass, Ceramic & Metal'].map(function (name, s) {
+    var items = [];
+    for (var i = 0; i < 3; i++) {
+      items.push({
+        catalogId: 'inv-' + s + '-' + i, name: 'Item with a fairly long descriptive name ' + s + i,
+        unit: 'cases of 6 × 3 kg cans (purchase unit)', category: 'Group', maxQty: 20,
+        sectionId: 'section-0' + s, sectionName: name, sortOrder: i * 10, status: 'active', previous: null
+      });
+    }
+    return { sectionId: 'section-0' + s, name: name, items: items };
+  });
+  return { ok: true, today: '2026-10-26', yesterday: '2026-10-25', submittedDates: [], sections: sections, draft: null };
+}
+
 async function mockBackend(page) {
   var documents = [
     { documentId: 'doc-1', title: 'Employee Handbook With A Fairly Long Title', description: 'Company policies and conduct.', category: 'Handbook', driveFileId: '', status: 'active', addedBy: 'TestManager', addedAt: new Date().toISOString() },
@@ -121,6 +138,15 @@ async function mockBackend(page) {
       payload = { ok: Boolean(document_) };
     } else if (action === 'getMyEntries') {
       payload = { ok: true, submissions: [] };
+    } else if (action === 'getInventoryCount') {
+      payload = inventoryCount();
+    } else if (action === 'saveInventoryDraft') {
+      payload = { ok: true, draft: { draftId: 'submission-draft', countDate: '2026-10-26', dateReason: '', items: {}, contributors: ['Test Manager'], startedByName: 'Test Manager', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), version: 2 } };
+    } else if (action === 'getInventorySections') {
+      payload = { ok: true, sections: [
+        { sectionId: 'section-01', name: 'Back storage — shelving by the walk-in door', sortOrder: 10, status: 'active', itemCount: 3 },
+        { sectionId: 'section-02', name: 'Dine-in glassware', sortOrder: 20, status: 'active', itemCount: 3 }
+      ] };
     } else if (action === 'getManagerSchedule') {
       payload = {
         ok: true,
@@ -198,6 +224,41 @@ test.describe('Mobile layout — no horizontal scroll at phone width', () => {
       await assertNoHorizontalScroll(page, path);
     });
   }
+
+  test('weekly count: blank items block Submit until each is counted or marked None', async ({ page }) => {
+    await mockBackend(page);
+    await seedSession(page);
+    await page.goto('/team/inventory');
+    const submit = page.locator('#submit-count');
+    await expect(submit).toHaveText('Submit · 6 left');
+    await expect(submit).toHaveAttribute('aria-disabled', 'true');
+
+    // aria-disabled (not disabled) on purpose: tapping it explains what is missing.
+    await submit.click({ force: true });
+    await expect(page.locator('#save-status')).toContainText('6 items still need a number or None');
+    await expect(page.locator('.count-row.is-missing')).toHaveCount(6);
+
+    // Typing a whole number plus a quarter, and marking the rest None.
+    const first = page.locator('.count-row').first();
+    await first.locator('[data-qty-whole]').first().fill('4');
+    await first.locator('.qty-field__fraction').first().selectOption('0.75');
+    await first.locator('.count-row__none').click();
+    await expect(first).toHaveClass(/is-complete/);
+    for (const none of await page.locator('.count-row__none').all()) await none.click();
+    await expect(submit).toHaveText('Submit count');
+    await expect(submit).toHaveAttribute('aria-disabled', 'false');
+    await expect(page.locator('#progress-text')).toHaveText('6 of 6 counted');
+  });
+
+  test('weekly count: every control meets the 44px touch target', async ({ page }) => {
+    await mockBackend(page);
+    await seedSession(page);
+    await page.goto('/team/inventory');
+    const small = await page.evaluate(() => Array.from(document.querySelectorAll('.count-row button, .count-row input, .count-row select, .count-footer button'))
+      .filter((node) => node.offsetParent !== null && node.getBoundingClientRect().height < 43.5)
+      .map((node) => (node.getAttribute('aria-label') || node.textContent).trim()));
+    expect(small).toEqual([]);
+  });
 
   test('contact messages can be reviewed from the portal', async ({ page }) => {
     await mockBackend(page);

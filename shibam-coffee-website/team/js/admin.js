@@ -344,10 +344,11 @@
       },
       csv: {
         filename: 'submissions.csv',
-        headers: ['Submission', 'Submitted', 'Employee', 'Date', 'Product', 'Details', 'Last Edited By', 'Last Edited At'],
+        headers: ['Submission', 'Submitted', 'Employee', 'Date', 'Product', 'Details', 'Last Edited By', 'Last Edited At', 'Edit History'],
         row: function (group) {
           return group.entries.map(function (e) {
-            return [group.badge || '', formatDateTime(e.submittedAt), e.employeeName, e.date, e.product, e.details, e.lastEditedBy, formatDateTime(e.lastEditedAt)];
+            return [group.badge || '', formatDateTime(e.submittedAt), e.employeeName, e.date, e.product, e.details, e.lastEditedBy,
+              formatDateTime(e.lastEditedAt), formatEditHistory(e.edits)];
           });
         }
       }
@@ -409,6 +410,15 @@
     });
 
     return order.filter(function (group) { return group.entries.length > 0; });
+  }
+
+  // "2026-10-22 4:13 PM — Mo Manager: qtyStorage 70 → 7 (Recount after delivery)", one per change.
+  function formatEditHistory(edits) {
+    return (edits || []).map(function (edit) {
+      return formatDateTime(edit.editedAt) + ' — ' + edit.editedBy + ': ' + edit.field + ' ' +
+        (edit.oldValue === '' ? '(blank)' : edit.oldValue) + ' → ' + (edit.newValue === '' ? '(blank)' : edit.newValue) +
+        (edit.reason ? ' (' + edit.reason + ')' : '');
+    }).join(' | ');
   }
 
   function buildSubmissionGroupRow(group, formType, expanded, refresh) {
@@ -497,7 +507,9 @@
 
     var itemInput = el('input'); itemInput.type = 'text'; itemInput.value = entry.product; itemInput.readOnly = true;
     var itemCell = el('th', 'count-table__item'); itemCell.appendChild(itemInput); row.appendChild(itemCell);
-    editableInputs.push(itemInput);
+    // Inventory rows are linked to their item by its permanent ID; rename
+    // the item in Catalog instead of editing the name on one row.
+    if (formType !== 'inventory') editableInputs.push(itemInput);
 
     var fields = []; // { input, key } — read back into details JSON on Save
     function addField(key, value, emphasize) {
@@ -546,11 +558,20 @@
       addField('_raw', entry.details, false);
     }
 
-    row.appendChild(el('td', 'count-table__unit', entry.lastEditedBy
+    var editedCell = el('td', 'count-table__unit', entry.lastEditedBy
       ? entry.lastEditedBy + ' — ' + formatDateTime(entry.lastEditedAt)
-      : 'Not edited yet'));
+      : 'Not edited yet');
+    if (entry.edits && entry.edits.length) {
+      var history = el('ul', 'edit-history');
+      entry.edits.forEach(function (edit) {
+        history.appendChild(el('li', null, formatEditHistory([edit])));
+      });
+      editedCell.appendChild(history);
+    }
+    row.appendChild(editedCell);
 
     var actionCell = el('td', 'count-table__actions');
+    var editError = el('span', 'inline-error', '');
     var editBtn = el('button', 'btn-inline-action', 'Edit');
     editBtn.type = 'button';
     var saveBtn = el('button', 'btn-inline-action', 'Save');
@@ -566,22 +587,43 @@
 
     saveBtn.addEventListener('click', function () {
       saveBtn.disabled = true;
+      editError.textContent = '';
       var newDetails = Object.assign({}, parsed);
       if (formType === 'inventory' && 'qtyOnHand' in newDetails) delete newDetails.qtyOnHand; // migrate a legacy row to the split Kitchen/Storage shape once it's edited
       fields.forEach(function (f) { newDetails[f.key] = coerceValue(f.input.value); });
 
-      Auth.apiCall('updateEntry', {
-        formType: formType,
-        entryId: entry.entryId,
-        changes: { product: itemInput.value, details: JSON.stringify(newDetails) }
-      }).then(function (result) {
-        if (result.ok) refresh();
-        else saveBtn.disabled = false;
-      });
+      function save(reason) {
+        return Auth.apiCall('updateEntry', {
+          formType: formType,
+          entryId: entry.entryId,
+          reason: reason || '',
+          changes: { product: itemInput.value, details: JSON.stringify(newDetails) }
+        }).then(function (result) {
+          if (result.ok) { refresh(); return; }
+          if (result.error === 'edit_reason_required') {
+            // Edits more than an hour after submission are logged with a reason.
+            return CountUI.promptSheet({
+              title: 'Why are you changing this?',
+              message: 'This was submitted more than an hour ago. The old value, new value, your name, and this reason are kept in the edit history.',
+              label: 'Reason for the change',
+              confirmLabel: 'Save change'
+            }).then(function (text) {
+              if (text === null) { saveBtn.disabled = false; return; }
+              return save(text);
+            });
+          }
+          saveBtn.disabled = false;
+          editError.textContent = result.error === 'invalid_quantity'
+            ? 'Quantities must be whole numbers or quarters (e.g. 4.25, 4.5, 4.75).'
+            : 'Could not save.';
+        });
+      }
+      save('');
     });
 
     actionCell.appendChild(editBtn);
     actionCell.appendChild(saveBtn);
+    actionCell.appendChild(editError);
     row.appendChild(actionCell);
 
     return row;
@@ -591,11 +633,44 @@
   // Catalog — every item across the three catalog-backed forms: search/sort,
   // multiselect bulk discontinue/restore, and inline edit of name/unit/group.
   // =========================================================================
+  // Weekly-count-only catalog columns: walk-order section, order within it,
+  // and the per-item maximum used by the outlier check.
+  var INVENTORY_CATALOG_COLUMNS = [
+    { label: 'Section', key: 'sectionName' },
+    { label: 'Order', key: 'sortOrder' },
+    { label: 'Max qty', key: 'maxQty' }
+  ];
+
   function initCatalogTab() {
     var select = document.getElementById('catalog-form-type');
     var mount = document.getElementById('catalog-table');
+    var sectionsMount = document.getElementById('inventory-sections-admin');
     var selected = new Set();
+    var sections = [];
     var controls;
+    var catalogColumns;
+
+    function setColumnsFor(formType) {
+      var base = catalogColumns.filter(function (col) { return INVENTORY_CATALOG_COLUMNS.indexOf(col) === -1; });
+      catalogColumns.length = 0;
+      base.forEach(function (col) { catalogColumns.push(col); });
+      if (formType === 'inventory') {
+        var unitIndex = catalogColumns.findIndex(function (col) { return col.key === 'unit'; });
+        Array.prototype.splice.apply(catalogColumns, [unitIndex + 1, 0].concat(INVENTORY_CATALOG_COLUMNS));
+      }
+    }
+
+    function reload() {
+      var formType = select.value;
+      setColumnsFor(formType);
+      var ready = formType === 'inventory'
+        ? Auth.apiCall('getInventorySections', {}).then(function (result) { sections = result.ok ? result.sections : []; })
+        : Promise.resolve().then(function () { sections = []; });
+      ready.then(function () {
+        if (sectionsMount) renderSectionsAdmin(sectionsMount, formType === 'inventory' ? sections : null, reload);
+        loadCatalog(formType, controls, selected, updateToolbar, sections);
+      });
+    }
 
     var toolbar = el('div', 'table-bulk-toolbar');
     toolbar.hidden = true;
@@ -622,19 +697,14 @@
         Auth.apiCall(action, { catalogIds: ids }).then(function () {
           discBtn.disabled = false; restoreBtn.disabled = false;
           selected.clear();
-          loadCatalog(select.value, controls, selected, updateToolbar);
+          reload();
         });
       });
     }
     discBtn.addEventListener('click', function () { bulkApply('discontinueItem', 'Discontinue'); });
     restoreBtn.addEventListener('click', function () { bulkApply('restoreItem', 'Restore'); });
 
-    controls = attachTableControls({
-      mount: mount,
-      searchPlaceholder: 'Search by item or group…',
-      emptyMessage: 'No items in this list yet.',
-      extraControls: toolbar,
-      columns: [
+    catalogColumns = [
         {
           label: 'Select',
           render: function (visible) {
@@ -659,22 +729,31 @@
         { label: 'Status', key: 'status' },
         { label: 'Added By', key: 'addedBy' },
         { label: 'Actions' }
-      ],
+    ];
+
+    controls = attachTableControls({
+      mount: mount,
+      searchPlaceholder: 'Search by item or group…',
+      emptyMessage: 'No items in this list yet.',
+      extraControls: toolbar,
+      columns: catalogColumns,
       searchPredicate: function (item, q) {
         return (item.name || '').toLowerCase().indexOf(q) !== -1 ||
           (item.group || '').toLowerCase().indexOf(q) !== -1;
       },
       buildRow: function (item) {
         return buildCatalogRow(item, {
+          formType: select.value,
+          sections: sections,
           selected: selected,
           onSelectionChange: function () { updateToolbar(); },
-          refresh: function () { loadCatalog(select.value, controls, selected, updateToolbar); }
+          refresh: reload
         });
       },
       csv: {
         filename: 'catalog.csv',
-        headers: ['Item', 'Group', 'Unit', 'Status', 'Added By'],
-        row: function (i) { return [i.name, i.group, i.unit, i.status, i.addedBy]; }
+        headers: ['Catalog ID', 'Item', 'Group', 'Unit', 'Section', 'Order', 'Max qty', 'Status', 'Added By'],
+        row: function (i) { return [i.catalogId, i.name, i.group, i.unit, i.sectionName || '', i.sortOrder || '', i.maxQty === null || i.maxQty === undefined ? '' : i.maxQty, i.status, i.addedBy]; }
       }
     });
 
@@ -682,17 +761,86 @@
       selected.clear();
       updateToolbar();
       controls.reset();
-      loadCatalog(select.value, controls, selected, updateToolbar);
+      reload();
     });
-    loadCatalog(select.value, controls, selected, updateToolbar);
+    reload();
   }
 
-  function loadCatalog(formType, controls, selected, updateToolbar) {
+  function loadCatalog(formType, controls, selected, updateToolbar, sections) {
+    var sectionNames = {};
+    (sections || []).forEach(function (section) { sectionNames[section.sectionId] = section.name; });
     Auth.apiCall('getCatalog', { formType: formType, includeAll: true }).then(function (result) {
       if (!result.ok) { controls.setData([]); return; }
+      result.items.forEach(function (item) { item.sectionName = sectionNames[item.sectionId] || ''; });
       controls.setData(result.items);
       if (updateToolbar) updateToolbar();
     });
+  }
+
+  // Walk-order sections for the weekly count: rename, reorder (lower Order
+  // numbers come first), retire, or add. Items are assigned in the table below.
+  function renderSectionsAdmin(mount, sections, refresh) {
+    mount.innerHTML = '';
+    mount.hidden = !sections;
+    if (!sections) return;
+
+    var card = el('div', 'form-card');
+    card.appendChild(el('h3', 'mt-0', 'Count sections (walk order)'));
+    card.appendChild(el('p', 'count-section__note', 'The weekly count shows sections in this order. Assign each item to the section where it physically sits, and set its Order within the section.'));
+
+    var table = el('table', 'count-table');
+    var thead = el('thead');
+    var headRow = el('tr');
+    var headers = ['Section', 'Order', 'Status', 'Items', 'Actions'];
+    headers.forEach(function (label) { headRow.appendChild(el('th', null, label)); });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    var tbody = el('tbody');
+
+    function sectionRow(section) {
+      var row = el('tr');
+      var name = el('input'); name.type = 'text'; name.value = section ? section.name : ''; name.placeholder = 'e.g. Back storage';
+      var order = el('input'); order.type = 'number'; order.step = '10'; order.value = section ? section.sortOrder : (sections.length + 1) * 10;
+      var status = el('select');
+      ['active', 'inactive'].forEach(function (value) {
+        var option = el('option', null, value === 'active' ? 'Active' : 'Inactive');
+        option.value = value;
+        if (section && section.status === value) option.selected = true;
+        status.appendChild(option);
+      });
+      var nameCell = el('th', 'count-table__item'); nameCell.appendChild(name); row.appendChild(nameCell);
+      var orderCell = el('td'); orderCell.appendChild(order); row.appendChild(orderCell);
+      var statusCell = el('td'); statusCell.appendChild(status); row.appendChild(statusCell);
+      row.appendChild(el('td', 'count-table__unit', section ? String(section.itemCount) : '—'));
+      var actionCell = el('td', 'count-table__actions');
+      var save = el('button', 'btn-inline-action', section ? 'Save' : 'Add section');
+      save.type = 'button';
+      var error = el('span', 'inline-error', '');
+      save.addEventListener('click', function () {
+        error.textContent = '';
+        if (!name.value.trim()) { error.textContent = 'Name the section.'; return; }
+        save.disabled = true;
+        Auth.apiCall('saveInventorySection', { section: {
+          sectionId: section ? section.sectionId : '', name: name.value.trim(), sortOrder: order.value, status: status.value
+        } }).then(function (result) {
+          save.disabled = false;
+          if (result.ok) refresh(); else error.textContent = 'Could not save.';
+        });
+      });
+      actionCell.appendChild(save);
+      actionCell.appendChild(error);
+      row.appendChild(actionCell);
+      applyDataLabels(row, headers);
+      return row;
+    }
+
+    sections.forEach(function (section) { tbody.appendChild(sectionRow(section)); });
+    tbody.appendChild(sectionRow(null));
+    table.appendChild(tbody);
+    var scroll = el('div', 'table-scroll');
+    scroll.appendChild(table);
+    card.appendChild(scroll);
+    mount.appendChild(card);
   }
 
   function buildCatalogRow(item, ctx) {
@@ -721,6 +869,32 @@
     var unitInput = el('input'); unitInput.type = 'text'; unitInput.value = item.unit || ''; unitInput.readOnly = true;
     var unitCell = el('td'); unitCell.appendChild(unitInput); row.appendChild(unitCell);
 
+    var isInventory = ctx.formType === 'inventory';
+    var sectionSelect, orderInput, maxInput;
+    if (isInventory) {
+      unitInput.placeholder = 'e.g. cases of 6 cans';
+      sectionSelect = el('select');
+      sectionSelect.disabled = true;
+      var unassigned = el('option', null, 'Unassigned');
+      unassigned.value = '';
+      sectionSelect.appendChild(unassigned);
+      ctx.sections.forEach(function (section) {
+        var option = el('option', null, section.name + (section.status === 'inactive' ? ' (inactive)' : ''));
+        option.value = section.sectionId;
+        if (section.sectionId === item.sectionId) option.selected = true;
+        sectionSelect.appendChild(option);
+      });
+      var sectionCell = el('td'); sectionCell.appendChild(sectionSelect); row.appendChild(sectionCell);
+
+      orderInput = el('input'); orderInput.type = 'number'; orderInput.step = '10'; orderInput.value = item.sortOrder || ''; orderInput.readOnly = true;
+      var orderCell = el('td'); orderCell.appendChild(orderInput); row.appendChild(orderCell);
+
+      maxInput = el('input'); maxInput.type = 'number'; maxInput.min = '0'; maxInput.step = 'any';
+      maxInput.value = item.maxQty === null || item.maxQty === undefined ? '' : item.maxQty; maxInput.readOnly = true;
+      maxInput.placeholder = 'none';
+      var maxCell = el('td'); maxCell.appendChild(maxInput); row.appendChild(maxCell);
+    }
+
     row.appendChild(el('td', null, item.status));
     row.appendChild(el('td', 'count-table__unit', item.addedBy));
 
@@ -737,6 +911,7 @@
       nameInput.readOnly = false;
       groupInput.readOnly = false;
       unitInput.readOnly = false;
+      if (isInventory) { sectionSelect.disabled = false; orderInput.readOnly = false; maxInput.readOnly = false; }
       editBtn.hidden = true;
       saveBtn.hidden = false;
       nameInput.focus();
@@ -745,13 +920,20 @@
     saveBtn.addEventListener('click', function () {
       saveBtn.disabled = true;
       editError.textContent = '';
-      Auth.apiCall('updateItem', {
-        catalogId: item.catalogId,
-        changes: { name: nameInput.value.trim(), group: groupInput.value.trim(), unit: unitInput.value.trim() }
-      }).then(function (result) {
+      var changes = { name: nameInput.value.trim(), group: groupInput.value.trim(), unit: unitInput.value.trim() };
+      if (isInventory) {
+        changes.sectionId = sectionSelect.value;
+        changes.sortOrder = orderInput.value;
+        changes.maxQty = maxInput.value;
+      }
+      Auth.apiCall('updateItem', { catalogId: item.catalogId, changes: changes }).then(function (result) {
         if (result.ok) { ctx.refresh(); return; }
         saveBtn.disabled = false;
-        editError.textContent = result.error === 'duplicate_name' ? 'Another item already has that name.' : 'Could not save.';
+        editError.textContent = {
+          duplicate_name: 'Another item already has that name.',
+          missing_unit: 'Every counted item needs a count unit (how we buy it).',
+          invalid_max_qty: 'Max qty must be a number above 0, or blank.'
+        }[result.error] || 'Could not save.';
       });
     });
 
@@ -773,7 +955,7 @@
       var discBtn = el('button', 'btn-inline-action btn-inline-action--danger', 'Discontinue');
       discBtn.type = 'button';
       discBtn.addEventListener('click', function () {
-        confirmAction('Discontinue "' + item.name + '"? It disappears from the active form immediately.').then(function (ok) {
+        confirmAction('Discontinue "' + item.name + '"? It disappears from the active form immediately but keeps its history. You can restore it later.').then(function (ok) {
           if (!ok) return;
           discBtn.disabled = true;
           Auth.apiCall('discontinueItem', { catalogId: item.catalogId }).then(function (r) {

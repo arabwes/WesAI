@@ -17,7 +17,7 @@ The portal now uses Cloudflare Pages Functions and D1. See
 | `manage-schedule.html` | Lead+ | Weekly schedule builder and request review |
 | `profile.html` | Barista+ | Profile, password, phone verification, notifications, push devices, calendar links |
 | `accept-invitation.html` | Invited employees | One-time account activation |
-| `inventory.html` | Barista+ | Weekly kitchen and storage count |
+| `inventory.html` | Barista+ | Weekly kitchen and storage count: shared server draft, walk-order sections, outlier confirmation, submitted once |
 | `dessert-inventory.html` | Barista+ | Daily dessert count and vendor order |
 | `local-order.html` | Barista+ | Consolidated local market request |
 | `documents.html` / `document.html` | Barista+ | Document hub and individual Google Drive document viewer |
@@ -133,6 +133,8 @@ works while the user table is empty and requires a Cloudflare secret.
 | `calendar_tokens` | Hashed private iCalendar subscription credentials |
 | `user_invitations` | Hashed, expiring employee invitations |
 | `audit_events` | Immutable action history |
+| `inventory_counts`, `inventory_sections` | Weekly count drafts/submissions (one open draft, one submitted count per date) and walk-order sections |
+| `form_entry_edits` | Old/new value, editor, time, and reason for every edit to a submitted form row |
 | `catalog`, `form_entries` | Existing operational forms and admin history |
 | `portal_documents` | Management-controlled handbook and reference links |
 | `employee_write_ups` | Draft/sent/completed corrective-action workflow, typed acknowledgments, version checks, and historical employee/position snapshots |
