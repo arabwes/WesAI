@@ -1,0 +1,88 @@
+name: Deploy to Cloudflare
+
+# Manual only. Open the Actions tab, pick "Deploy to Cloudflare", click "Run workflow".
+#   check  (default): changes NOTHING. Shows pending database migrations and the
+#                     Worker's secret names so you can see what a deploy would do.
+#   deploy:           runs the tests, applies pending database migrations to the
+#                     production database, deploys the notification Worker, then
+#                     checks the live booking page and API.
+# The website itself (Pages) deploys from the main branch on its own.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = look only, deploy = apply migrations and deploy the Worker"
+        type: choice
+        options: [check, deploy]
+        default: check
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://shibamatlanta.com
+
+jobs:
+  cloudflare:
+    name: ${{ inputs.mode }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: shibam-coffee-website
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check the Cloudflare secrets are set
+        run: |
+          missing=0
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "::error::The GitHub secret CLOUDFLARE_API_TOKEN is not set (repo Settings, Secrets and variables, Actions)."; missing=1; fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then echo "::error::The GitHub secret CLOUDFLARE_ACCOUNT_ID is not set (repo Settings, Secrets and variables, Actions)."; missing=1; fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: shibam-coffee-website/package-lock.json
+      - run: npm ci
+
+      - name: Confirm the token works and which account it is
+        run: npx wrangler whoami
+
+      - name: Show pending database migrations
+        run: npx wrangler d1 migrations list shibam-team --remote
+
+      - name: Show the notification Worker's secret names
+        run: |
+          npx wrangler secret list --config workers/notifications/wrangler.jsonc | tee secrets.json
+          if ! grep -q '"RESEND_API_KEY"' secrets.json; then
+            echo "::warning::RESEND_API_KEY is not set on the notification Worker. Booking emails will not send until it is added."
+          fi
+
+      - name: Tests (deploy only)
+        if: inputs.mode == 'deploy'
+        run: npm test
+
+      - name: Apply database migrations (deploy only)
+        if: inputs.mode == 'deploy'
+        run: npm run db:migrate:production
+
+      - name: Deploy the notification Worker (deploy only)
+        if: inputs.mode == 'deploy'
+        run: npm run notifications:deploy
+
+      - name: Confirm no migrations are left (deploy only)
+        if: inputs.mode == 'deploy'
+        run: npx wrangler d1 migrations list shibam-team --remote
+
+      - name: Check the live booking page and API (deploy only)
+        if: inputs.mode == 'deploy'
+        run: ./scripts/verify-booking-live.sh "$SITE_URL"

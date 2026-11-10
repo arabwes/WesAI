@@ -10,6 +10,82 @@ automatically. The new pages need four new database tables/columns (migrations
 the existing site and portal keep working, but Booking Links, Team Calendar and
 `/book/...` will show errors. Do Step 1 first, right after the code is pushed.
 
+## Fastest route: run Steps 1 to 3 from the GitHub website (no terminal)
+
+The repository has a button-driven workflow, **Deploy to Cloudflare**, that does
+Steps 1, 2 and part of 3 for you and then tests the live site. If you use it,
+skip the command-line Steps 1 to 3 below and carry on from Step 4. You set it up
+once (A to C), then click Run (D and E).
+
+### A. Create a Cloudflare API token (about 3 minutes)
+
+1. Sign in at dash.cloudflare.com.
+2. Click your profile icon (top right), then **My Profile**, then **API Tokens**.
+3. Click **Create Token**, then next to **Create Custom Token** click **Get started**.
+4. Name it `GitHub deploy`.
+5. Under **Permissions** add these five rows (use the three dropdowns on each row):
+   - **Account** / **D1** / **Edit**
+   - **Account** / **Workers Scripts** / **Edit**
+   - **Account** / **Queues** / **Edit**
+   - **Account** / **Account Settings** / **Read**
+   - **User** / **User Details** / **Read**
+6. Under **Account Resources** choose **Include**, then your Shibam account.
+7. Click **Continue to summary**, then **Create Token**.
+8. **Copy the token now.** Cloudflare shows it only once. Keep the tab open.
+
+### B. Copy your Cloudflare Account ID
+
+1. In the Cloudflare dashboard click **Workers & Pages**.
+2. On the right-hand side find **Account ID** and click to copy it.
+
+### C. Save both in GitHub (once)
+
+1. Go to github.com/arabwes/WesAI, then **Settings**, then **Secrets and
+   variables**, then **Actions**.
+2. Click **New repository secret**. Name: `CLOUDFLARE_API_TOKEN`. Secret: paste
+   the token from A. Click **Add secret**.
+3. Click **New repository secret** again. Name: `CLOUDFLARE_ACCOUNT_ID`. Secret:
+   paste the ID from B. Click **Add secret**.
+
+Type the two names exactly as shown, in capitals. GitHub never shows the values
+again, and the workflow only uses them to talk to Cloudflare.
+
+### D. Do a safe look first (changes nothing)
+
+1. In the repository click the **Actions** tab.
+2. In the left list click **Deploy to Cloudflare**.
+3. Click **Run workflow** (right side), leave **Branch: main** and **mode:
+   check**, and click the green **Run workflow** button.
+4. After a few seconds a new run appears. Click it, then click the job inside it.
+5. It should finish with a green tick in about a minute. Open these steps to
+   read them:
+   - **Confirm the token works** shows your Cloudflare account.
+   - **Show pending database migrations** lists `0012` to `0015` as waiting.
+   - **Show the notification Worker's secret names** should include
+     `RESEND_API_KEY`. A yellow warning here means the email key is missing: add
+     it in Cloudflare under **Workers & Pages**, **shibam-team-notifications**,
+     **Settings**, **Variables and Secrets**.
+
+### E. Do the real deploy
+
+1. Back on **Actions**, **Deploy to Cloudflare**, click **Run workflow** again.
+2. This time set **mode** to **deploy** and click **Run workflow**.
+3. Open the run. It runs the tests, applies the four database changes, deploys
+   the email Worker, and then checks that the live booking page and API work. It
+   can wait up to about 5 minutes for your website's own deployment to finish.
+4. **A green tick means Steps 1 to 3 are done and Step 4's rewrite check has
+   passed.** The last step prints `OK: the booking page and API are live`.
+
+If a step goes red, open it and read the message, then see "If the workflow
+fails" at the end of this file.
+
+You can leave the token in place to use for future deploys, or delete it in
+Cloudflare (**My Profile**, **API Tokens**) and create a new one next time.
+
+---
+
+## Command-line route (alternative to the GitHub button)
+
 ## Step 1: Apply the database migrations (required)
 
 1. Open PowerShell and go to the website folder:
@@ -149,3 +225,15 @@ Hide the feature by removing the **Booking Links** and **Team Calendar** tiles
 from `team/dashboard.html` and revoking links in the portal. The database changes
 are additive and can safely stay. To disable public booking immediately,
 revoke every link (Booking Links, then **Revoke**).
+
+## If the workflow fails
+
+| What the red step says | What it means and what to do |
+|---|---|
+| "The GitHub secret CLOUDFLARE_API_TOKEN is not set" | Redo part C. The secret names must match exactly. |
+| `wrangler whoami` or any step says "Authentication error" or "Invalid API token" | The token is wrong or missing a permission. Create a new one following part A exactly, then update the GitHub secret. |
+| "Could not route to /accounts/..." or "account not found" | The Account ID in part C is wrong. Re-copy it from Workers & Pages. |
+| A migration step fails with "table ... already exists" or "duplicate column" | Someone applied part of it by hand earlier. Stop and send me the message. Do not run it again. |
+| "Tests" step fails | Nothing was changed on Cloudflare. Send me the message. |
+| "Check the live booking page and API" fails with `HTTP 404` on the page | The `/book/...` rewrite is not working on Cloudflare. Check Deployments shows Success for the latest `main` commit, run deploy again, and if it still fails send me the message. |
+| The same step fails with `HTTP 500 server_error` on the API | The database changes did not apply. Look at the "Apply database migrations" step above it. |
