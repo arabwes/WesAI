@@ -1,7 +1,15 @@
 # Portal calendar and booking links — implementation plan
 
-Status: proposal, nothing built yet. Review the decisions and open questions
-at the bottom before work starts.
+Status: phase 1 (foundation) is built and tested. Nothing is routed or visible
+yet. Phases 2-5 are still to do.
+
+Phase 1 delivered: `migrations/0012_calendar.sql`,
+`functions/_lib/calendar-rules.js` (timezone, availability and slot maths,
+booking redaction), `functions/_lib/calendar.js` (link lookup, slots, atomic
+booking, team calendar, cancel, 12-month anonymising) and
+`tests/calendar.test.js`. Deliberately deferred: skipping slots that overlap
+the owner's published work shifts (opt-in), the setup handlers in phase 2, and
+the public HTTP routes in phase 3.
 
 ## Goal
 
@@ -205,7 +213,7 @@ policy wording.
 
 ## Delivery phases
 
-1. **Foundation**: migration, `calendar.js` with availability maths and
+1. **Foundation (done)**: migration, `calendar.js` with availability maths and
    `redactBooking`, unit tests. No UI.
 2. **Owner setup**: event types, availability, links, and the
    `event-types.html` page.
@@ -256,12 +264,15 @@ My choices, change if wrong:
    the key (Cloudflare dashboard, Turnstile, add widget for `shibamatlanta.com`)
    and we store the secret as a Pages variable. No separate vendor account.
 
+## Resolved since
+
+- Retention is 12 months after the meeting (confirmed).
+- One active booking per email per link (confirmed, enforced in the booking
+  insert and covered by tests).
+
 ## Remaining open questions
 
 1. Confirm the sender address: the code uses `EMAIL_FROM` from the
    notifications worker, but I cannot see its value from here. Check that it
    is a monitored address, since invitees may reply to interview emails.
-2. Retention: is 12 months acceptable, or does your hiring policy need a
-   different period?
-3. Should a candidate be allowed to book more than one interview slot with the
    same email, or one active booking per email per link?
