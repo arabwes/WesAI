@@ -7,10 +7,10 @@ at the bottom before work starts.
 
 Add a Calendly-style calendar to the team portal:
 
-1. A team member configures event types (a "30-minute tasting", "Catering
-   consult") and their weekly availability.
-2. They send a unique link to a client. The client picks a slot and books
-   without logging in.
+1. A Lead or Management user configures event types (first use case: a
+   "30-minute interview") and their weekly availability.
+2. They send one reusable link to a client or job candidate. The invitee picks
+   a slot and books without logging in.
 3. A shared team calendar shows upcoming events for everyone.
 4. A booked meeting's details are visible only to the person who owns the
    link and to Management (the portal's admin role).
@@ -49,24 +49,32 @@ calling each calendar action cannot read another user's booking fields.
 
 ## Data model (`migrations/0012_calendar.sql`)
 
+- `meeting_locations`: `id, name, address_line1, address_line2, city, state,
+  postal_code, notes (parking, which door), active, created_by, created_at`.
+  The saved-address list. Lead and above can add and edit entries; entries are
+  archived, never deleted, so old bookings keep their address.
 - `event_types`: `id, owner_id, name, slug, description, duration_minutes,
-  buffer_before, buffer_after, location_type (in_person | phone | video |
-  custom), location_detail, min_notice_minutes, max_days_ahead,
+  buffer_before, buffer_after, location_id (required, FK to
+  `meeting_locations`), min_notice_minutes, max_days_ahead,
   slot_interval_minutes, questions_json, active, created_at, updated_at`.
-  Unique on `(owner_id, slug)`.
+  Unique on `(owner_id, slug)`. Meetings are in-person only, so there is no
+  phone or video type.
 - `booking_availability`: `id, owner_id, weekday, start_time, end_time` plus
   `booking_date_overrides` (`owner_id, date, start_time, end_time, is_blocked`)
   for one-off days off or extra hours. Times are wall-clock in the owner's
   timezone, stored on the owner row (`booking_timezone`, default
   `STORE_TIMEZONE`).
 - `booking_links`: `id, event_type_id, token_hash, label, expires_at,
-  max_uses, use_count, revoked_at, created_at`. One event type can have many
-  links, so a link can be one-time (for a specific client) or reusable. Only a
+  max_uses, use_count, revoked_at, created_at`. Links are reusable by
+  default (`max_uses` empty), so one link can go to many candidates. An
+  optional expiry or use cap can be set, and a link can be revoked at any time
+  without affecting bookings already made. Only a
   SHA-256 hash of the token is stored, the same approach as `calendar_tokens`.
   Tokens are 32 random bytes, base64url.
-- `bookings`: `id, event_type_id, owner_id, link_id, start_utc, end_utc,
+- `bookings`: `id, event_type_id, owner_id, link_id, location_id,
+  location_snapshot_json (address as it was when booked), start_utc, end_utc,
   status (confirmed | cancelled | rescheduled), client_name, client_email,
-  client_phone, answers_json, manage_token_hash, created_at, cancelled_at,
+  client_phone (optional), answers_json, manage_token_hash, created_at, cancelled_at,
   cancel_reason`.
 - `team_events`: `id, created_by, title, description, start_utc, end_utc,
   all_day, location, visibility, created_at, updated_at`.
@@ -91,9 +99,11 @@ Authenticated (added to `ACTIONS` in `functions/api/team/index.js`, new file
 |---|---|---|
 | `getCalendar` | barista | Range query. Returns team events plus bookings, passed through `redactBooking`. |
 | `saveTeamEvent`, `deleteTeamEvent` | lead | Team-wide events. Management can edit any, leads their own. |
-| `listEventTypes`, `saveEventType`, `archiveEventType` | barista | Own event types only. Management can view all. |
-| `getBookingAvailability`, `saveBookingAvailability`, `saveDateOverride` | barista | Own only. |
-| `createBookingLink`, `listBookingLinks`, `revokeBookingLink` | barista | Own links only. Returns the full URL once, at creation. |
+| `listEventTypes`, `saveEventType`, `archiveEventType` | lead | Own event types only. Management can view all. |
+| `listMeetingLocations` | lead | Fills the address drop-down. |
+| `saveMeetingLocation`, `archiveMeetingLocation` | lead | Add or edit saved addresses. |
+| `getBookingAvailability`, `saveBookingAvailability`, `saveDateOverride` | lead | Own only. |
+| `createBookingLink`, `listBookingLinks`, `revokeBookingLink` | lead | Own links only. Returns the full URL once, at creation. |
 | `getMyBookings`, `getBooking` | barista | Owner or management, else `forbidden`. |
 | `cancelBooking`, `rescheduleBooking` | barista | Owner or management. Emails the client. |
 | `getAllBookings` | management | Admin view across owners. |
@@ -102,7 +112,7 @@ Public, no login (`functions/api/book/[token].js`, plus
 `functions/api/book/[token]/slots.js`, `book.js`, `manage.js`):
 
 - `GET  /api/book/:token`: event type name, duration, owner first name,
-  questions. 404 for unknown, revoked, expired or exhausted tokens. The
+  the meeting address, questions. 404 for unknown, revoked, expired or exhausted tokens. The
   response is identical for "unknown" and "revoked" so tokens cannot be probed.
 - `GET  /api/book/:token/slots?from=&to=&tz=`: available start times.
 - `POST /api/book/:token/book`: creates the booking.
@@ -127,8 +137,9 @@ stale page can never book an unavailable time.
 
 ## Notifications
 
-- Client: confirmation email with an `.ics` attachment and a private manage
-  link. Reminder 24 hours before (queue with delay, or a scheduled worker
+- Invitee: confirmation email with the address, an `.ics` attachment and a
+  private manage link, sent through the existing Resend setup
+  (`EMAIL_FROM` in the notifications worker). Reminder 24 hours before (queue with delay, or a scheduled worker
   using the existing notifications worker).
 - Owner: portal notification and email on new, cancelled and rescheduled
   bookings, reusing the notification rows the scheduling code already writes.
@@ -145,9 +156,37 @@ stale page can never book an unavailable time.
   and anything outside the generated slot set.
 - Responses carry `Cache-Control: no-store` and `X-Robots-Tag: noindex`;
   `/book/*` is excluded from `sitemap.xml` and disallowed in `robots.txt`.
-- Client email and phone are personal data: add a retention rule (for example
-  anonymise bookings 18 months after the meeting) and mention it in
-  `privacy-policy.html`.
+- Invitee name and email are personal data, and for interviews they are
+  hiring data. See "Data collected" below for what is stored, who sees it and
+  how long it is kept.
+
+## Data collected
+
+Collected from the invitee on the booking page:
+
+| Field | Required | Why |
+|---|---|---|
+| Full name | Yes | Identify who is coming. |
+| Email | Yes | Send the confirmation, reminder and cancel/reschedule link. |
+| Phone | Optional | Reach them if they are running late. |
+| Answers to the owner's custom questions | Optional per question | For example "Which position are you applying for?" |
+
+Collected automatically: the chosen time, the address that applied at booking
+time, the invitee's timezone, and when the booking was created or cancelled. No
+IP address is stored with the booking (the rate limiter keys on a hash that
+expires). No resume upload and no payment details in v1.
+
+Who sees it: the link owner and Management only (see the privacy model above).
+
+Retention (proposed, since you were not sure): delete or anonymise name,
+email, phone and answers 12 months after the meeting date, and sooner on
+request. The meeting row stays with the personal fields blanked, so history
+and counts survive. A scheduled worker does the cleanup. Because these are job
+candidates, keep the period short and do not store interview notes in this
+feature. Before launch, add a short line to `privacy-policy.html` saying what
+the booking form collects and how long it is kept. This is practical guidance,
+not legal advice; if you want certainty, have someone qualified review the
+policy wording.
 
 ## Front end
 
@@ -155,8 +194,9 @@ stale page can never book an unavailable time.
   bookings. Own bookings are fully detailed; others show as "Booked". Filters:
   mine, everyone, team events only. Add the page to the dashboard tiles and
   the README table.
-- `team/event-types.html`: create and edit event types, set weekly hours and
-  date overrides, generate, copy and revoke links.
+- `team/event-types.html` (Lead+): create and edit event types, pick the
+  address from a drop-down with an "Add new address" option, set weekly hours
+  and date overrides, generate, copy and revoke links.
 - `book.html` (public): pick date, then time, shown in the client's timezone
   with a timezone selector, then a form, then a confirmation screen. Matches
   the public site styling, mobile first, no framework.
@@ -190,28 +230,38 @@ off until phase 3 passes review.
 - Playwright: complete a booking on a phone viewport; cancel from the manage
   link.
 
-## Decisions I made (change if wrong)
+## Decisions
 
-1. **"Admin" = Management role.** Leads do not get access to others' bookings.
-2. **Team calendar shows other people's client meetings as "Booked" blocks**,
-   not hidden entirely, so the team can see who is busy. If you want them
-   fully invisible instead, drop those rows from `getCalendar` for non-owners.
-3. **Calendar scope is bookings plus team events**, not a replacement for the
-   shift schedule. Shifts stay in `schedule.html`.
-4. **No Google or Outlook two-way sync in v1.** It adds OAuth, token storage
-   and conflict handling. The `.ics` attachment covers clients, and the existing
-   per-user calendar feed can be extended to include bookings in a later phase.
-5. **No payments, no group events, no round-robin** in v1.
+Confirmed by you:
 
-## Open questions
+1. Lead and above can create event types, availability and links.
+2. Links are reusable. First use case is sending one link to many interview
+   candidates.
+3. Confirmation emails go out through the existing Resend setup.
+4. In-person only. An address must be chosen from a drop-down, and Lead+ can
+   add addresses to it.
 
-1. Who can create event types: all employees, or Lead and above?
-2. Should booking links be one-per-client (single use) by default, or
-   reusable with an optional limit?
-3. Do clients get an email address to reply to? Needs a sending identity on the
-   Resend domain.
-4. Is a phone or video meeting link needed (Zoom, Meet), or is in-person and
-   phone enough for v1?
-5. Retention period for client data, and whether the privacy policy needs
-   review by someone before launch.
-6. Which Turnstile account should own the keys?
+My choices, change if wrong:
+
+5. "Admin" means the Management role. Leads cannot see other people's
+   bookings.
+6. Other people's meetings show on the team calendar as "Booked" blocks, not
+   hidden entirely. Dropping those rows for non-owners is a small change if you
+   prefer.
+7. The calendar covers bookings plus team events. Shifts stay in
+   `schedule.html`.
+8. No Google or Outlook sync, payments, group events or round-robin in v1.
+9. Cloudflare Turnstile guards the public form. It is free and uses the same
+   Cloudflare account as the site, so whoever owns the Pages project creates
+   the key (Cloudflare dashboard, Turnstile, add widget for `shibamatlanta.com`)
+   and we store the secret as a Pages variable. No separate vendor account.
+
+## Remaining open questions
+
+1. Confirm the sender address: the code uses `EMAIL_FROM` from the
+   notifications worker, but I cannot see its value from here. Check that it
+   is a monitored address, since invitees may reply to interview emails.
+2. Retention: is 12 months acceptable, or does your hiring policy need a
+   different period?
+3. Should a candidate be allowed to book more than one interview slot with the
+   same email, or one active booking per email per link?
