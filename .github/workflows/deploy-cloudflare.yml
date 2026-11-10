@@ -54,7 +54,10 @@ jobs:
           cache-dependency-path: shibam-coffee-website/package-lock.json
       - run: npm ci
 
-      - name: Confirm the token works and which account it is
+      # Informational only: a token without the extra "read" permissions can still deploy,
+      # so this must never block the real steps below.
+      - name: Show which account the token belongs to
+        continue-on-error: true
         run: npx wrangler whoami
 
       - name: Show pending database migrations

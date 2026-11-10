@@ -23,12 +23,13 @@ once (A to C), then click Run (D and E).
 2. Click your profile icon (top right), then **My Profile**, then **API Tokens**.
 3. Click **Create Token**, then next to **Create Custom Token** click **Get started**.
 4. Name it `GitHub deploy`.
-5. Under **Permissions** add these five rows (use the three dropdowns on each row):
+5. Under **Permissions** add these four rows (use the three dropdowns on each row).
+   Use a single policy with **Effect: Allow**, and leave **Client IP Address
+   Filtering** blank:
    - **Account** / **D1** / **Edit**
    - **Account** / **Workers Scripts** / **Edit**
    - **Account** / **Queues** / **Edit**
    - **Account** / **Account Settings** / **Read**
-   - **User** / **User Details** / **Read**
 6. Under **Account Resources** choose **Include**, then your Shibam account.
 7. Click **Continue to summary**, then **Create Token**.
 8. **Copy the token now.** Cloudflare shows it only once. Keep the tab open.
@@ -59,7 +60,7 @@ again, and the workflow only uses them to talk to Cloudflare.
 4. After a few seconds a new run appears. Click it, then click the job inside it.
 5. It should finish with a green tick in about a minute. Open these steps to
    read them:
-   - **Confirm the token works** shows your Cloudflare account.
+   - **Show which account the token belongs to** shows your Cloudflare account. This step is informational and may print a permissions note; that is fine.
    - **Show pending database migrations** lists `0012` to `0015` as waiting.
    - **Show the notification Worker's secret names** should include
      `RESEND_API_KEY`. A yellow warning here means the email key is missing: add
