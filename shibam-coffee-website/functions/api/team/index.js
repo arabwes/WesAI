@@ -6,6 +6,8 @@ import {
   listBookingLinks, listEventTypes, listMeetingLocations, revokeBookingLink, saveBookingAvailability,
   saveDateOverride, saveEventType, saveMeetingLocation
 } from '../../_lib/calendar-setup.js';
+import { cancelBooking, getBooking, getCalendar, getMyBookings } from '../../_lib/calendar.js';
+import { deleteTeamEvent, saveTeamEvent } from '../../_lib/calendar-team.js';
 import { ApiError, json, readJson } from '../../_lib/http.js';
 import {
   discardInventoryDraft, getInventoryCount, getInventorySections, saveInventoryDraft, saveInventorySection,
@@ -153,7 +155,13 @@ const ACTIONS = {
   deleteDateOverride,
   createBookingLink,
   listBookingLinks,
-  revokeBookingLink
+  revokeBookingLink,
+  getCalendar,
+  getBooking,
+  getMyBookings,
+  cancelBooking,
+  saveTeamEvent,
+  deleteTeamEvent
 };
 
 export async function onRequestGet({ request, env }) {

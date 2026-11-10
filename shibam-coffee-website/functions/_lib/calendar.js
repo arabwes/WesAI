@@ -309,11 +309,11 @@ async function notifyOwner(env, { bookingId, ownerId, eventName, startMs, kind }
     const { timezone } = await ownerSettings(env, ownerId);
     const when = describeInstant(startMs, timezone);
     const text = {
-      new: ['New booking', `${eventName} booked for ${when}. Open your booking details to review.`],
+      new: ['New booking', `${eventName} booked for ${when}. Open the team calendar to review.`],
       cancelled: ['Booking cancelled', `A ${eventName} booking for ${when} was cancelled by the invitee.`],
       rescheduled: ['Booking rescheduled', `A ${eventName} booking was moved to ${when}.`]
     }[kind];
-    await notifyUser(env, ownerId, `booking_${kind}`, text[0], text[1], '/team/booking-links', `booking:${bookingId}:${kind}`);
+    await notifyUser(env, ownerId, `booking_${kind}`, text[0], text[1], '/team/calendar', `booking:${bookingId}:${kind}`);
   } catch (error) {
     console.error('booking owner notification failed', String(error));
   }
@@ -430,8 +430,10 @@ export async function getCalendar(request, payload, env) {
   const to = normalizeDate(payload.to, 'to');
   if (to < from) throw new ApiError('invalid_range', 400);
   if (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`) > 100 * 86_400_000) throw new ApiError('range_too_large', 400);
-  const startIso = toIso(Date.parse(`${addDaysToDate(from, -1)}T00:00:00Z`));
-  const endIso = toIso(Date.parse(`${addDaysToDate(to, 2)}T00:00:00Z`));
+  // Ranges are whole days in the store's timezone, the zone the team works in.
+  const timezone = storeTimezone(env);
+  const startIso = toIso(wallToUtc(from, 0, timezone) ?? Date.parse(`${from}T00:00:00Z`));
+  const endIso = toIso(wallToUtc(to, 1440, timezone) ?? Date.parse(`${addDaysToDate(to, 1)}T00:00:00Z`));
   const [events, bookings] = await Promise.all([
     env.TEAM_DB.prepare(`SELECT te.*, u.name AS creator_name FROM team_events te JOIN users u ON u.id = te.created_by
       WHERE te.end_utc > ? AND te.start_utc < ? ORDER BY te.start_utc LIMIT 500`).bind(startIso, endIso).all(),
@@ -440,12 +442,20 @@ export async function getCalendar(request, payload, env) {
   ]);
   return {
     ok: true,
+    timezone,
     events: events.results.map((row) => ({
       id: row.id, title: row.title, description: row.description, startUtc: row.start_utc, endUtc: row.end_utc,
-      allDay: !!row.all_day, location: row.location, createdBy: row.created_by, creatorName: row.creator_name
+      allDay: !!row.all_day, location: row.location, createdBy: row.created_by, creatorName: row.creator_name,
+      blocksAvailability: !!row.blocks_availability && row.created_by === actor.id,
+      canEdit: actor.role === 'management' || (actor.role !== 'barista' && row.created_by === actor.id)
     })),
     bookings: bookings.results.map((row) => redactBooking(actor, row))
   };
+}
+
+export function storeTimezone(env) {
+  const zone = env.STORE_TIMEZONE || 'America/New_York';
+  return isValidTimezone(zone) ? zone : 'America/New_York';
 }
 
 // Authenticated: one booking in full. Anyone who is not the owner or

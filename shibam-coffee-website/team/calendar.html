@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Calendar — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css?v=14">
+  <script src="/team/js/config.js?v=10" defer></script>
+  <script src="/team/js/auth.js?v=11" defer></script>
+  <script src="/team/js/calendar.js?v=1" defer></script>
+</head>
+<body data-page="app" data-require-role="barista">
+
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">
+        Shibam Coffee
+        <span>Team Forms</span>
+      </div>
+      <div class="portal-header__session">
+        <a class="portal-header__back" href="/team/dashboard">&larr; All forms</a>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container">
+
+      <div class="portal-intro">
+        <h1>Team Calendar</h1>
+        <p>Upcoming team events and meetings. Meetings booked through a booking link show as &ldquo;Booked&rdquo; unless you are the person who owns the link or Management.</p>
+      </div>
+
+      <p class="session-banner" id="session-banner"></p>
+      <p class="booking-status" id="cal-status" role="status" aria-live="polite"></p>
+
+      <div class="cal-toolbar">
+        <div class="cal-nav">
+          <button type="button" class="btn-inline-action" id="cal-prev" aria-label="Previous month">&lsaquo;</button>
+          <h2 id="cal-month" class="cal-month">Month</h2>
+          <button type="button" class="btn-inline-action" id="cal-next" aria-label="Next month">&rsaquo;</button>
+          <button type="button" class="btn-inline-action" id="cal-today">Today</button>
+        </div>
+        <div class="cal-filters">
+          <label for="cal-filter" class="cal-filter-label">Show</label>
+          <select id="cal-filter">
+            <option value="all">Everything</option>
+            <option value="mine">My meetings</option>
+            <option value="events">Team events only</option>
+          </select>
+          <button type="button" class="btn btn-small" id="cal-new" data-role="lead" hidden>New team event</button>
+        </div>
+      </div>
+
+      <div class="cal-grid" id="cal-grid" role="grid" aria-label="Month calendar"></div>
+
+      <section class="booking-section" aria-labelledby="agenda-heading">
+        <h2 id="agenda-heading">Agenda</h2>
+        <div id="cal-agenda">Loading calendar…</div>
+      </section>
+
+      <form id="event-form" class="booking-form" hidden></form>
+
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
