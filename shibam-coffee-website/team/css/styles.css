@@ -2465,3 +2465,31 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/* Booking links (Lead+): addresses, meeting types, hours, links */
+.booking-section { margin: var(--space-5) 0; }
+.booking-section > h2 { margin-bottom: var(--space-2); }
+.booking-hint { color: var(--color-brown-mid); margin: 0 0 var(--space-3); }
+.booking-status { min-height: 1.5em; margin: 0 0 var(--space-3); font-weight: 600; }
+.booking-status.is-error { color: #B3261E; }
+.booking-actions { margin: var(--space-3) 0; }
+.booking-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3); }
+.booking-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--space-2); }
+.booking-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); margin-top: var(--space-3);
+  padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-cream); }
+.booking-form .form-group--wide, .booking-form .booking-form__actions { grid-column: 1 / -1; }
+.booking-form__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.booking-links { margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
+.booking-links h5 { margin: 0 0 var(--space-1); }
+.booking-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 0; font-size: 0.85rem; }
+.booking-link-row__label { flex: 1 1 140px; font-weight: 600; }
+.booking-link-reveal { margin: var(--space-2) 0; padding: var(--space-2); border: 1px solid var(--color-gold); border-radius: var(--radius-btn); background: #fff8e6; }
+.booking-link-reveal input { width: 100%; margin: 6px 0; padding: 8px; font-size: 0.85rem; }
+.hours-day { display: grid; grid-template-columns: 110px 1fr; gap: var(--space-2); align-items: start; padding: 8px 0; border-bottom: 1px solid var(--color-border); }
+.hours-day__name { font-weight: 700; padding-top: 8px; }
+.hours-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; }
+.hours-row select { padding: 8px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-cream); }
+.hours-closed { color: var(--color-brown-mid); padding-top: 8px; display: inline-block; margin-right: var(--space-2); }
+.hours-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-3); }
+.override-form { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); margin: var(--space-3) 0; }
+@media (max-width: 560px) { .hours-day { grid-template-columns: 1fr; } .hours-day__name { padding-top: 0; } }

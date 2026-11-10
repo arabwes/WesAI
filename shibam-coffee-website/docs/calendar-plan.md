@@ -1,15 +1,22 @@
 # Portal calendar and booking links — implementation plan
 
-Status: phase 1 (foundation) is built and tested. Nothing is routed or visible
-yet. Phases 2-5 are still to do.
+Status: phases 1 (foundation) and 2 (owner setup) are built and tested. Leads
+can create links at `/team/booking-links`, but the public booking page that the
+links point to (`/book/<token>`) is phase 3, so links do not open anything yet.
+Phases 3-5 are still to do.
 
 Phase 1 delivered: `migrations/0012_calendar.sql`,
 `functions/_lib/calendar-rules.js` (timezone, availability and slot maths,
 booking redaction), `functions/_lib/calendar.js` (link lookup, slots, atomic
 booking, team calendar, cancel, 12-month anonymising) and
-`tests/calendar.test.js`. Deliberately deferred: skipping slots that overlap
-the owner's published work shifts (opt-in), the setup handlers in phase 2, and
-the public HTTP routes in phase 3.
+`tests/calendar.test.js`. Deliberately deferred to later phases: the public HTTP routes.
+
+Phase 2 delivered: `functions/_lib/calendar-setup.js` (addresses, meeting
+types, weekly hours, date overrides, links), the opt-in "avoid my published
+shifts" setting (`migrations/0013_calendar_avoid_shifts.sql`), the 13 actions
+routed in `functions/api/team/index.js`, the Lead+ page
+`team/booking-links.html`, a dashboard tile, and tests in
+`tests/calendar-setup.test.js` and `tests/booking-links.spec.cjs`.
 
 ## Goal
 
@@ -202,7 +209,7 @@ policy wording.
   bookings. Own bookings are fully detailed; others show as "Booked". Filters:
   mine, everyone, team events only. Add the page to the dashboard tiles and
   the README table.
-- `team/event-types.html` (Lead+): create and edit event types, pick the
+- `team/booking-links.html` (Lead+): create and edit event types, pick the
   address from a drop-down with an "Add new address" option, set weekly hours
   and date overrides, generate, copy and revoke links.
 - `book.html` (public): pick date, then time, shown in the client's timezone
@@ -215,7 +222,7 @@ policy wording.
 
 1. **Foundation (done)**: migration, `calendar.js` with availability maths and
    `redactBooking`, unit tests. No UI.
-2. **Owner setup**: event types, availability, links, and the
+2. **Owner setup (done)**: event types, availability, links, and the
    `event-types.html` page.
 3. **Public booking flow**: slots, booking, double-booking guard, emails with
    `.ics`, manage link, Turnstile and rate limiting.

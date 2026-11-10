@@ -83,16 +83,37 @@ function locationSnapshot(link) {
   };
 }
 
-async function ownerTimezone(env, ownerId) {
-  const row = await env.TEAM_DB.prepare('SELECT timezone FROM booking_settings WHERE owner_id = ?').bind(ownerId).first();
+async function ownerSettings(env, ownerId) {
+  const row = await env.TEAM_DB.prepare('SELECT timezone, avoid_shifts FROM booking_settings WHERE owner_id = ?').bind(ownerId).first();
   const zone = row?.timezone || env.STORE_TIMEZONE || 'America/New_York';
-  return isValidTimezone(zone) ? zone : 'America/New_York';
+  return { timezone: isValidTimezone(zone) ? zone : 'America/New_York', avoidShifts: !!row?.avoid_shifts };
+}
+
+// Published, active work shifts as busy intervals. Shift times are wall-clock
+// in the location's timezone; an end at or before the start runs past midnight.
+async function shiftIntervals(env, ownerId, fromIso, toIso_) {
+  const fromDate = addDaysToDate(fromIso.slice(0, 10), -1);
+  const toDate = addDaysToDate(toIso_.slice(0, 10), 1);
+  const { results } = await env.TEAM_DB.prepare(`SELECT s.shift_date, s.start_time, s.end_time, l.timezone
+    FROM shifts s JOIN schedules sc ON sc.id = s.schedule_id JOIN locations l ON l.id = sc.location_id
+    WHERE s.employee_id = ? AND s.status = 'active' AND sc.status = 'published'
+      AND s.shift_date >= ? AND s.shift_date <= ?`).bind(ownerId, fromDate, toDate).all();
+  const minutes = (value) => { const [h, m] = value.split(':').map(Number); return h * 60 + m; };
+  const intervals = [];
+  for (const shift of results) {
+    const zone = isValidTimezone(shift.timezone) ? shift.timezone : 'America/New_York';
+    const start = wallToUtc(shift.shift_date, minutes(shift.start_time), zone);
+    const endMinutes = minutes(shift.end_time);
+    const end = wallToUtc(shift.shift_date, endMinutes <= minutes(shift.start_time) ? endMinutes + 1440 : endMinutes, zone);
+    if (start !== null && end !== null && end > start) intervals.push({ start, end });
+  }
+  return intervals;
 }
 
 // Everything that makes an owner busy between two instants.
-async function loadBusy(env, ownerId, fromIso, toIso_, timezone) {
+async function loadBusy(env, ownerId, fromIso, toIso_, timezone, avoidShifts) {
   const db = env.TEAM_DB;
-  const [bookings, events, timeOff] = await Promise.all([
+  const [bookings, events, timeOff, shifts] = await Promise.all([
     db.prepare(`SELECT blocks_start_utc, blocks_end_utc FROM bookings
       WHERE owner_id = ? AND status = 'confirmed' AND blocks_end_utc > ? AND blocks_start_utc < ?`)
       .bind(ownerId, fromIso, toIso_).all(),
@@ -100,17 +121,19 @@ async function loadBusy(env, ownerId, fromIso, toIso_, timezone) {
       WHERE created_by = ? AND blocks_availability = 1 AND end_utc > ? AND start_utc < ?`)
       .bind(ownerId, fromIso, toIso_).all(),
     db.prepare(`SELECT start_date, end_date, start_time, end_time FROM time_off_requests
-      WHERE employee_id = ? AND status = 'approved'`).bind(ownerId).all()
+      WHERE employee_id = ? AND status = 'approved'`).bind(ownerId).all(),
+    avoidShifts ? shiftIntervals(env, ownerId, fromIso, toIso_) : []
   ]);
   return [
     ...bookings.results.map((r) => ({ start: Date.parse(r.blocks_start_utc), end: Date.parse(r.blocks_end_utc) })),
     ...events.results.map((r) => ({ start: Date.parse(r.start_utc), end: Date.parse(r.end_utc) })),
-    ...timeOffToIntervals(timeOff.results, timezone)
+    ...timeOffToIntervals(timeOff.results, timezone),
+    ...shifts
   ];
 }
 
 async function computeSlots(env, link, now) {
-  const timezone = await ownerTimezone(env, link.owner_id);
+  const { timezone, avoidShifts } = await ownerSettings(env, link.owner_id);
   const nowTime = nowMs(now);
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
     .format(new Date(nowTime));
@@ -124,7 +147,7 @@ async function computeSlots(env, link, now) {
   const windows = expandAvailability({ rules: rules.results, overrides: overrides.results, fromDate, toDate, timezone });
   const rangeStart = wallToUtc(fromDate, 0, timezone) ?? nowTime;
   const rangeEnd = wallToUtc(toDate, 1440, timezone) ?? nowTime + (link.max_days_ahead + 2) * 86_400_000;
-  const busy = await loadBusy(env, link.owner_id, toIso(rangeStart), toIso(rangeEnd), timezone);
+  const busy = await loadBusy(env, link.owner_id, toIso(rangeStart), toIso(rangeEnd), timezone, avoidShifts);
   return {
     timezone,
     slots: generateSlots({

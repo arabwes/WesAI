@@ -1,6 +1,11 @@
 import { bootstrap, getSession, login, logout } from '../../_lib/auth.js';
 import { getCateringRequests, updateCateringRequestStatus } from '../../_lib/catering.js';
 import { getContactRequests, updateContactRequestStatus } from '../../_lib/contact.js';
+import {
+  archiveEventType, archiveMeetingLocation, createBookingLink, deleteDateOverride, getBookingAvailability,
+  listBookingLinks, listEventTypes, listMeetingLocations, revokeBookingLink, saveBookingAvailability,
+  saveDateOverride, saveEventType, saveMeetingLocation
+} from '../../_lib/calendar-setup.js';
 import { ApiError, json, readJson } from '../../_lib/http.js';
 import {
   discardInventoryDraft, getInventoryCount, getInventorySections, saveInventoryDraft, saveInventorySection,
@@ -135,7 +140,20 @@ const ACTIONS = {
   submitInventoryCount,
   discardInventoryDraft,
   getInventorySections,
-  saveInventorySection
+  saveInventorySection,
+  listMeetingLocations,
+  saveMeetingLocation,
+  archiveMeetingLocation,
+  listEventTypes,
+  saveEventType,
+  archiveEventType,
+  getBookingAvailability,
+  saveBookingAvailability,
+  saveDateOverride,
+  deleteDateOverride,
+  createBookingLink,
+  listBookingLinks,
+  revokeBookingLink
 };
 
 export async function onRequestGet({ request, env }) {

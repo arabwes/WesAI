@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Booking Links — Shibam Coffee Atlanta</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/team/css/styles.css?v=13">
+  <script src="/team/js/config.js?v=10" defer></script>
+  <script src="/team/js/auth.js?v=11" defer></script>
+  <script src="/team/js/booking-links.js?v=1" defer></script>
+</head>
+<body data-page="app" data-require-role="lead">
+
+  <header class="portal-header">
+    <div class="container portal-header__inner">
+      <div class="portal-header__brand">
+        Shibam Coffee
+        <span>Team Forms</span>
+      </div>
+      <div class="portal-header__session">
+        <a class="portal-header__back" href="/team/dashboard">&larr; All forms</a>
+        <button type="button" id="logout-btn" class="btn-remove-row">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="portal-main">
+    <div class="container">
+
+      <div class="portal-intro">
+        <h1>Booking Links</h1>
+        <p>Set your hours, choose where meetings happen, then send a link so people can book a time with you. Only you and Management can see who books.</p>
+      </div>
+
+      <p class="session-banner" id="session-banner"></p>
+      <p class="booking-status" id="booking-status" role="status" aria-live="polite"></p>
+
+      <section class="booking-section" aria-labelledby="types-heading">
+        <h2 id="types-heading">Meeting types and links</h2>
+        <div id="types-list">Loading meeting types…</div>
+        <div class="booking-actions"><button type="button" class="btn btn-small" id="new-type-btn">New meeting type</button></div>
+        <form id="type-form" class="booking-form" hidden></form>
+      </section>
+
+      <section class="booking-section" aria-labelledby="hours-heading">
+        <h2 id="hours-heading">My booking hours</h2>
+        <div id="hours-editor">Loading hours…</div>
+      </section>
+
+      <section class="booking-section" aria-labelledby="locations-heading">
+        <h2 id="locations-heading">Meeting addresses</h2>
+        <p class="booking-hint">Every meeting happens in person. Addresses saved here show up in the drop-down for everyone.</p>
+        <div id="locations-list">Loading addresses…</div>
+        <div class="booking-actions"><button type="button" class="btn btn-small" id="new-location-btn">Add an address</button></div>
+        <form id="location-form" class="booking-form" hidden></form>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="portal-footer">
+    <div class="container">
+      <p>&copy; <span id="footer-year">2026</span> Yemeni Coffee Co. DBA Shibam Coffee — internal use only.</p>
+    </div>
+  </footer>
+
+</body>
+</html>
