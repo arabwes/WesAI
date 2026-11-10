@@ -63,6 +63,7 @@ export function buildIcs({ bookingId, title, startIso, endIso, location, descrip
 }
 
 const TEMPLATES = {
+  reminder: { subject: (t, when) => `Reminder: ${t} on ${when}`, lead: 'This is a reminder of your upcoming meeting.', calendar: false, reminder: true },
   confirmed: { subject: (t, when) => `Confirmed: ${t} on ${when}`, lead: 'Your meeting is confirmed.', calendar: true },
   rescheduled: { subject: (t, when) => `Rescheduled: ${t} on ${when}`, lead: 'Your meeting has been moved to a new time.', calendar: true },
   cancelled_by_invitee: { subject: (t) => `You cancelled: ${t}`, lead: 'You cancelled this meeting.', calendar: false, cancelled: true },
@@ -89,6 +90,7 @@ export function buildBookingEmail({ template, booking, manageLink, ownerTimezone
     textLines.push(`Where: ${where}`);
     if (notes) textLines.push(`Notes: ${notes}`);
     if (manageLink) textLines.push('', `Need to change plans? Reschedule or cancel here:`, manageLink);
+    else if (spec.reminder) textLines.push('', 'Need to change plans? Use the link in your confirmation email, or reply to this email.');
   }
   textLines.push('', 'Shibam Coffee Atlanta');
 
@@ -101,6 +103,7 @@ export function buildBookingEmail({ template, booking, manageLink, ownerTimezone
     `<table cellpadding="4" style="border-collapse:collapse">${rows.map(([k, v]) =>
       `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${escapeHtml(v)}</td></tr>`).join('')}</table>` +
     (!spec.cancelled && manageLink ? `<p>Need to change plans? <a href="${escapeHtml(manageLink)}">Reschedule or cancel</a>.</p>` : '') +
+    (spec.reminder ? '<p>Need to change plans? Use the link in your confirmation email, or reply to this email.</p>' : '') +
     '<p>Shibam Coffee Atlanta</p>';
 
   const email = { subject: spec.subject(booking.title, when), text: textLines.join('\n'), html };

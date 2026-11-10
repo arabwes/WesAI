@@ -345,9 +345,12 @@ which is a different file from the portal's `team/js/config.js`.
 
 ### 3B-2. Calendar and booking links: launch checklist
 
-The booking feature needs three migrations (`0012` to `0014`) and a Worker
-redeploy, because the notification Worker now sends booking confirmation emails
-and runs the 12-month cleanup of invitee data.
+A plain-language, step-by-step version of this is in
+[`docs/calendar-go-live.md`](docs/calendar-go-live.md).
+
+The booking feature needs four migrations (`0012` to `0015`) and a Worker
+redeploy, because the notification Worker now sends booking confirmation and
+reminder emails and runs the 12-month cleanup of invitee data.
 
 1. Apply migrations: `npm run db:migrate:preview`, test, then `npm run db:migrate:production`.
 2. Redeploy the Worker: `npm run notifications:deploy`.
@@ -363,6 +366,11 @@ and runs the 12-month cleanup of invitee data.
    does not contain the invitee's name.
 6. Confirm `EMAIL_FROM` (`workers/notifications/wrangler.jsonc`) is an address
    someone reads; it is used as the sender for these emails.
+7. Reminders: the Worker's hourly job emails people whose meeting is within 24
+   hours (skipping meetings booked less than a day ahead). Check the Worker logs
+   for `booking_reminders_complete` after the first scheduled run.
+8. Erasing someone's details on request: sign in as Management, open Team
+   Calendar, find the booking, and use "Erase personal data".
 
 ### 3C. Notification Worker Resend secret
 

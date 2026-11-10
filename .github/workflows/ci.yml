@@ -22,6 +22,43 @@ jobs:
         working-directory: cafe-mcp
         run: python -m pytest tests mcp-common/tests -q
 
+  website:
+    name: website (unit tests and build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shibam-coffee-website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: shibam-coffee-website/package-lock.json
+      - run: npm ci
+      - name: Unit and integration tests
+        run: npm test
+      - name: Build the Pages output
+        run: npm run build
+
+  website-browser:
+    name: website (browser tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shibam-coffee-website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: shibam-coffee-website/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Phone-width browser tests
+        run: npx playwright test
+
   security:
     runs-on: ubuntu-latest
     steps:

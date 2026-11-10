@@ -212,29 +212,21 @@ function toBase64(text) {
   return btoa(binary);
 }
 
-// Emails to the person who booked a meeting. Skips quietly when the booking is
-// gone, was anonymised, or is no longer in the state the email describes.
-async function sendBookingEmail(message, env) {
-  const { bookingId, template, manageToken } = message.body || {};
-  if (!bookingId || !isBookingTemplate(template)) return false;
-  const booking = await env.TEAM_DB.prepare(`SELECT b.*, u.name AS owner_name, u.email AS owner_email
-    FROM bookings b JOIN users u ON u.id = b.owner_id WHERE b.id = ?`).bind(bookingId).first();
-  if (!booking || !booking.client_email) return false;
-  const wantsCancelled = template.startsWith('cancelled');
-  if (wantsCancelled !== (booking.status === 'cancelled')) return false;
-  if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
+// Sends one booking email through Resend. Shared by queued emails and reminders.
+async function deliverBookingEmail(env, booking, template, manageToken, deliveryKey) {
   const settings = await env.TEAM_DB.prepare('SELECT timezone FROM booking_settings WHERE owner_id = ?').bind(booking.owner_id).first();
-  const manageLink = manageToken && !wantsCancelled ? `${env.PORTAL_ORIGIN}/book/manage/${encodeURIComponent(manageToken)}` : '';
+  const manageLink = manageToken && !template.startsWith('cancelled') ? `${env.PORTAL_ORIGIN}/book/manage/${encodeURIComponent(manageToken)}` : '';
   const email = buildBookingEmail({
     template, booking, manageLink, ownerTimezone: settings?.timezone || env.STORE_TIMEZONE
   });
+  const cancelling = template.startsWith('cancelled');
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
       'User-Agent': 'ShibamCoffeeTeam/2.0',
-      'Idempotency-Key': String(message.body.deliveryKey || `booking:${bookingId}:${template}`).slice(0, 256)
+      'Idempotency-Key': String(deliveryKey || `booking:${booking.id}:${template}`).slice(0, 256)
     },
     body: JSON.stringify({
       from: env.EMAIL_FROM,
@@ -245,13 +237,60 @@ async function sendBookingEmail(message, env) {
       html: email.html,
       ...(email.ics ? { attachments: [{
         filename: 'meeting.ics', content: toBase64(email.ics),
-        content_type: `text/calendar; charset=utf-8; method=${wantsCancelled ? 'CANCEL' : 'PUBLISH'}`
+        content_type: `text/calendar; charset=utf-8; method=${cancelling ? 'CANCEL' : 'PUBLISH'}`
       }] } : {})
     })
   });
   const body = await responseSnippet(response);
   if (!response.ok) throw new Error(`Resend ${response.status}: ${body}`);
+}
+
+const BOOKING_WITH_OWNER = `SELECT b.*, u.name AS owner_name, u.email AS owner_email
+  FROM bookings b JOIN users u ON u.id = b.owner_id`;
+
+// Emails to the person who booked a meeting. Skips quietly when the booking is
+// gone, was anonymised, or is no longer in the state the email describes.
+async function sendBookingEmail(message, env) {
+  const { bookingId, template, manageToken } = message.body || {};
+  if (!bookingId || !isBookingTemplate(template)) return false;
+  const booking = await env.TEAM_DB.prepare(`${BOOKING_WITH_OWNER} WHERE b.id = ?`).bind(bookingId).first();
+  if (!booking || !booking.client_email) return false;
+  const wantsCancelled = template.startsWith('cancelled');
+  if (wantsCancelled !== (booking.status === 'cancelled')) return false;
+  if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
+  await deliverBookingEmail(env, booking, template, manageToken, message.body.deliveryKey);
   return false;
+}
+
+// Hourly: email a reminder to people whose meeting is within 24 hours. Skipped
+// for bookings made less than 24 hours ahead (they just heard from us) and for
+// anonymised, cancelled or already-reminded bookings. A failure for one booking
+// never stops the others or the rest of the cleanup job.
+async function sendBookingReminders(env, nowMs = Date.now()) {
+  if (!env.RESEND_API_KEY) {
+    console.log(JSON.stringify({ event: 'booking_reminders_skipped', reason: 'resend_not_configured' }));
+    return { sent: 0, failed: 0 };
+  }
+  const now = new Date(nowMs).toISOString();
+  const horizon = new Date(nowMs + 24 * 3600 * 1000).toISOString();
+  const { results } = await env.TEAM_DB.prepare(`${BOOKING_WITH_OWNER}
+    WHERE b.status = 'confirmed' AND b.reminder_sent_at IS NULL AND b.anonymized_at IS NULL AND b.client_email IS NOT NULL
+      AND b.start_utc > ? AND b.start_utc <= ? AND julianday(b.created_at) <= julianday(b.start_utc) - 1
+    ORDER BY b.start_utc LIMIT 50`).bind(now, horizon).all();
+  let sent = 0;
+  let failed = 0;
+  for (const booking of results) {
+    try {
+      await deliverBookingEmail(env, booking, 'reminder', '', `booking:${booking.id}:reminder`);
+      await env.TEAM_DB.prepare('UPDATE bookings SET reminder_sent_at = ? WHERE id = ? AND reminder_sent_at IS NULL').bind(now, booking.id).run();
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      console.error(JSON.stringify({ event: 'booking_reminder_failed', bookingId: booking.id, error: String(error).slice(0, 300) }));
+    }
+  }
+  console.log(JSON.stringify({ event: 'booking_reminders_complete', sent, failed }));
+  return { sent, failed };
 }
 
 function dateInTimezone(date, timezone) {
@@ -441,6 +480,7 @@ export default {
       env.TEAM_DB.prepare('DELETE FROM public_rate_limits WHERE expires_at < ?').bind(now),
       anonymizeExpiredBookingsStatement(env.TEAM_DB, Date.now())
     ]);
+    await sendBookingReminders(env).catch((error) => console.error(JSON.stringify({ event: 'booking_reminders_error', error: String(error).slice(0, 300) })));
     await syncToastSales(env);
     console.log(JSON.stringify({ event: 'scheduled_cleanup_complete', at: now }));
   }

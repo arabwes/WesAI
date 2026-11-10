@@ -212,7 +212,7 @@
       card.appendChild(node('div', 'cal-item__title', 'Booked'));
       return card;
     }
-    card.appendChild(node('div', 'cal-item__title', booking.title + (booking.clientName ? ' — ' + booking.clientName : '')));
+    card.appendChild(node('div', 'cal-item__title', booking.title + (booking.clientName ? ' — ' + booking.clientName : booking.anonymized ? ' — details removed' : '')));
     card.appendChild(node('p', 'cal-item__meta', 'Only you and Management can see these details'));
     var details = node('div', 'cal-item__details');
     details.hidden = true;
@@ -244,6 +244,18 @@
     });
     actions.appendChild(toggle);
     actions.appendChild(cancel);
+    if (state.session && Auth.hasRole(state.session, 'management') && booking.clientEmail) {
+      var erase = node('button', 'btn-inline-action btn-inline-action--danger', 'Erase personal data'); erase.type = 'button';
+      erase.addEventListener('click', function () {
+        if (!window.confirm('Erase all details for ' + (booking.clientName || 'this person') + '? Any upcoming meeting is cancelled and this cannot be undone.')) return;
+        Auth.apiCall('eraseBookingData', { bookingId: booking.id }).then(function (result) {
+          if (!result.ok) return say('Could not erase the details.', true);
+          say('Personal data erased.');
+          return load();
+        });
+      });
+      actions.appendChild(erase);
+    }
     card.appendChild(actions);
     card.appendChild(details);
     return card;

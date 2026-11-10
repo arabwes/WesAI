@@ -6,7 +6,7 @@ import {
   listBookingLinks, listEventTypes, listMeetingLocations, revokeBookingLink, saveBookingAvailability,
   saveDateOverride, saveEventType, saveMeetingLocation
 } from '../../_lib/calendar-setup.js';
-import { cancelBooking, getBooking, getCalendar, getMyBookings } from '../../_lib/calendar.js';
+import { cancelBooking, eraseBookingData, getBooking, getCalendar, getMyBookings } from '../../_lib/calendar.js';
 import { deleteTeamEvent, saveTeamEvent } from '../../_lib/calendar-team.js';
 import { ApiError, json, readJson } from '../../_lib/http.js';
 import {
@@ -160,6 +160,7 @@ const ACTIONS = {
   getBooking,
   getMyBookings,
   cancelBooking,
+  eraseBookingData,
   saveTeamEvent,
   deleteTeamEvent
 };

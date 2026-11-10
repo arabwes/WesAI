@@ -22,9 +22,6 @@ async function boot(page, who) {
   const req = {};
   for (const [key, profile] of Object.entries(PROFILES)) req[key] = addUserWithSession(db, profile);
 
-  // Data: a team event today, and a booking by Ana's candidate tomorrow.
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-  await team.saveTeamEvent(req.leadA, { title: 'Supplier tasting', date: today, startTime: '14:00', endTime: '15:00', location: 'Back room' }, env);
   const location = await setup.saveMeetingLocation(req.leadA, { name: 'Shop', addressLine1: '1 Main St', city: 'Alpharetta', state: 'GA', postalCode: '30022' }, env);
   const type = await setup.saveEventType(req.leadA, { name: 'Barista interview', durationMinutes: 30, locationId: location.id, minNoticeMinutes: 60 }, env);
   await setup.saveBookingAvailability(req.leadA, { timezone: 'America/New_York', weekly: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startTime: '09:00', endTime: '17:00' })) }, env);
@@ -32,6 +29,11 @@ async function boot(page, who) {
   const token = link.url.split('/').pop();
   const slots = (await cal.getAvailableSlots(env, token)).slots;
   await cal.createBooking(env, token, { name: 'Cam Candidate', email: 'cam@example.com', phone: '555-0100', start: slots[0] });
+  // The team event is on the same store-timezone day as the booking, so both are always in the same month
+  // no matter when the test runs (end of month, late evening, ...).
+  const bookingDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(slots[0]));
+  await team.saveTeamEvent(req.leadA, { title: 'Supplier tasting', date: bookingDay, startTime: '17:30', endTime: '18:30', location: 'Back room' }, env);
+  const monthLabel = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' }).format(new Date(`${bookingDay}T12:00:00Z`));
 
   const profile = PROFILES[who];
   await page.addInitScript((p) => localStorage.setItem('shibam_team_profile', JSON.stringify(p)), { ...profile, email: '', expiresAt: expiresAt() });
@@ -44,18 +46,23 @@ async function boot(page, who) {
     });
     return route.fulfill({ status: response.status, contentType: 'application/json', body: await response.text() });
   });
-  return { db, env };
+  return { db, env, monthLabel };
 }
 
-async function seeAll(page) {
+// Opens the calendar on the month that contains the test data.
+async function seeAll(page, monthLabel) {
   await page.goto('/team/calendar');
   await expect(page.locator('#cal-agenda')).not.toContainText('Loading calendar');
-  // Show every item for the visible month in the agenda.
+  for (let i = 0; i < 3 && (await page.locator('#cal-month').textContent()) !== monthLabel; i += 1) {
+    await page.click('#cal-next');
+    await expect(page.locator('#cal-agenda')).not.toContainText('Loading calendar');
+  }
+  await expect(page.locator('#cal-month')).toHaveText(monthLabel);
 }
 
 test('a barista sees team events and "Booked", but never the candidate, and cannot add events', async ({ page }) => {
-  await boot(page, 'barista');
-  await seeAll(page);
+  const { monthLabel } = await boot(page, 'barista');
+  await seeAll(page, monthLabel);
   const agenda = page.locator('#cal-agenda');
   await expect(agenda).toContainText('Supplier tasting');
   await expect(agenda).toContainText('Back room');
@@ -71,8 +78,8 @@ test('a barista sees team events and "Booked", but never the candidate, and cann
 });
 
 test('another lead sees the meeting as "Booked" only', async ({ page }) => {
-  await boot(page, 'leadB');
-  await seeAll(page);
+  const { monthLabel } = await boot(page, 'leadB');
+  await seeAll(page, monthLabel);
   const text = await page.locator('body').innerText();
   expect(text).not.toContain('Cam Candidate');
   await expect(page.locator('#cal-agenda .cal-item--booking')).toContainText('Booked');
@@ -81,8 +88,8 @@ test('another lead sees the meeting as "Booked" only', async ({ page }) => {
 });
 
 test('the host sees candidate details and can cancel; the event is theirs to edit', async ({ page }) => {
-  const { db } = await boot(page, 'leadA');
-  await seeAll(page);
+  const { db, monthLabel } = await boot(page, 'leadA');
+  await seeAll(page, monthLabel);
   const booking = page.locator('#cal-agenda .cal-item--booking');
   await expect(booking).toContainText('Barista interview — Cam Candidate');
   await expect(booking.locator('.cal-item__details')).toBeHidden();
@@ -98,15 +105,15 @@ test('the host sees candidate details and can cancel; the event is theirs to edi
 });
 
 test('Management sees candidate details for every booking', async ({ page }) => {
-  await boot(page, 'admin');
-  await seeAll(page);
+  const { monthLabel } = await boot(page, 'admin');
+  await seeAll(page, monthLabel);
   await expect(page.locator('#cal-agenda .cal-item--booking')).toContainText('Cam Candidate');
   await expect(page.locator('#cal-agenda').getByRole('button', { name: 'Edit' })).toHaveCount(1);
 });
 
 test('"My meetings" filter hides other people\'s bookings and team events', async ({ page }) => {
-  await boot(page, 'leadB');
-  await seeAll(page);
+  const { monthLabel } = await boot(page, 'leadB');
+  await seeAll(page, monthLabel);
   await page.selectOption('#cal-filter', 'mine');
   await expect(page.locator('#cal-agenda')).toContainText('Nothing scheduled this month');
   await page.selectOption('#cal-filter', 'events');
@@ -115,9 +122,11 @@ test('"My meetings" filter hides other people\'s bookings and team events', asyn
 });
 
 test('a lead adds a team event; the form is hidden until asked for', async ({ page }) => {
-  const { db } = await boot(page, 'leadA');
-  await seeAll(page);
+  const { db, monthLabel } = await boot(page, 'leadA');
+  await seeAll(page, monthLabel);
   await expect(page.locator('#event-form')).toBeHidden();
+  // New events default to the selected day, so pick a day inside the month being viewed.
+  await page.locator('.cal-day:not(.is-outside)').nth(14).click();
   await page.click('#cal-new');
   await expect(page.locator('#event-form')).toBeVisible();
   const form = page.locator('#event-form');
@@ -140,14 +149,15 @@ test('a lead adds a team event; the form is hidden until asked for', async ({ pa
 });
 
 test('month navigation works and the page fits a phone', async ({ page }) => {
-  await boot(page, 'barista');
-  await seeAll(page);
-  const first = await page.locator('#cal-month').textContent();
+  const { monthLabel } = await boot(page, 'barista');
+  await seeAll(page, monthLabel);
+  await expect(page.locator('#cal-agenda')).toContainText('Supplier tasting');
   await page.click('#cal-next');
-  await expect(page.locator('#cal-month')).not.toHaveText(first);
-  await expect(page.locator('#cal-agenda')).toContainText('Nothing scheduled this month');
-  await page.click('#cal-today');
-  await expect(page.locator('#cal-month')).toHaveText(first);
+  await expect(page.locator('#cal-month')).not.toHaveText(monthLabel);
+  await expect(page.locator('#cal-agenda')).not.toContainText('Supplier tasting', { timeout: 5000 });
+  await page.click('#cal-prev');
+  await expect(page.locator('#cal-month')).toHaveText(monthLabel);
+  await expect(page.locator('#cal-agenda')).toContainText('Supplier tasting');
   await page.locator('.cal-day:not(.is-outside)').first().click();
   await expect(page.locator('.cal-day.is-selected')).toHaveCount(1);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -161,4 +171,27 @@ test('Booking Links forms stay hidden until opened', async ({ page }) => {
   await expect(page.locator('#location-form')).toBeHidden();
   await page.click('#new-location-btn');
   await expect(page.locator('#location-form')).toBeVisible();
+});
+
+test('only Management sees "Erase personal data", and using it removes the candidate from the page', async ({ page }) => {
+  const { db, monthLabel } = await boot(page, 'admin');
+  await seeAll(page, monthLabel);
+  const booking = page.locator('#cal-agenda .cal-item--booking');
+  await expect(booking.getByRole('button', { name: 'Erase personal data' })).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await booking.getByRole('button', { name: 'Erase personal data' }).click();
+  await expect(page.locator('#cal-status')).toContainText('Personal data erased');
+  await expect(page.locator('#cal-agenda .cal-item--booking')).toHaveCount(0); // wait for the list to refresh
+  const text = await page.locator('body').innerText();
+  expect(text).not.toContain('Cam Candidate');
+  expect(text).not.toContain('cam@example.com');
+  const row = db.raw.prepare('SELECT client_name, client_email, status FROM bookings').get();
+  expect({ ...row }).toEqual({ client_name: null, client_email: null, status: 'cancelled' });
+});
+
+test('the host (a lead) does not get the erase button', async ({ page }) => {
+  const { monthLabel } = await boot(page, 'leadA');
+  await seeAll(page, monthLabel);
+  await expect(page.locator('#cal-agenda .cal-item--booking').getByRole('button', { name: 'Cancel meeting' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Erase personal data' })).toHaveCount(0);
 });

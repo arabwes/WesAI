@@ -76,8 +76,8 @@ test('a candidate books, reschedules and cancels from a phone', async ({ page })
   await page.getByRole('link', { name: 'Change or cancel this booking' }).click();
   await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible();
   await page.getByRole('button', { name: 'Reschedule' }).click();
-  await page.locator('.booking-chip').first().click();
-  await page.locator('.booking-time').nth(2).click();
+  await page.locator('.booking-chip').nth(1).click(); // the second day always has a full set of times
+  await page.locator('.booking-time').first().click();
   await page.getByRole('button', { name: 'Confirm new time' }).click();
   await expect(page.locator('h1')).toHaveText('You are booked');
   const rows = db.raw.prepare('SELECT status, start_utc FROM bookings ORDER BY rowid').all();

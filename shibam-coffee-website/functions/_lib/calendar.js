@@ -498,3 +498,26 @@ export async function anonymizeExpiredBookings(env, now = Date.now()) {
   const result = await anonymizeExpiredBookingsStatement(env.TEAM_DB, nowMs(now)).run();
   return { ok: true, anonymized: result.meta.changes };
 }
+
+// Management only: erase one person's details on request (the privacy policy
+// promises this). Covers every booking row with the same email, including old
+// cancelled and rescheduled copies, and cancels any that are still upcoming so
+// no ghost meeting is left behind. The meeting times themselves are kept.
+export async function eraseBookingData(request, payload, env) {
+  const actor = await requireRole(request, payload, env, 'management');
+  const db = env.TEAM_DB;
+  const row = await db.prepare('SELECT id, client_email FROM bookings WHERE id = ?').bind(String(payload.bookingId || '')).first();
+  if (!row) throw new ApiError('booking_not_found', 404);
+  const now = nowIso();
+  const where = row.client_email ? 'client_email = ?' : 'id = ?';
+  const key = row.client_email || row.id;
+  const results = await db.batch([
+    db.prepare(`UPDATE bookings SET status = 'cancelled', cancelled_at = ?, cancelled_by = ?, cancel_reason = 'erased on request'
+      WHERE ${where} AND status = 'confirmed' AND start_utc > ?`).bind(now, actor.id, key, now),
+    db.prepare(`UPDATE bookings SET client_name = NULL, client_email = NULL, client_phone = NULL, client_timezone = NULL,
+      answers_json = '{}', cancel_reason = CASE WHEN cancel_reason = 'erased on request' THEN cancel_reason ELSE NULL END,
+      anonymized_at = COALESCE(anonymized_at, ?) WHERE ${where}`).bind(now, key)
+  ]);
+  await audit(db, actor.id, 'booking.erase', 'booking', row.id, { rows: results[1].meta.changes });
+  return { ok: true, erased: results[1].meta.changes };
+}

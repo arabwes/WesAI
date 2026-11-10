@@ -4,9 +4,18 @@ test('public pages load their images', async ({ page }) => {
   for (const path of ['/', '/menu', '/catering-events', '/about', '/location', '/contact', '/careers']) {
     await page.goto(path);
     await page.locator('img').first().waitFor();
-    const broken = await page.locator('img').evaluateAll((images) => images
-      .filter((image) => !image.complete || image.naturalWidth === 0)
-      .map((image) => image.getAttribute('src')));
+    // Below-the-fold images are lazy-loaded (loading="lazy"), so they have not
+    // started loading yet. Force every image to load, then check none are broken.
+    const broken = await page.locator('img').evaluateAll(async (images) => {
+      await Promise.all(images.map((image) => {
+        image.loading = 'eager';
+        return image.complete ? null : new Promise((resolve) => {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', resolve, { once: true });
+        });
+      }));
+      return images.filter((image) => !image.complete || image.naturalWidth === 0).map((image) => image.getAttribute('src'));
+    });
     expect(broken, path).toEqual([]);
   }
 });

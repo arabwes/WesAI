@@ -1,15 +1,26 @@
 # Portal calendar and booking links — implementation plan
 
-Status: phases 1 (foundation), 2 (owner setup) and 3 (public booking) are built
-and tested. Leads create links at `/team/booking-links` and candidates book at
-`/book/<token>`. Phases 4-5 (team calendar page, reminders and hardening) are
-still to do. Deployment steps are in `CLOUDFLARE_SETUP.md` section 3B-2.
+Status: all five phases are built and tested. Leads create links at
+`/team/booking-links`, candidates book at `/book/<token>`, and everyone sees the
+team calendar at `/team/calendar`. Step-by-step instructions to turn it on are in
+`docs/calendar-go-live.md`; the technical checklist is `CLOUDFLARE_SETUP.md`
+section 3B-2.
 
 Phase 1 delivered: `migrations/0012_calendar.sql`,
 `functions/_lib/calendar-rules.js` (timezone, availability and slot maths,
 booking redaction), `functions/_lib/calendar.js` (link lookup, slots, atomic
 booking, team calendar, cancel, 12-month anonymising) and
 `tests/calendar.test.js`. 
+Phase 4 delivered: `team/calendar.html` and `team/js/calendar.js` (month grid,
+agenda, filters, add and edit team events), `functions/_lib/calendar-team.js`,
+the calendar actions routed on the team API, a dashboard tile, and tests in
+`tests/calendar-team.test.js` and `tests/calendar-page.spec.cjs`.
+
+Phase 5 delivered: 24-hour reminder emails from the hourly Worker job
+(`migrations/0015_booking_reminders.sql`), Management "Erase personal data" on
+request (`eraseBookingData`), website tests added to CI
+(`.github/workflows/ci.yml`), and `tests/calendar-reminders.test.js`.
+
 Phase 3 delivered: `functions/api/book.js` (public API), `book.html` and
 `js/book.js`, self-service cancel and reschedule, confirmation emails with a
 calendar invite (`workers/notifications/src/booking-email.js`), owner
@@ -233,9 +244,9 @@ policy wording.
    `event-types.html` page.
 3. **Public booking flow (done)**: slots, booking, double-booking guard, emails with
    `.ics`, manage link, Turnstile and rate limiting.
-4. **Team calendar**: `calendar.html`, team events, redacted bookings, admin
+4. **Team calendar (done)**: `calendar.html`, team events, redacted bookings, admin
    view.
-5. **Hardening**: reminders, retention job, Playwright tests on mobile,
+5. **Hardening (done)**: reminders, retention job, Playwright tests on mobile,
    privacy-policy update, runbook entry in `CLOUDFLARE_SETUP.md`.
 
 Each phase ships behind the unlinked `/team` pages, and public booking stays
