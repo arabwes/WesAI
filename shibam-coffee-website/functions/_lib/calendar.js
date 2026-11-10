@@ -1,7 +1,9 @@
-// Portal calendar: database layer (phase 1). Public handlers take a raw booking
-// token; authenticated handlers use the portal session like every other action.
-// None of these are routed yet; routing and UI arrive in later phases.
+// Portal calendar: database layer. Public handlers take a raw booking or manage
+// token (routed by functions/api/book.js); authenticated handlers use the
+// portal session like every other action.
 import { audit, requireRole } from './auth.js';
+import { anonymizeExpiredBookingsStatement } from './calendar-retention.js';
+import { notifyUser } from './scheduling.js';
 import {
   ApiError, clampInt, newId, normalizeDate, nowIso, safeJsonParse, sha256Hex
 } from './http.js';
@@ -10,7 +12,6 @@ import {
   redactBooking, canViewBooking, timeOffToIntervals, toIso, wallToUtc
 } from './calendar-rules.js';
 
-const RETENTION_MONTHS = 12;
 const MAX_NAME = 120;
 const MAX_ANSWER = 1000;
 
@@ -36,12 +37,7 @@ export async function createLinkRecord(db, { eventTypeId, label = '', expiresAt 
   return { id, token };
 }
 
-// Unknown, revoked, expired and exhausted links all return the same error so
-// a token cannot be probed for its state. Inactive event types and archived
-// locations are also "not found" to the public.
-export async function resolveLink(env, token, now = Date.now()) {
-  if (typeof token !== 'string' || token.length < 20 || token.length > 100) throw new ApiError('link_not_found', 404);
-  const row = await env.TEAM_DB.prepare(`SELECT l.id AS link_id, l.expires_at, l.max_uses, l.use_count, l.revoked_at,
+const LINK_SELECT = `SELECT l.id AS link_id, l.expires_at, l.max_uses, l.use_count, l.revoked_at,
       e.id AS event_type_id, e.owner_id, e.name, e.description, e.duration_minutes, e.buffer_before_minutes,
       e.buffer_after_minutes, e.min_notice_minutes, e.max_days_ahead, e.slot_interval_minutes, e.questions_json,
       e.active AS event_active, m.id AS location_id, m.name AS location_name, m.address_line1, m.address_line2,
@@ -49,13 +45,28 @@ export async function resolveLink(env, token, now = Date.now()) {
     FROM booking_links l
     JOIN event_types e ON e.id = l.event_type_id
     JOIN meeting_locations m ON m.id = e.location_id
-    JOIN users u ON u.id = e.owner_id
-    WHERE l.token_hash = ?`).bind(await sha256Hex(token)).first();
+    JOIN users u ON u.id = e.owner_id`;
+
+// Unknown, revoked, expired and exhausted links all return the same error so
+// a token cannot be probed for its state. Inactive event types and archived
+// locations are also "not found" to the public.
+export async function resolveLink(env, token, now = Date.now()) {
+  if (typeof token !== 'string' || token.length < 20 || token.length > 100) throw new ApiError('link_not_found', 404);
+  const row = await env.TEAM_DB.prepare(`${LINK_SELECT} WHERE l.token_hash = ?`).bind(await sha256Hex(token)).first();
   const expired = row?.expires_at && Date.parse(row.expires_at) <= nowMs(now);
   const exhausted = row && row.max_uses !== null && row.use_count >= row.max_uses;
   if (!row || row.revoked_at || expired || exhausted || !row.event_active || !row.location_active || !row.owner_active) {
     throw new ApiError('link_not_found', 404);
   }
+  return row;
+}
+
+// Someone who already booked may still change or cancel it after the link was
+// revoked, expired or used up. Only an archived meeting type, address or owner
+// stops a reschedule.
+async function linkForBooking(env, booking) {
+  const row = await env.TEAM_DB.prepare(`${LINK_SELECT} WHERE l.id = ?`).bind(booking.link_id).first();
+  if (!row || !row.event_active || !row.location_active || !row.owner_active) throw new ApiError('reschedule_unavailable', 409);
   return row;
 }
 
@@ -111,12 +122,12 @@ async function shiftIntervals(env, ownerId, fromIso, toIso_) {
 }
 
 // Everything that makes an owner busy between two instants.
-async function loadBusy(env, ownerId, fromIso, toIso_, timezone, avoidShifts) {
+async function loadBusy(env, ownerId, fromIso, toIso_, timezone, avoidShifts, ignoreBookingId = '') {
   const db = env.TEAM_DB;
   const [bookings, events, timeOff, shifts] = await Promise.all([
     db.prepare(`SELECT blocks_start_utc, blocks_end_utc FROM bookings
-      WHERE owner_id = ? AND status = 'confirmed' AND blocks_end_utc > ? AND blocks_start_utc < ?`)
-      .bind(ownerId, fromIso, toIso_).all(),
+      WHERE owner_id = ? AND status = 'confirmed' AND blocks_end_utc > ? AND blocks_start_utc < ? AND id != ?`)
+      .bind(ownerId, fromIso, toIso_, ignoreBookingId).all(),
     db.prepare(`SELECT start_utc, end_utc FROM team_events
       WHERE created_by = ? AND blocks_availability = 1 AND end_utc > ? AND start_utc < ?`)
       .bind(ownerId, fromIso, toIso_).all(),
@@ -132,7 +143,7 @@ async function loadBusy(env, ownerId, fromIso, toIso_, timezone, avoidShifts) {
   ];
 }
 
-async function computeSlots(env, link, now) {
+async function computeSlots(env, link, now, ignoreBookingId = '') {
   const { timezone, avoidShifts } = await ownerSettings(env, link.owner_id);
   const nowTime = nowMs(now);
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -147,7 +158,7 @@ async function computeSlots(env, link, now) {
   const windows = expandAvailability({ rules: rules.results, overrides: overrides.results, fromDate, toDate, timezone });
   const rangeStart = wallToUtc(fromDate, 0, timezone) ?? nowTime;
   const rangeEnd = wallToUtc(toDate, 1440, timezone) ?? nowTime + (link.max_days_ahead + 2) * 86_400_000;
-  const busy = await loadBusy(env, link.owner_id, toIso(rangeStart), toIso(rangeEnd), timezone, avoidShifts);
+  const busy = await loadBusy(env, link.owner_id, toIso(rangeStart), toIso(rangeEnd), timezone, avoidShifts, ignoreBookingId);
   return {
     timezone,
     slots: generateSlots({
@@ -184,6 +195,35 @@ function cleanAnswers(link, answers) {
   return clean;
 }
 
+function insertBookingStatement(db, p) {
+  // One statement: insert only if the owner has no other overlapping confirmed
+  // booking AND this invitee has no other active (confirmed, not yet ended)
+  // booking on this link. `excludeId` is the booking being rescheduled.
+  return db.prepare(`INSERT INTO bookings
+      (id, event_type_id, owner_id, link_id, location_id, location_snapshot_json, title, start_utc, end_utc,
+       blocks_start_utc, blocks_end_utc, status, client_name, client_email, client_phone, client_timezone,
+       answers_json, manage_token_hash, created_at, rescheduled_from)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?, ?
+    WHERE NOT EXISTS (SELECT 1 FROM bookings WHERE owner_id = ? AND status = 'confirmed' AND id != ?
+        AND blocks_start_utc < ? AND blocks_end_utc > ?)
+      AND NOT EXISTS (SELECT 1 FROM bookings WHERE link_id = ? AND client_email = ? AND status = 'confirmed' AND id != ?
+        AND end_utc > ?)`)
+    .bind(p.bookingId, p.link.event_type_id, p.link.owner_id, p.link.link_id, p.link.location_id,
+      JSON.stringify(locationSnapshot(p.link)), p.link.name, toIso(p.block.start), toIso(p.block.end),
+      toIso(p.block.blocksStart), toIso(p.block.blocksEnd), p.name, p.email, p.phone || null, p.clientTimezone || null,
+      JSON.stringify(p.answers), p.manageHash, p.createdAt, p.excludeId || null,
+      p.link.owner_id, p.excludeId, toIso(p.block.blocksEnd), toIso(p.block.blocksStart),
+      p.link.link_id, p.email, p.excludeId, p.nowIsoValue);
+}
+
+function blockFor(link, startMs) {
+  return bookingBlock(startMs, {
+    durationMinutes: link.duration_minutes,
+    bufferBeforeMinutes: link.buffer_before_minutes,
+    bufferAfterMinutes: link.buffer_after_minutes
+  });
+}
+
 // Public: book a slot. The slot is recomputed server-side, then inserted with
 // one conditional statement so a stale page, a double click or two clients
 // racing can never create an overlapping or duplicate booking.
@@ -201,14 +241,9 @@ export async function createBooking(env, token, input, now = Date.now()) {
   const { slots } = await computeSlots(env, link, now);
   if (!slots.includes(startMs)) throw new ApiError('slot_unavailable', 409);
 
-  const block = bookingBlock(startMs, {
-    durationMinutes: link.duration_minutes,
-    bufferBeforeMinutes: link.buffer_before_minutes,
-    bufferAfterMinutes: link.buffer_after_minutes
-  });
+  const block = blockFor(link, startMs);
   const bookingId = newId('booking');
   const manageToken = randomToken();
-  const createdAt = nowIso();
   const nowIsoValue = toIso(nowMs(now));
   const db = env.TEAM_DB;
 
@@ -219,24 +254,10 @@ export async function createBooking(env, token, input, now = Date.now()) {
 
   let inserted;
   try {
-    // One statement: insert only if the owner has no overlapping confirmed
-    // booking AND this invitee has no other active (confirmed, not yet ended)
-    // booking on this link.
-    inserted = await db.prepare(`INSERT INTO bookings
-        (id, event_type_id, owner_id, link_id, location_id, location_snapshot_json, title, start_utc, end_utc,
-         blocks_start_utc, blocks_end_utc, status, client_name, client_email, client_phone, client_timezone,
-         answers_json, manage_token_hash, created_at)
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?, ?, ?
-      WHERE NOT EXISTS (SELECT 1 FROM bookings WHERE owner_id = ? AND status = 'confirmed'
-          AND blocks_start_utc < ? AND blocks_end_utc > ?)
-        AND NOT EXISTS (SELECT 1 FROM bookings WHERE link_id = ? AND client_email = ? AND status = 'confirmed'
-          AND end_utc > ?)`)
-      .bind(bookingId, link.event_type_id, link.owner_id, link.link_id, link.location_id,
-        JSON.stringify(locationSnapshot(link)), link.name, toIso(block.start), toIso(block.end),
-        toIso(block.blocksStart), toIso(block.blocksEnd), name, email, phone || null, clientTimezone || null,
-        JSON.stringify(answers), await sha256Hex(manageToken), createdAt,
-        link.owner_id, toIso(block.blocksEnd), toIso(block.blocksStart),
-        link.link_id, email, nowIsoValue).run();
+    inserted = await insertBookingStatement(db, {
+      bookingId, link, block, name, email, phone, clientTimezone, answers, manageHash: await sha256Hex(manageToken),
+      createdAt: nowIso(), nowIsoValue, excludeId: ''
+    }).run();
   } catch (error) {
     await releaseClaim(db, link.link_id);
     // The unique index fired: someone took exactly this start between check and write.
@@ -252,11 +273,146 @@ export async function createBooking(env, token, input, now = Date.now()) {
   }
 
   await audit(db, null, 'booking.create', 'booking', bookingId, { ownerId: link.owner_id, linkId: link.link_id });
+  const emailQueued = await announceBooking(env, { bookingId, link, block, manageToken, template: 'confirmed' });
   return {
     ok: true,
     booking: { id: bookingId, startUtc: toIso(block.start), endUtc: toIso(block.end), title: link.name, location: locationSnapshot(link) },
     manageToken,
+    emailQueued,
     owner: { id: link.owner_id, name: link.owner_name }
+  };
+}
+
+// ---- emails and owner notifications (never allowed to fail a booking) ----
+
+async function queueBookingEmail(env, bookingId, template, extra = {}) {
+  if (!env.NOTIFICATIONS?.send) return false;
+  try {
+    await env.NOTIFICATIONS.send({ kind: 'booking_email', bookingId, template, ...extra, deliveryKey: `booking:${bookingId}:${template}` });
+    return true;
+  } catch (error) {
+    console.error('booking email enqueue failed', String(error));
+    return false;
+  }
+}
+
+function describeInstant(ms, timezone) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    .format(new Date(ms));
+}
+
+// The owner's portal notification deliberately omits the invitee's name and
+// contact details: notification rows are kept long-term, but invitee data is
+// anonymised after 12 months. The details live in the booking itself.
+async function notifyOwner(env, { bookingId, ownerId, eventName, startMs, kind }) {
+  try {
+    const { timezone } = await ownerSettings(env, ownerId);
+    const when = describeInstant(startMs, timezone);
+    const text = {
+      new: ['New booking', `${eventName} booked for ${when}. Open your booking details to review.`],
+      cancelled: ['Booking cancelled', `A ${eventName} booking for ${when} was cancelled by the invitee.`],
+      rescheduled: ['Booking rescheduled', `A ${eventName} booking was moved to ${when}.`]
+    }[kind];
+    await notifyUser(env, ownerId, `booking_${kind}`, text[0], text[1], '/team/booking-links', `booking:${bookingId}:${kind}`);
+  } catch (error) {
+    console.error('booking owner notification failed', String(error));
+  }
+}
+
+async function announceBooking(env, { bookingId, link, block, manageToken, template, kind = 'new' }) {
+  const queued = await queueBookingEmail(env, bookingId, template, { manageToken });
+  await notifyOwner(env, { bookingId, ownerId: link.owner_id, eventName: link.name, startMs: block.start, kind });
+  return queued;
+}
+
+// ---- invitee self-service (manage token from the confirmation email) ----
+
+async function loadManaged(env, manageToken) {
+  if (typeof manageToken !== 'string' || manageToken.length < 20 || manageToken.length > 100) throw new ApiError('booking_not_found', 404);
+  const row = await env.TEAM_DB.prepare('SELECT * FROM bookings WHERE manage_token_hash = ?').bind(await sha256Hex(manageToken)).first();
+  if (!row) throw new ApiError('booking_not_found', 404);
+  return row;
+}
+
+function managedView(row, now) {
+  const upcoming = Date.parse(row.start_utc) > nowMs(now);
+  return {
+    title: row.title,
+    startUtc: row.start_utc,
+    endUtc: row.end_utc,
+    status: row.status,
+    location: safeJsonParse(row.location_snapshot_json, null),
+    clientName: row.client_name,
+    canChange: row.status === 'confirmed' && upcoming
+  };
+}
+
+export async function getManagedBooking(env, manageToken, now = Date.now()) {
+  const row = await loadManaged(env, manageToken);
+  const owner = await env.TEAM_DB.prepare('SELECT name FROM users WHERE id = ?').bind(row.owner_id).first();
+  const { timezone } = await ownerSettings(env, row.owner_id);
+  return { ok: true, booking: { ...managedView(row, now), ownerFirstName: String(owner?.name || '').split(' ')[0], ownerTimezone: timezone } };
+}
+
+export async function getManagedSlots(env, manageToken, now = Date.now()) {
+  const row = await loadManaged(env, manageToken);
+  if (row.status !== 'confirmed' || Date.parse(row.start_utc) <= nowMs(now)) throw new ApiError('booking_not_changeable', 409);
+  const link = await linkForBooking(env, row);
+  const { timezone, slots } = await computeSlots(env, link, now, row.id);
+  return { ok: true, ownerTimezone: timezone, slots: slots.map(toIso) };
+}
+
+export async function cancelManagedBooking(env, manageToken, reason, now = Date.now()) {
+  const row = await loadManaged(env, manageToken);
+  if (row.status !== 'confirmed' || Date.parse(row.start_utc) <= nowMs(now)) throw new ApiError('booking_not_changeable', 409);
+  const result = await env.TEAM_DB.prepare(`UPDATE bookings SET status = 'cancelled', cancelled_at = ?, cancelled_by = 'invitee', cancel_reason = ?
+    WHERE id = ? AND status = 'confirmed'`).bind(toIso(nowMs(now)), cleanText(reason, 300, 'reason', false) || null, row.id).run();
+  if (!result.meta.changes) throw new ApiError('booking_not_changeable', 409);
+  await audit(env.TEAM_DB, null, 'booking.cancel_by_invitee', 'booking', row.id, {});
+  await queueBookingEmail(env, row.id, 'cancelled_by_invitee');
+  await notifyOwner(env, { bookingId: row.id, ownerId: row.owner_id, eventName: row.title, startMs: Date.parse(row.start_utc), kind: 'cancelled' });
+  return { ok: true };
+}
+
+// Moves a booking: the new booking is inserted and the old one cancelled in a
+// single transaction, and the old one is only cancelled if the new one exists.
+export async function rescheduleManagedBooking(env, manageToken, start, now = Date.now()) {
+  const old = await loadManaged(env, manageToken);
+  if (old.status !== 'confirmed' || Date.parse(old.start_utc) <= nowMs(now)) throw new ApiError('booking_not_changeable', 409);
+  const link = await linkForBooking(env, old);
+  const startMs = Date.parse(String(start || ''));
+  if (!Number.isFinite(startMs)) throw new ApiError('invalid_start', 400);
+  const { slots } = await computeSlots(env, link, now, old.id);
+  if (!slots.includes(startMs)) throw new ApiError('slot_unavailable', 409);
+
+  const block = blockFor(link, startMs);
+  const bookingId = newId('booking');
+  const newManageToken = randomToken();
+  const db = env.TEAM_DB;
+  let results;
+  try {
+    results = await db.batch([
+      insertBookingStatement(db, {
+        bookingId, link, block, name: old.client_name, email: old.client_email, phone: old.client_phone,
+        clientTimezone: old.client_timezone, answers: safeJsonParse(old.answers_json, {}),
+        manageHash: await sha256Hex(newManageToken), createdAt: nowIso(), nowIsoValue: toIso(nowMs(now)), excludeId: old.id
+      }),
+      db.prepare(`UPDATE bookings SET status = 'cancelled', cancelled_at = ?, cancelled_by = 'invitee', cancel_reason = 'rescheduled'
+        WHERE id = ? AND status = 'confirmed' AND EXISTS (SELECT 1 FROM bookings WHERE id = ? AND status = 'confirmed')`)
+        .bind(toIso(nowMs(now)), old.id, bookingId)
+    ]);
+  } catch (error) {
+    if (/UNIQUE/i.test(String(error?.message))) throw new ApiError('slot_unavailable', 409);
+    throw error;
+  }
+  if (!results[0].meta.changes || !results[1].meta.changes) throw new ApiError('slot_unavailable', 409);
+  await audit(db, null, 'booking.reschedule', 'booking', bookingId, { from: old.id });
+  const emailQueued = await announceBooking(env, { bookingId, link, block, manageToken: newManageToken, template: 'rescheduled', kind: 'rescheduled' });
+  return {
+    ok: true,
+    booking: { id: bookingId, startUtc: toIso(block.start), endUtc: toIso(block.end), title: link.name, location: locationSnapshot(link) },
+    manageToken: newManageToken,
+    emailQueued
   };
 }
 
@@ -323,16 +479,12 @@ export async function cancelBooking(request, payload, env) {
     .bind(nowIso(), actor.id, cleanText(payload.reason, 300, 'reason', false), row.id).run();
   if (!result.meta.changes) throw new ApiError('booking_not_cancellable', 409);
   await audit(env.TEAM_DB, actor.id, 'booking.cancel', 'booking', row.id, {});
+  if (row.client_email) await queueBookingEmail(env, row.id, 'cancelled_by_host');
   return { ok: true };
 }
 
 // Retention: 12 months after a meeting ends, blank the invitee's personal data.
-// The meeting row and its time stay, so history and counts survive.
 export async function anonymizeExpiredBookings(env, now = Date.now()) {
-  const cutoff = new Date(nowMs(now));
-  cutoff.setUTCMonth(cutoff.getUTCMonth() - RETENTION_MONTHS);
-  const result = await env.TEAM_DB.prepare(`UPDATE bookings SET client_name = NULL, client_email = NULL, client_phone = NULL,
-      client_timezone = NULL, answers_json = '{}', cancel_reason = NULL, anonymized_at = ?
-    WHERE anonymized_at IS NULL AND end_utc < ?`).bind(toIso(nowMs(now)), cutoff.toISOString()).run();
+  const result = await anonymizeExpiredBookingsStatement(env.TEAM_DB, nowMs(now)).run();
   return { ok: true, anonymized: result.meta.changes };
 }

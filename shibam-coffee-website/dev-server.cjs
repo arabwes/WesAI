@@ -61,6 +61,17 @@ function loadHeaderRules() {
 
 const HEADER_RULES = loadHeaderRules();
 
+// Minimal _redirects support for 200 rewrites such as "/book/*  /book.html  200".
+function loadRewrites() {
+  const file = path.join(ROOT, '_redirects');
+  if (!fs.existsSync(file)) return [];
+  return fs.readFileSync(file, 'utf8').split('\n').map((line) => line.trim().split(/\s+/))
+    .filter((parts) => parts.length === 3 && parts[2] === '200' && !parts[0].startsWith('#'))
+    .map(([from, to]) => ({ prefix: from.endsWith('/*') ? from.slice(0, -1) : null, exact: from, to }));
+}
+
+const REWRITES = loadRewrites();
+
 function headersFor(pathname) {
   const out = {};
   for (const rule of HEADER_RULES) {
@@ -81,9 +92,13 @@ http.createServer((req, res) => {
     return;
   }
 
-  let file = pathname.endsWith('/')
-    ? path.join(ROOT, pathname, 'index.html')
-    : path.join(ROOT, pathname);
+  // 200 rewrites serve another file without changing the address.
+  const rewrite = REWRITES.find((r) => (r.prefix ? pathname.startsWith(r.prefix) : pathname === r.exact));
+  const servedPath = rewrite && !fs.existsSync(path.join(ROOT, pathname)) ? rewrite.to : pathname;
+
+  let file = servedPath.endsWith('/')
+    ? path.join(ROOT, servedPath, 'index.html')
+    : path.join(ROOT, servedPath);
 
   // Extensionless request -> the .html file behind it.
   if (!fs.existsSync(file) && fs.existsSync(file + '.html')) file += '.html';

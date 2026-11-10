@@ -1,15 +1,22 @@
 # Portal calendar and booking links — implementation plan
 
-Status: phases 1 (foundation) and 2 (owner setup) are built and tested. Leads
-can create links at `/team/booking-links`, but the public booking page that the
-links point to (`/book/<token>`) is phase 3, so links do not open anything yet.
-Phases 3-5 are still to do.
+Status: phases 1 (foundation), 2 (owner setup) and 3 (public booking) are built
+and tested. Leads create links at `/team/booking-links` and candidates book at
+`/book/<token>`. Phases 4-5 (team calendar page, reminders and hardening) are
+still to do. Deployment steps are in `CLOUDFLARE_SETUP.md` section 3B-2.
 
 Phase 1 delivered: `migrations/0012_calendar.sql`,
 `functions/_lib/calendar-rules.js` (timezone, availability and slot maths,
 booking redaction), `functions/_lib/calendar.js` (link lookup, slots, atomic
 booking, team calendar, cancel, 12-month anonymising) and
-`tests/calendar.test.js`. Deliberately deferred to later phases: the public HTTP routes.
+`tests/calendar.test.js`. 
+Phase 3 delivered: `functions/api/book.js` (public API), `book.html` and
+`js/book.js`, self-service cancel and reschedule, confirmation emails with a
+calendar invite (`workers/notifications/src/booking-email.js`), owner
+notifications that omit the invitee's name, Turnstile, honeypot and per-IP rate
+limits, the hourly 12-month cleanup in the notifications Worker, the privacy
+policy section, and `migrations/0014_booking_public_flow.sql`. Tests:
+`tests/calendar-public.test.js`, `tests/book-page.spec.cjs`.
 
 Phase 2 delivered: `functions/_lib/calendar-setup.js` (addresses, meeting
 types, weekly hours, date overrides, links), the opt-in "avoid my published
@@ -224,7 +231,7 @@ policy wording.
    `redactBooking`, unit tests. No UI.
 2. **Owner setup (done)**: event types, availability, links, and the
    `event-types.html` page.
-3. **Public booking flow**: slots, booking, double-booking guard, emails with
+3. **Public booking flow (done)**: slots, booking, double-booking guard, emails with
    `.ics`, manage link, Turnstile and rate limiting.
 4. **Team calendar**: `calendar.html`, team events, redacted bookings, admin
    view.

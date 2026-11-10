@@ -13,3 +13,13 @@
 # onto new JS. Do not remove the versioning and assume this file covers it.
 /team/*
   Cache-Control: no-cache, must-revalidate
+
+# Booking pages carry a private token in the address: keep them out of search,
+# caches and referrers.
+/book/*
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer
+/book
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer

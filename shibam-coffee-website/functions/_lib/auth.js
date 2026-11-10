@@ -1,4 +1,5 @@
 import { ApiError, getCookie, newId, nowIso, publicUser, sha256Hex } from './http.js';
+import { verifyTurnstile } from './turnstile.js';
 
 const ROLE_RANK = { barista: 1, lead: 2, management: 3 };
 const COOKIE_NAME = 'shibam_team_session';
@@ -53,20 +54,7 @@ export function clearSessionCookie(env) {
 }
 
 async function validateTurnstile(payload, request, env) {
-  if (!env.TURNSTILE_SECRET) return;
-  if (!payload.turnstileToken) throw new ApiError('turnstile_required', 400);
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      secret: env.TURNSTILE_SECRET,
-      response: payload.turnstileToken,
-      remoteip: request.headers.get('CF-Connecting-IP') || undefined,
-      idempotency_key: crypto.randomUUID()
-    })
-  });
-  const result = await response.json();
-  if (!result.success) throw new ApiError('turnstile_failed', 403);
+  await verifyTurnstile(payload.turnstileToken, request, env);
 }
 
 async function rateLimitLogin(db, request, username) {

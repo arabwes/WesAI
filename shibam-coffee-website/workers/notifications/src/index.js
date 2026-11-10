@@ -1,4 +1,6 @@
 import { buildPushHTTPRequest } from '@pushforge/builder';
+import { anonymizeExpiredBookingsStatement } from '../../../functions/_lib/calendar-retention.js';
+import { buildBookingEmail, isBookingTemplate } from './booking-email.js';
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>'"]/g, (character) => ({
@@ -203,6 +205,55 @@ async function sendInvitation(message, env) {
   return false;
 }
 
+function toBase64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+// Emails to the person who booked a meeting. Skips quietly when the booking is
+// gone, was anonymised, or is no longer in the state the email describes.
+async function sendBookingEmail(message, env) {
+  const { bookingId, template, manageToken } = message.body || {};
+  if (!bookingId || !isBookingTemplate(template)) return false;
+  const booking = await env.TEAM_DB.prepare(`SELECT b.*, u.name AS owner_name, u.email AS owner_email
+    FROM bookings b JOIN users u ON u.id = b.owner_id WHERE b.id = ?`).bind(bookingId).first();
+  if (!booking || !booking.client_email) return false;
+  const wantsCancelled = template.startsWith('cancelled');
+  if (wantsCancelled !== (booking.status === 'cancelled')) return false;
+  if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
+  const settings = await env.TEAM_DB.prepare('SELECT timezone FROM booking_settings WHERE owner_id = ?').bind(booking.owner_id).first();
+  const manageLink = manageToken && !wantsCancelled ? `${env.PORTAL_ORIGIN}/book/manage/${encodeURIComponent(manageToken)}` : '';
+  const email = buildBookingEmail({
+    template, booking, manageLink, ownerTimezone: settings?.timezone || env.STORE_TIMEZONE
+  });
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'ShibamCoffeeTeam/2.0',
+      'Idempotency-Key': String(message.body.deliveryKey || `booking:${bookingId}:${template}`).slice(0, 256)
+    },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: [booking.client_email],
+      ...(booking.owner_email ? { reply_to: booking.owner_email } : {}),
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
+      ...(email.ics ? { attachments: [{
+        filename: 'meeting.ics', content: toBase64(email.ics),
+        content_type: `text/calendar; charset=utf-8; method=${wantsCancelled ? 'CANCEL' : 'PUBLISH'}`
+      }] } : {})
+    })
+  });
+  const body = await responseSnippet(response);
+  if (!response.ok) throw new Error(`Resend ${response.status}: ${body}`);
+  return false;
+}
+
 function dateInTimezone(date, timezone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone || 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
@@ -359,9 +410,12 @@ export default {
   async queue(batch, env) {
     for (const message of batch.messages) {
       try {
-        const delay = message.body?.kind === 'invitation'
+        const kind = message.body?.kind;
+        const delay = kind === 'invitation'
           ? await sendInvitation(message, env)
-          : await sendNotification(message, env);
+          : kind === 'booking_email'
+            ? await sendBookingEmail(message, env)
+            : await sendNotification(message, env);
         if (delay) message.retry({ delaySeconds: delay });
         else message.ack();
       } catch (error) {
@@ -383,7 +437,9 @@ export default {
       env.TEAM_DB.prepare('DELETE FROM login_attempts WHERE expires_at < ?').bind(now),
       env.TEAM_DB.prepare("UPDATE user_invitations SET status = 'expired' WHERE status = 'pending' AND expires_at < ?").bind(now),
       env.TEAM_DB.prepare("UPDATE shift_exchange_requests SET status = 'expired', review_note = 'The offered shift has passed.' WHERE status IN ('open', 'employee_accepted') AND offered_shift_id IN (SELECT id FROM shifts WHERE shift_date < ?)").bind(today),
-      env.TEAM_DB.prepare('DELETE FROM phone_verifications WHERE expires_at < ? AND verified_at IS NULL').bind(now)
+      env.TEAM_DB.prepare('DELETE FROM phone_verifications WHERE expires_at < ? AND verified_at IS NULL').bind(now),
+      env.TEAM_DB.prepare('DELETE FROM public_rate_limits WHERE expires_at < ?').bind(now),
+      anonymizeExpiredBookingsStatement(env.TEAM_DB, Date.now())
     ]);
     await syncToastSales(env);
     console.log(JSON.stringify({ event: 'scheduled_cleanup_complete', at: now }));

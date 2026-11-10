@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /book/
 
 Sitemap: https://shibamatlanta.com/sitemap.xml

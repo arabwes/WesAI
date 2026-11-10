@@ -28,6 +28,10 @@ const CONFIG = {
   TIKTOK_URL: "https://www.tiktok.com/@shibamatlanta",
   FACEBOOK_URL: "https://www.facebook.com/ShibamCoffee",
 
+  // Cloudflare Turnstile site key (public) for the booking form. Leave empty to
+  // skip the check; set TURNSTILE_SECRET in Pages to enforce it on the server.
+  TURNSTILE_SITEKEY: "",
+
   // Order-ahead / rewards app (Appfront).
   APP_STORE_URL: "https://apps.apple.com/us/app/shibam-coffee-co/id6739554858",
   GOOGLE_PLAY_URL: "https://play.google.com/store/apps/details?id=ai.appfront.shibamcoffee",

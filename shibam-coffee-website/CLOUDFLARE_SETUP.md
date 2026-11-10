@@ -328,6 +328,42 @@ npx wrangler pages secret list --project-name yemenicoffeeco
 Turnstile remains optional until both the public sitekey and private secret are
 configured. Never put the private Turnstile secret in browser JavaScript.
 
+#### Turnstile also protects the public booking page
+
+The same `TURNSTILE_SECRET` is checked by the public booking endpoint
+(`/api/book`) when someone books or reschedules a meeting. The widget on the
+booking page reads its public sitekey from **`js/config.js`** (`TURNSTILE_SITEKEY`),
+which is a different file from the portal's `team/js/config.js`.
+
+- Put the same public sitekey in **both** files. Add `shibamatlanta.com` to the
+  widget's allowed hostnames.
+- Do not set `TURNSTILE_SECRET` unless both sitekeys are filled in. With the
+  secret set and an empty sitekey, the booking form has no widget and every
+  booking is rejected with "Please complete the security check".
+- With no secret set, bookings still work and are protected by the hidden
+  honeypot field and per-IP rate limits only.
+
+### 3B-2. Calendar and booking links: launch checklist
+
+The booking feature needs three migrations (`0012` to `0014`) and a Worker
+redeploy, because the notification Worker now sends booking confirmation emails
+and runs the 12-month cleanup of invitee data.
+
+1. Apply migrations: `npm run db:migrate:preview`, test, then `npm run db:migrate:production`.
+2. Redeploy the Worker: `npm run notifications:deploy`.
+3. Deploy Pages. The build writes content-hashed asset URLs and minified files.
+4. **Verify the link rewrite on the live site.** `_redirects` serves
+   `/book/<token>` and `/book/manage/<token>` from `book.html` with a `200`
+   rewrite. Create a link in the portal (Booking Links), open it in a private
+   window, and confirm the booking page loads and the address bar still shows
+   `/book/<token>`. This rewrite could only be tested locally, not on Cloudflare.
+5. Book a test slot with a personal email and confirm: the confirmation email
+   arrives with a calendar invite, replying goes to the person who owns the
+   link, the manage link works, and the owner sees a portal notification that
+   does not contain the invitee's name.
+6. Confirm `EMAIL_FROM` (`workers/notifications/wrangler.jsonc`) is an address
+   someone reads; it is used as the sender for these emails.
+
 ### 3C. Notification Worker Resend secret
 
 This is the most important distinction in the setup:
