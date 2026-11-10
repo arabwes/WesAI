@@ -275,4 +275,3 @@ My choices, change if wrong:
 1. Confirm the sender address: the code uses `EMAIL_FROM` from the
    notifications worker, but I cannot see its value from here. Check that it
    is a monitored address, since invitees may reply to interview emails.
-   same email, or one active booking per email per link?
