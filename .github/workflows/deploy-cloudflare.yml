@@ -10,8 +10,8 @@ name: Deploy to Cloudflare
 #   3. saves a database restore point (Cloudflare Time Travel) and prints how to use it
 #   4. applies pending database migrations
 #   5. deploys the notification Worker
-#   6. deploys the portal AI connector (portal-mcp), once the PORTAL_MCP_ENABLED repository
-#      variable is "true" (it needs two extra Cloudflare token permissions; see its README)
+#   6. deploys the portal AI connector (portal-mcp) when PORTAL_MCP_ENABLED below is "true"
+#      (it needs two extra Cloudflare token permissions; see its README)
 #   7. checks the live booking page and API (and the connector, when enabled)
 #
 # Manual runs (Actions tab, "Run workflow") are still available:
@@ -48,6 +48,8 @@ concurrency:
 
 env:
   SITE_URL: https://shibamatlanta.com
+  # The portal AI connector's on/off switch. "true" deploys and checks it on every run.
+  PORTAL_MCP_ENABLED: "true"
 
 jobs:
   cloudflare:
@@ -92,7 +94,7 @@ jobs:
 
       - name: Show whether the portal AI connector is switched on
         run: |
-          if [ "${{ vars.PORTAL_MCP_ENABLED }}" = "true" ]; then echo "Portal AI connector: ON (deployed by this workflow)";
+          if [ "$PORTAL_MCP_ENABLED" = "true" ]; then echo "Portal AI connector: ON (deployed by this workflow)";
           else echo "Portal AI connector: OFF. To switch it on, follow shibam-coffee-website/workers/portal-mcp/README.md."; fi
 
       - name: Show the notification Worker's secret names
@@ -151,7 +153,7 @@ jobs:
         run: npm run notifications:deploy
 
       - name: Deploy the portal AI connector (deploy only, once enabled)
-        if: env.MODE == 'deploy' && vars.PORTAL_MCP_ENABLED == 'true'
+        if: env.MODE == 'deploy' && env.PORTAL_MCP_ENABLED == 'true'
         working-directory: shibam-coffee-website/workers/portal-mcp
         run: |
           npm ci
@@ -164,7 +166,7 @@ jobs:
       - name: Check the live booking page and API (deploy only)
         if: env.MODE == 'deploy'
         env:
-          CHECK_PORTAL_MCP: ${{ vars.PORTAL_MCP_ENABLED == 'true' && '1' || '0' }}
+          CHECK_PORTAL_MCP: ${{ env.PORTAL_MCP_ENABLED == 'true' && '1' || '0' }}
         run: ./scripts/verify-booking-live.sh "$SITE_URL"
 
       - name: Explain what to do if this run failed

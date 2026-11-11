@@ -64,8 +64,9 @@ test('the portal AI connector deploys only when switched on, and with any change
     assert.ok(text.includes(`"${path}"`), `push trigger covers ${path}`);
   }
   const step = text.slice(at('name: Deploy the portal AI connector'), at('name: Confirm no migrations are left'));
-  assert.match(step, /if: env\.MODE == 'deploy' && vars\.PORTAL_MCP_ENABLED == 'true'/);
+  assert.match(step, /if: env\.MODE == 'deploy' && env\.PORTAL_MCP_ENABLED == 'true'/);
   assert.match(step, /working-directory: shibam-coffee-website\/workers\/portal-mcp/);
   assert.ok(at('name: Apply database migrations') < at('name: Deploy the portal AI connector'), 'after the database is up to date');
-  assert.match(text, /CHECK_PORTAL_MCP: \$\{\{ vars\.PORTAL_MCP_ENABLED == 'true' && '1' \|\| '0' \}\}/, 'the live check covers it when on');
+  assert.match(text, /CHECK_PORTAL_MCP: \$\{\{ env\.PORTAL_MCP_ENABLED == 'true' && '1' \|\| '0' \}\}/, 'the live check covers it when on');
+  assert.match(text, /\n  PORTAL_MCP_ENABLED: "(true|false)"\n/, 'the switch lives in the workflow file');
 });

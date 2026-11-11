@@ -44,24 +44,19 @@ anything about passwords or sessions. Each tool returns only the fields named in
 
 ## One-time setup (owner)
 
-The connector is deployed by the **Deploy to Cloudflare** GitHub workflow, but stays switched off
-until these steps are done, because it needs two more Cloudflare permissions than the rest.
+The connector is deployed by the **Deploy to Cloudflare** GitHub workflow. Its on/off switch is
+`PORTAL_MCP_ENABLED` near the top of `.github/workflows/deploy-cloudflare.yml` (now `"true"`).
+It needs two more Cloudflare permissions than the rest of the site, on the `GitHub deploy` token
+(dash.cloudflare.com, then your profile icon, **My Profile**, **API Tokens**, **Edit**):
 
-1. **Give the Cloudflare token two more permissions.** dash.cloudflare.com, then your profile
-   icon, **My Profile**, **API Tokens**, the `GitHub deploy` token, **Edit**. Add:
-   - **Account** / **Workers KV Storage** / **Edit** (the connector stores its sign-in records in KV;
-     the storage is created automatically on the first deploy)
-   - **Zone** / **Workers Routes** / **Edit**, and under **Zone Resources** choose
-     **Include** / **Specific zone** / `shibamatlanta.com` (so it can serve `/portal-mcp`)
+- **Account** / **Workers KV Storage** / **Edit** (its sign-in records live in KV, which is created
+  automatically on the first deploy)
+- **Zone** / **Workers Routes** / **Edit**, with **Zone Resources** set to **Include** / **Specific
+  zone** / `shibamatlanta.com` (so it can serve `/portal-mcp`)
 
-   Then **Continue to summary** and **Update token**. The token value does not change.
-2. **Switch it on in GitHub.** github.com/arabwes/WesAI, **Settings**, **Secrets and variables**,
-   **Actions**, the **Variables** tab, **New repository variable**: name `PORTAL_MCP_ENABLED`,
-   value `true`.
-3. **Deploy.** **Actions**, **Deploy to Cloudflare**, **Run workflow**, mode `deploy`. The step
-   "Deploy the portal AI connector" should be green, and the last line should say `OK`.
-
-From then on, any change to the connector or to the portal code it uses redeploys it automatically.
+Any change to the connector, or to the portal code it uses, redeploys it automatically. To switch
+it off, set the switch to `"false"` and remove its routes in Cloudflare (Workers & Pages,
+`shibam-portal-mcp`), or delete that Worker.
 
 ## Connect Claude
 
