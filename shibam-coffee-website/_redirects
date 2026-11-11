@@ -1,4 +1,4 @@
 /catering       /catering-events.html   301
 /events         /catering-events.html   301
 # Booking pages: one page serves /book/<token> and /book/manage/<token>.
-/book/*  /book.html  200
+/book/*  /book  200

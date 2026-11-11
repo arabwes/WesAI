@@ -358,8 +358,9 @@ reminder emails and runs the 12-month cleanup of invitee data.
 2. Redeploy the Worker: `npm run notifications:deploy`.
 3. Deploy Pages. The build writes content-hashed asset URLs and minified files.
 4. **Verify the link rewrite on the live site.** `_redirects` serves
-   `/book/<token>` and `/book/manage/<token>` from `book.html` with a `200`
-   rewrite. Create a link in the portal (Booking Links), open it in a private
+   `/book/<token>` and `/book/manage/<token>` from the `/book` page (`book.html`)
+   with a `200` rewrite. The destination must be `/book`, not `/book.html`: Pages
+   answers a `.html` destination with a `308` redirect that drops the token. Create a link in the portal (Booking Links), open it in a private
    window, and confirm the booking page loads and the address bar still shows
    `/book/<token>`. This rewrite could only be tested locally, not on Cloudflare.
 5. Book a test slot with a personal email and confirm: the confirmation email

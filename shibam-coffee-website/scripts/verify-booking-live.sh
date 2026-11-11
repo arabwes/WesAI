@@ -17,10 +17,15 @@ FAKE="$(printf 'a%.0s' $(seq 1 43))"
 check_page() {
   local body status
   body="$(mktemp)"
-  status="$(curl -sS -m 20 -o "$body" -w '%{http_code}' "$SITE/book/$FAKE" 2>/dev/null || echo 000)"
-  if [ "$status" = "200" ] && grep -q 'id="booking-app"' "$body"; then rm -f "$body"; return 0; fi
+  local headers; headers="$(mktemp)"
+  status="$(curl -sS -m 20 -D "$headers" -o "$body" -w '%{http_code}' "$SITE/book/$FAKE" 2>/dev/null || echo 000)"
+  if [ "$status" = "200" ] && grep -q 'id="booking-app"' "$body"; then rm -f "$body" "$headers"; return 0; fi
   echo "  page check: HTTP $status (expected 200 with the booking page)"
-  rm -f "$body"; return 1
+  case "$status" in
+    30*) echo "    The link is being redirected to: $(grep -i '^location:' "$headers" | head -1 | tr -d '\r' | cut -d' ' -f2-)"
+         echo "    A redirect drops the private token, so booking links would open an empty page." ;;
+  esac
+  rm -f "$body" "$headers"; return 1
 }
 
 check_api() {

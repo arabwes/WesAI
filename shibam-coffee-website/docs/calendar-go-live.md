@@ -236,5 +236,5 @@ revoke every link (Booking Links, then **Revoke**).
 | "Could not route to /accounts/..." or "account not found" | The Account ID in part C is wrong. Re-copy it from Workers & Pages. |
 | A migration step fails with "table ... already exists" or "duplicate column" | Someone applied part of it by hand earlier. Stop and send me the message. Do not run it again. |
 | "Tests" step fails | Nothing was changed on Cloudflare. Send me the message. |
-| "Check the live booking page and API" fails with `HTTP 404` on the page | The `/book/...` rewrite is not working on Cloudflare. Check Deployments shows Success for the latest `main` commit, run deploy again, and if it still fails send me the message. |
+| "Check the live booking page and API" fails with `HTTP 308` or `HTTP 404` on the page | The `/book/...` address is not being served as the booking page. A `308` means the site is redirecting and dropping the private token (this happened once and is fixed in `_redirects`). Make sure the latest `main` commit shows **Success** under Cloudflare **Deployments**, then run the workflow again. If it still fails, send me the lines that start with `page check`. |
 | The same step fails with `HTTP 500 server_error` on the API | The database changes did not apply. Look at the "Apply database migrations" step above it. |
