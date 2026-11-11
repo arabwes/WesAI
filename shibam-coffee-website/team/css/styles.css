@@ -2530,3 +2530,24 @@
 .booking-link-url { width: 100%; margin-top: 4px; padding: 8px; font-size: 0.8rem; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-cream); }
 .booking-links[hidden] { display: none; }
 .booking-link-item .booking-hint { font-size: 0.85rem; margin: 6px 0 0; }
+
+/* Catering request conversations */
+.catering-unread { background: #B3261E; color: #fff; margin-left: 6px; }
+.conversation { margin-top: var(--space-3); }
+.conversation__panel { margin-top: var(--space-2); padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-cream); }
+.conversation__thread { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
+.conversation__empty { margin: 0; color: var(--color-brown-mid); }
+.conv-message { padding: var(--space-2) var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-surface); max-width: 94%; }
+.conv-message--staff { justify-self: end; background: #f6ecd8; }
+.conv-message--note { background: #fff8d6; border-style: dashed; }
+.conv-message.is-unread { box-shadow: 0 0 0 2px var(--color-gold); }
+.conv-message__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); font-size: 0.8rem; color: var(--color-brown-mid); }
+.conv-message__body { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.conversation__form textarea { width: 100%; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-surface); font: inherit; }
+.conversation__note-toggle { display: block; margin: var(--space-2) 0; font-size: 0.85rem; }
+.conversation__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.conversation__status { min-height: 1.4em; margin: 0 0 var(--space-2); font-weight: 600; font-size: 0.9rem; }
+.conversation__status.is-error { color: #B3261E; }
+.conversation__hint { margin: var(--space-2) 0 0; font-size: 0.8rem; color: var(--color-brown-mid); }
+.conversation__link { display: grid; gap: 4px; margin-top: var(--space-2); }
+.conversation__link input { width: 100%; padding: 8px; font-size: 0.8rem; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-surface); }

@@ -61,7 +61,7 @@ for (const file of await listFiles(outputDir)) {
 // .js/.css with a 4-hour max-age (see _headers). Stamp each reference with a
 // hash of the built file so a deploy is picked up immediately. Portal pages
 // under /team keep their manual ?v=N strings.
-const publicAssets = ['/css/styles.css', '/js/script.js', '/js/config.js', '/js/book.js'];
+const publicAssets = ['/css/styles.css', '/js/script.js', '/js/config.js', '/js/book.js', '/js/inquiry.js'];
 const hashes = {};
 for (const asset of publicAssets) {
   const content = await readFile(join(outputDir, asset));

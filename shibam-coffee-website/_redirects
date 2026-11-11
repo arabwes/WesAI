@@ -2,3 +2,6 @@
 /events         /catering-events.html   301
 # Booking pages: one page serves /book/<token> and /book/manage/<token>.
 /book/*  /book  200
+# Catering conversation page: one page serves /inquiry/<token>. The destination must be
+# /inquiry (not .html): Pages answers a .html destination with a redirect that drops the token.
+/inquiry/*  /inquiry  200

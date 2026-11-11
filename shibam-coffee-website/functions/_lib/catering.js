@@ -16,7 +16,12 @@ function cateringRequestDto(row) {
     details: row.details || '',
     status: row.status,
     createdAt: row.created_at,
-    updatedAt: row.updated_at || ''
+    updatedAt: row.updated_at || '',
+    // Conversation summary. The customer's private link is never part of this list.
+    messageCount: Number(row.message_count || 0),
+    unreadCount: Number(row.unread_count || 0),
+    lastMessageAt: row.last_message_at || '',
+    assignedToName: row.assigned_name || ''
   };
 }
 
@@ -59,11 +64,19 @@ export async function submitCateringRequest(request, payload, env) {
 export async function getCateringRequests(request, payload, env) {
   await requireRole(request, payload, env, 'lead');
   const status = String(payload.status || '').trim();
-  const query = VALID_STATUSES.has(status)
-    ? { sql: 'SELECT * FROM catering_requests WHERE status = ? ORDER BY created_at DESC', args: [status] }
-    : { sql: 'SELECT * FROM catering_requests ORDER BY created_at DESC', args: [] };
-  const { results } = await env.TEAM_DB.prepare(query.sql).bind(...query.args).all();
-  return { ok: true, requests: results.map(cateringRequestDto) };
+  const filtered = VALID_STATUSES.has(status);
+  // Conversations with something unread come first, then the most recently active.
+  const { results } = await env.TEAM_DB.prepare(`SELECT r.*, u.name AS assigned_name,
+      (SELECT COUNT(*) FROM catering_messages m WHERE m.request_id = r.id AND m.kind = 'customer' AND m.read_at IS NULL) AS unread_count,
+      (SELECT COUNT(*) FROM catering_messages m WHERE m.request_id = r.id AND m.kind IN ('staff', 'customer')) AS message_count
+    FROM catering_requests r LEFT JOIN users u ON u.id = r.assigned_to
+    ${filtered ? 'WHERE r.status = ?' : ''}
+    ORDER BY (unread_count > 0) DESC, COALESCE(r.last_message_at, r.created_at) DESC`)
+    .bind(...(filtered ? [status] : [])).all();
+  // How many conversations have a reply nobody has read yet, whatever the filter (for the dashboard alert).
+  const unread = await env.TEAM_DB.prepare(`SELECT COUNT(DISTINCT request_id) AS n FROM catering_messages
+    WHERE kind = 'customer' AND read_at IS NULL`).first();
+  return { ok: true, requests: results.map(cateringRequestDto), unreadReplies: Number(unread.n || 0) };
 }
 
 export async function updateCateringRequestStatus(request, payload, env) {

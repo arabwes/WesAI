@@ -23,3 +23,12 @@
 /book
   X-Robots-Tag: noindex, nofollow
   Referrer-Policy: no-referrer
+
+# A catering customer's private conversation page: the address contains a private token.
+/inquiry/*
+  Cache-Control: no-store
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer
+/inquiry
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer

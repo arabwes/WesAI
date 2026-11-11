@@ -1,6 +1,7 @@
 import { buildPushHTTPRequest } from '@pushforge/builder';
 import { anonymizeExpiredBookingsStatement } from '../../../functions/_lib/calendar-retention.js';
 import { buildBookingEmail, isBookingTemplate } from './booking-email.js';
+import { buildCateringMessageEmail } from './catering-email.js';
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>'"]/g, (character) => ({
@@ -293,6 +294,37 @@ async function sendBookingReminders(env, nowMs = Date.now()) {
   return { sent, failed };
 }
 
+// Tells a catering customer that the team wrote to them, with a link to their private page.
+// The message text is never put in the email. Safe to run twice: it skips a message that was
+// already emailed, and Resend de-duplicates by the idempotency key.
+async function sendCateringMessageEmail(message, env) {
+  const { messageId } = message.body || {};
+  if (!messageId) return false;
+  const row = await env.TEAM_DB.prepare(`SELECT m.id, m.kind, m.emailed_at, r.name, r.email, r.event_type, r.event_date, r.thread_token
+    FROM catering_messages m JOIN catering_requests r ON r.id = m.request_id WHERE m.id = ?`).bind(messageId).first();
+  if (!row || row.kind !== 'staff' || !row.thread_token || !row.email || row.emailed_at) return false;
+  if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
+  const email = buildCateringMessageEmail({
+    name: row.name, eventType: row.event_type, eventDate: row.event_date,
+    link: `${env.PORTAL_ORIGIN}/inquiry/${encodeURIComponent(row.thread_token)}`
+  });
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'ShibamCoffeeTeam/2.0',
+      'Idempotency-Key': String(message.body.deliveryKey || `catering:${messageId}`).slice(0, 256)
+    },
+    body: JSON.stringify({ from: env.EMAIL_FROM, to: [row.email], subject: email.subject, text: email.text, html: email.html })
+  });
+  const body = await responseSnippet(response);
+  if (!response.ok) throw new Error(`Resend ${response.status}: ${body}`);
+  await env.TEAM_DB.prepare('UPDATE catering_messages SET emailed_at = ? WHERE id = ? AND emailed_at IS NULL')
+    .bind(new Date().toISOString(), messageId).run();
+  return false;
+}
+
 function dateInTimezone(date, timezone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone || 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
@@ -454,7 +486,9 @@ export default {
           ? await sendInvitation(message, env)
           : kind === 'booking_email'
             ? await sendBookingEmail(message, env)
-            : await sendNotification(message, env);
+            : kind === 'catering_message'
+              ? await sendCateringMessageEmail(message, env)
+              : await sendNotification(message, env);
         if (delay) message.retry({ delaySeconds: delay });
         else message.ack();
       } catch (error) {

@@ -23,11 +23,14 @@
     var session = window.Auth && Auth.getSession();
     if (cateringAlert && session && Auth.hasRole(session, 'lead')) {
       Auth.apiCall('getCateringRequests', { status: 'new' }).then(function (result) {
-        if (!result.ok || !Array.isArray(result.requests) || !result.requests.length) return;
-        var count = result.requests.length;
-        document.getElementById('catering-request-alert-title').textContent = count === 1
-          ? 'You have a new catering request'
-          : 'You have ' + count + ' new catering requests';
+        if (!result.ok || !Array.isArray(result.requests)) return;
+        var fresh = result.requests.length;
+        var replies = Number(result.unreadReplies) || 0;
+        if (!fresh && !replies) return;
+        var parts = [];
+        if (fresh) parts.push(fresh === 1 ? 'a new catering request' : fresh + ' new catering requests');
+        if (replies) parts.push(replies === 1 ? '1 catering reply to read' : replies + ' catering replies to read');
+        document.getElementById('catering-request-alert-title').textContent = 'You have ' + parts.join(' and ');
         cateringAlert.hidden = false;
       }).catch(function () {
         // The dashboard remains usable if the reminder cannot be loaded.

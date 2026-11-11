@@ -1,5 +1,6 @@
 import { bootstrap, getSession, login, logout } from '../../_lib/auth.js';
 import { getCateringRequests, updateCateringRequestStatus } from '../../_lib/catering.js';
+import { getCateringThread, sendCateringMessage } from '../../_lib/catering-conversation.js';
 import { getContactRequests, updateContactRequestStatus } from '../../_lib/contact.js';
 import {
   archiveEventType, archiveMeetingLocation, createBookingLink, deleteDateOverride, getBookingAvailability,
@@ -135,6 +136,8 @@ const ACTIONS = {
   updateManagedUser,
   getCateringRequests,
   updateCateringRequestStatus,
+  getCateringThread,
+  sendCateringMessage,
   getContactRequests,
   updateContactRequestStatus,
   getInventoryCount,

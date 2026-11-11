@@ -26,10 +26,23 @@ test('the booking rewrite covers both link shapes and its page exists', () => {
   assert.ok(existsSync(new URL('book.html', root)), '/book is served from book.html');
 });
 
-test('booking pages are kept out of search, caches and referrers', () => {
+test('the catering conversation rewrite covers /inquiry/<token> and its page exists', () => {
+  const inquiry = rules.find((parts) => parts[0] === '/inquiry/*');
+  assert.ok(inquiry, '/inquiry/* rule exists');
+  assert.equal(inquiry[1], '/inquiry');
+  assert.equal(inquiry[2], '200');
+  assert.ok(existsSync(new URL('inquiry.html', root)), '/inquiry is served from inquiry.html');
+});
+
+test('pages that carry a private token are kept out of search, caches and referrers', () => {
   const headers = readFileSync(new URL('_headers', root), 'utf8');
-  const block = headers.slice(headers.indexOf('/book/*'));
-  assert.match(block, /Cache-Control: no-store/);
-  assert.match(block, /X-Robots-Tag: noindex/);
-  assert.match(block, /Referrer-Policy: no-referrer/);
+  for (const prefix of ['/book/*', '/inquiry/*']) {
+    const block = headers.slice(headers.indexOf(`\n${prefix}\n`)).split('\n\n')[0];
+    assert.match(block, /Cache-Control: no-store/, prefix);
+    assert.match(block, /X-Robots-Tag: noindex/, prefix);
+    assert.match(block, /Referrer-Policy: no-referrer/, prefix);
+  }
+  const robots = readFileSync(new URL('robots.txt', root), 'utf8');
+  assert.match(robots, /Disallow: \/book\//);
+  assert.match(robots, /Disallow: \/inquiry\//);
 });
