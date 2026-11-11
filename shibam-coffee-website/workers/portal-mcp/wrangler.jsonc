@@ -1,0 +1,35 @@
+{
+  // Shibam Coffee Portal MCP: read-only MCP connector for the team portal.
+  // Deployed by .github/workflows/deploy-cloudflare.yml once the PORTAL_MCP_ENABLED repository
+  // variable is "true" (see README.md for the one-time setup).
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "shibam-portal-mcp",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "shibamatlanta.com/portal-mcp*", "zone_name": "shibamatlanta.com" },
+    { "pattern": "shibamatlanta.com/.well-known/oauth-protected-resource/portal-mcp*", "zone_name": "shibamatlanta.com" },
+    { "pattern": "shibamatlanta.com/.well-known/oauth-authorization-server/portal-mcp*", "zone_name": "shibamatlanta.com" }
+  ],
+  // The same portal database the website uses.
+  "d1_databases": [
+    {
+      "binding": "TEAM_DB",
+      "database_name": "shibam-team",
+      "database_id": "51e7afb0-7d0c-4899-8e06-0db68bf7b16e",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+  // OAuth clients, grants and tokens. Created automatically on the first deploy.
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+  "triggers": { "crons": ["41 4 * * *"] },
+  "vars": {
+    "PUBLIC_ORIGIN": "https://shibamatlanta.com",
+    "BASE_PATH": "/portal-mcp",
+    "STORE_TIMEZONE": "America/New_York",
+    "APP_ENV": "production"
+  },
+  "observability": { "enabled": true }
+}

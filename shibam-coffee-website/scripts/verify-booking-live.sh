@@ -61,12 +61,28 @@ check_inquiry_api() {
   rm -f "$body"; return 1
 }
 
+# 5. (CHECK_PORTAL_MCP=1) the portal AI connector answers: OAuth discovery works and the MCP
+#    endpoint refuses a call without a token.
+check_portal_mcp() {
+  local body status
+  body="$(mktemp)"
+  status="$(curl -sS -m 20 -o "$body" -w '%{http_code}' "$SITE/.well-known/oauth-authorization-server/portal-mcp" 2>/dev/null || echo 000)"
+  if [ "$status" != "200" ] || ! grep -q '"issuer":"[^"]*/portal-mcp"' "$body"; then
+    echo "  portal connector discovery: HTTP $status (expected 200 with an issuer ending in /portal-mcp)"; rm -f "$body"; return 1
+  fi
+  status="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -X POST "$SITE/portal-mcp/mcp" -H 'Content-Type: application/json' -d '{}' 2>/dev/null || echo 000)"
+  rm -f "$body"
+  if [ "$status" = "401" ]; then return 0; fi
+  echo "  portal connector: HTTP $status for a call without a token (expected 401)"; return 1
+}
+
 attempt=1
 while [ "$attempt" -le "$TRIES" ]; do
   ok=1
   check_page || ok=0
   check_inquiry_page || ok=0
   if [ "${CHECK_API:-1}" = "1" ]; then check_api || ok=0; check_inquiry_api || ok=0; fi
+  if [ "${CHECK_PORTAL_MCP:-0}" = "1" ]; then check_portal_mcp || ok=0; fi
   if [ "$ok" = "1" ]; then
     echo "OK: the booking and catering conversation pages and APIs are live at $SITE"
     exit 0

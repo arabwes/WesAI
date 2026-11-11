@@ -1,0 +1,20 @@
+{
+  "name": "shibam-portal-mcp",
+  "private": true,
+  "type": "module",
+  "description": "Read-only MCP connector for the Shibam Coffee team portal (sign in with a portal account).",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "0.10.3",
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.22.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "wrangler": "^4.129.0"
+  }
+}

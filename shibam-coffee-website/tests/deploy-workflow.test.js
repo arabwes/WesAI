@@ -13,7 +13,7 @@ const at = (needle) => {
 
 test('runs on its own for pushes to main that change the database or the Worker, and can still be run by hand', () => {
   assert.match(text, /on:\n  push:\n    branches: \[main\]\n    paths:/);
-  for (const path of ['shibam-coffee-website/migrations/**', 'shibam-coffee-website/workers/notifications/**', 'shibam-coffee-website/functions/_lib/calendar-retention.js']) {
+  for (const path of ['shibam-coffee-website/migrations/**', 'shibam-coffee-website/workers/notifications/**', 'shibam-coffee-website/functions/_lib/**']) {
     assert.ok(text.includes(`"${path}"`), `push trigger covers ${path}`);
   }
   assert.match(text, /workflow_dispatch:[\s\S]*default: check/, 'manual runs default to the harmless check');
@@ -57,4 +57,15 @@ test('a failed restore-point step never blocks the deploy, and the bookmark is r
   const step = text.slice(at('name: Save a database restore point'), at('name: Apply database migrations'));
   assert.match(step, /continue-on-error: true/);
   assert.match(step, /current bookmark is/);
+});
+
+test('the portal AI connector deploys only when switched on, and with any change to the portal code it bundles', () => {
+  for (const path of ['shibam-coffee-website/functions/_lib/**', 'shibam-coffee-website/workers/portal-mcp/**']) {
+    assert.ok(text.includes(`"${path}"`), `push trigger covers ${path}`);
+  }
+  const step = text.slice(at('name: Deploy the portal AI connector'), at('name: Confirm no migrations are left'));
+  assert.match(step, /if: env\.MODE == 'deploy' && vars\.PORTAL_MCP_ENABLED == 'true'/);
+  assert.match(step, /working-directory: shibam-coffee-website\/workers\/portal-mcp/);
+  assert.ok(at('name: Apply database migrations') < at('name: Deploy the portal AI connector'), 'after the database is up to date');
+  assert.match(text, /CHECK_PORTAL_MCP: \$\{\{ vars\.PORTAL_MCP_ENABLED == 'true' && '1' \|\| '0' \}\}/, 'the live check covers it when on');
 });

@@ -85,19 +85,28 @@ function requestSummary(row) {
 
 // ---- staff (Lead+) ----
 
-// Opens a conversation. Opening it marks the customer's messages as read.
-export async function getCateringThread(request, payload, env) {
-  await requireRole(request, payload, env, 'lead');
-  const row = await loadRequest(env, payload.requestId);
+// Loads a conversation. A person opening it marks the customer's replies as read; the AI
+// connector reads with markRead:false so it never clears the team's unread badges.
+export async function readCateringThread(env, requestId, { markRead }) {
+  const row = await loadRequest(env, requestId);
   const { results } = await env.TEAM_DB.prepare(
     'SELECT * FROM catering_messages WHERE request_id = ? ORDER BY created_at, rowid'
   ).bind(row.id).all();
-  await env.TEAM_DB.prepare(`UPDATE catering_messages SET read_at = ?
-    WHERE request_id = ? AND kind = 'customer' AND read_at IS NULL`).bind(nowIso(), row.id).run();
+  if (markRead) {
+    await env.TEAM_DB.prepare(`UPDATE catering_messages SET read_at = ?
+      WHERE request_id = ? AND kind = 'customer' AND read_at IS NULL`).bind(nowIso(), row.id).run();
+  }
+  return { row, messages: results.map((message) => staffMessageDto(message, message.kind === 'customer' && !message.read_at)) };
+}
+
+// Opens a conversation in the portal.
+export async function getCateringThread(request, payload, env) {
+  await requireRole(request, payload, env, 'lead');
+  const { row, messages } = await readCateringThread(env, payload.requestId, { markRead: true });
   return {
     ok: true,
     request: requestSummary(row),
-    messages: results.map((message) => staffMessageDto(message, message.kind === 'customer' && !message.read_at)),
+    messages,
     // The customer's private page, for staff who want to share it by phone or text.
     customerLink: row.thread_token ? linkUrl(request, env, row.thread_token) : null,
     assignedTo: row.assigned_to || null

@@ -72,8 +72,10 @@ async function rateLimitLogin(db, request, username) {
   return key;
 }
 
-export async function login(request, payload, env) {
-  await validateTurnstile(payload, request, env);
+// Checks a portal username and password with the same attempt limit (10 per 15 minutes per
+// address and username) and password rules as the portal login, without creating a portal
+// session. Used by the portal login below and by the AI connector's sign-in page.
+export async function verifyCredentials(request, payload, env) {
   const username = String(payload.username || '').trim();
   const password = String(payload.password || '');
   if (!username || !password) throw new ApiError('missing_credentials', 400);
@@ -89,6 +91,12 @@ export async function login(request, payload, env) {
   }
 
   await env.TEAM_DB.prepare('DELETE FROM login_attempts WHERE attempt_key = ?').bind(attemptKey).run();
+  return user;
+}
+
+export async function login(request, payload, env) {
+  await validateTurnstile(payload, request, env);
+  const user = await verifyCredentials(request, payload, env);
   const rawToken = `${crypto.randomUUID()}${randomHex(16)}`;
   const tokenHash = await sha256Hex(rawToken);
   const hours = Number(env.SESSION_HOURS || 12);
@@ -113,7 +121,21 @@ export async function logout(request, payload, env) {
   return { result: { ok: true }, cookie: clearSessionCookie(env) };
 }
 
+// Requests made by trusted server code on behalf of an already-authenticated person (the AI
+// connector, after its own OAuth check) carry their user here. Only code that constructs the
+// Request object itself can register it, so nothing arriving over the network can claim an
+// identity this way: browser requests come from the runtime and are never in this map.
+const trustedActors = new WeakMap();
+
+export function actAs(request, user) {
+  if (!(request instanceof Request) || !user?.id || !ROLE_RANK[user.role]) throw new Error('actAs needs a Request and a portal user');
+  trustedActors.set(request, user);
+  return request;
+}
+
 export async function getSession(request, payload, env) {
+  const trusted = trustedActors.get(request);
+  if (trusted) return trusted;
   const rawToken = getCookie(request, COOKIE_NAME) || String(payload?.token || payload?.sessionToken || '');
   if (!rawToken) return null;
   const tokenHash = await sha256Hex(rawToken);
