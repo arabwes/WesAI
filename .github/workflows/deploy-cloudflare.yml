@@ -1,14 +1,30 @@
 name: Deploy to Cloudflare
 
-# Manual only. Open the Actions tab, pick "Deploy to Cloudflare", click "Run workflow".
-#   check  (default): changes NOTHING. Shows pending database migrations and the
-#                     Worker's secret names so you can see what a deploy would do.
-#   deploy:           runs the tests, applies pending database migrations to the
-#                     production database, deploys the notification Worker, then
-#                     checks the live booking page and API.
-# The website itself (Pages) deploys from the main branch on its own.
+# Runs by itself whenever a push to main changes the database (migrations) or the
+# notification Worker. Pushes that only change website pages do not run it: the website
+# publishes itself from main through Cloudflare Pages.
+#
+# What an automatic run does, in order:
+#   1. tests (stops here if anything fails; nothing on Cloudflare is touched)
+#   2. a 30 second countdown. To stop the deploy, open the run and click "Cancel workflow".
+#   3. saves a database restore point (Cloudflare Time Travel) and prints how to use it
+#   4. applies pending database migrations
+#   5. deploys the notification Worker
+#   6. checks the live booking page and API
+#
+# Manual runs (Actions tab, "Run workflow") are still available:
+#   check  (default): changes NOTHING. Shows what is pending.
+#   deploy:           the same steps as an automatic run, without the countdown.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "shibam-coffee-website/migrations/**"
+      - "shibam-coffee-website/workers/notifications/**"
+      # The Worker imports this file, so a change to it changes the deployed Worker.
+      - "shibam-coffee-website/functions/_lib/calendar-retention.js"
+      - "shibam-coffee-website/package.json"
   workflow_dispatch:
     inputs:
       mode:
@@ -20,6 +36,8 @@ on:
 permissions:
   contents: read
 
+# One deploy at a time. A run that has already started is never cancelled halfway
+# (that could stop a database change midway); a newer push waits its turn.
 concurrency:
   group: cloudflare-production
   cancel-in-progress: false
@@ -29,13 +47,15 @@ env:
 
 jobs:
   cloudflare:
-    name: ${{ inputs.mode }}
+    name: ${{ inputs.mode || 'deploy' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: shibam-coffee-website
     env:
+      # Pushes have no input, so they always deploy; manual runs use the mode that was chosen.
+      MODE: ${{ inputs.mode || 'deploy' }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
@@ -74,21 +94,77 @@ jobs:
           fi
 
       - name: Tests (deploy only)
-        if: inputs.mode == 'deploy'
+        if: env.MODE == 'deploy'
         run: npm test
 
+      # Only for automatic runs: a person who clicks "Run workflow" has already decided.
+      - name: Pause 30 seconds before deploying (automatic runs only)
+        if: env.MODE == 'deploy' && github.event_name == 'push'
+        run: |
+          echo "::notice title=Deploying in 30 seconds::To stop this deploy, cancel this run now (open the run, then Cancel workflow). Nothing has been changed yet."
+          for left in 30 25 20 15 10 5; do
+            echo "Deploying in $left seconds... (cancel this run to stop)"
+            sleep 5
+          done
+
+      # Cloudflare keeps 30 days of database history. This records the exact moment before
+      # any change so it can be restored if a database change turns out to be wrong.
+      - name: Save a database restore point (deploy only)
+        if: env.MODE == 'deploy'
+        id: restore
+        continue-on-error: true
+        run: |
+          npx wrangler d1 time-travel info shibam-team | tee restore-point.txt
+          # Wrangler prints: The current bookmark is '<id>'
+          bookmark="$(sed -n "s/.*current bookmark is '\([^']*\)'.*/\1/p" restore-point.txt | head -1)"
+          if [ -z "$bookmark" ]; then
+            echo "::warning::Could not read a restore point. The deploy will continue, but there is no saved restore point for this run."
+            exit 0
+          fi
+          echo "bookmark=$bookmark" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Database restore point"
+            echo "Saved just before this deploy changed anything:"
+            echo
+            echo "    $bookmark"
+            echo
+            echo "To undo this deploy's database changes, run in the website folder:"
+            echo
+            echo "    npx wrangler d1 time-travel restore shibam-team --bookmark=$bookmark"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Apply database migrations (deploy only)
-        if: inputs.mode == 'deploy'
+        if: env.MODE == 'deploy'
         run: npm run db:migrate:production
 
       - name: Deploy the notification Worker (deploy only)
-        if: inputs.mode == 'deploy'
+        if: env.MODE == 'deploy'
         run: npm run notifications:deploy
 
       - name: Confirm no migrations are left (deploy only)
-        if: inputs.mode == 'deploy'
+        if: env.MODE == 'deploy'
         run: npx wrangler d1 migrations list shibam-team --remote
 
       - name: Check the live booking page and API (deploy only)
-        if: inputs.mode == 'deploy'
+        if: env.MODE == 'deploy'
         run: ./scripts/verify-booking-live.sh "$SITE_URL"
+
+      - name: Explain what to do if this run failed
+        if: failure() && env.MODE == 'deploy'
+        env:
+          BOOKMARK: ${{ steps.restore.outputs.bookmark }}
+        run: |
+          {
+            echo "### This deploy failed"
+            echo "Open the red step above and read its message."
+            echo
+            echo "- If it failed at **Tests**, nothing on Cloudflare was changed."
+            echo "- If it failed at **Apply database migrations**, the database may be partly updated. Do not run it again until you have looked at the message."
+            echo "- If it failed at **Check the live booking page and API**, the changes were applied. The website may still be publishing; run the workflow again in a few minutes."
+            if [ -n "$BOOKMARK" ]; then
+              echo
+              echo "To put the database back exactly as it was before this deploy:"
+              echo
+              echo "    npx wrangler d1 time-travel restore shibam-team --bookmark=$BOOKMARK"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

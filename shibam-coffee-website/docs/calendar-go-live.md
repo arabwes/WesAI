@@ -12,10 +12,11 @@ the existing site and portal keep working, but Booking Links, Team Calendar and
 
 ## Fastest route: run Steps 1 to 3 from the GitHub website (no terminal)
 
-The repository has a button-driven workflow, **Deploy to Cloudflare**, that does
-Steps 1, 2 and part of 3 for you and then tests the live site. If you use it,
-skip the command-line Steps 1 to 3 below and carry on from Step 4. You set it up
-once (A to C), then click Run (D and E).
+The repository has a workflow, **Deploy to Cloudflare**, that does Steps 1, 2 and
+part of 3 for you and then tests the live site. If you use it, skip the
+command-line Steps 1 to 3 below and carry on from Step 4. You set it up once (A to
+C), then click Run (D and E). After that it also runs by itself (see "After the
+one-time setup" below).
 
 ### A. Create a Cloudflare API token (about 3 minutes)
 
@@ -82,6 +83,46 @@ fails" at the end of this file.
 
 You can leave the token in place to use for future deploys, or delete it in
 Cloudflare (**My Profile**, **API Tokens**) and create a new one next time.
+
+---
+
+## After the one-time setup: deploys happen automatically
+
+Once the two GitHub secrets from part C are in place, you never need to click Run
+workflow again for normal changes.
+
+**When it runs by itself.** Whenever a change that touches the database
+(`migrations/`) or the email Worker (`workers/notifications/`) is pushed to
+`main`. Changes that only affect website pages do not start it, because
+Cloudflare publishes the website from `main` on its own.
+
+**What happens, in order:**
+1. The tests run. If any fail, nothing on Cloudflare is touched.
+2. A **30 second countdown**. To stop the deploy, open the run on the **Actions**
+   tab and click **Cancel workflow** before it ends. Nothing has changed yet.
+3. A database restore point is saved (Cloudflare keeps 30 days of history).
+4. Pending database changes are applied.
+5. The email Worker is deployed.
+6. The live booking page and API are checked.
+
+A green tick means it all worked. If a run fails, GitHub emails you, and the run's
+summary page says which step failed and, if the database was involved, the one
+command that restores it to how it was just before.
+
+**To undo a deploy's database changes**, open the run, scroll to the **Summary**
+at the top, and run the `npx wrangler d1 time-travel restore ...` command shown
+there (in the `shibam-coffee-website` folder, signed in with `npx wrangler login`).
+
+**Clicking Run workflow still works.** `check` only looks and changes nothing.
+`deploy` does the same steps as an automatic run, without the countdown.
+
+**One habit that avoids brief errors.** The website and the database are updated
+by two separate Cloudflare systems that start at the same moment, so for a minute
+or two one can be ahead of the other. If a change adds a database column *and*
+the code that uses it in the same commit, a new feature can show an error
+until the database catches up. Existing pages are not affected. For a change
+that needs a new column, push the database change first and the code that uses
+it in a later commit.
 
 ---
 

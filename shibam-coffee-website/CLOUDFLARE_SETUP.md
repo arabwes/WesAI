@@ -348,7 +348,8 @@ which is a different file from the portal's `team/js/config.js`.
 A plain-language, step-by-step version of this is in
 [`docs/calendar-go-live.md`](docs/calendar-go-live.md), including a GitHub
 Actions workflow (**Deploy to Cloudflare**) that applies the migrations and
-deploys the Worker from the GitHub website with no terminal.
+deploys the Worker with no terminal. It runs automatically when a push to `main`
+changes `migrations/` or `workers/notifications/`, after a 30 second countdown.
 
 The booking feature needs four migrations (`0012` to `0015`) and a Worker
 redeploy, because the notification Worker now sends booking confirmation and
