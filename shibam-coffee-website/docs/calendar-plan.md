@@ -101,9 +101,11 @@ calling each calendar action cannot read another user's booking fields.
   max_uses, use_count, revoked_at, created_at`. Links are reusable by
   default (`max_uses` empty), so one link can go to many candidates. An
   optional expiry or use cap can be set, and a link can be revoked at any time
-  without affecting bookings already made. Only a
-  SHA-256 hash of the token is stored, the same approach as `calendar_tokens`.
-  Tokens are 32 random bytes, base64url.
+  without affecting bookings already made. Lookups use a SHA-256 hash of the
+  token. The token itself is also kept (`token`, migration 0016) so the owner
+  and Management can view and copy a link again; it is erased when the link is
+  revoked. An invitee's own manage token stays hash-only. Tokens are 32 random
+  bytes, base64url. "Book up to" (`max_days_ahead`) is limited to 1-30 days.
 - `bookings`: `id, event_type_id, owner_id, link_id, location_id,
   location_snapshot_json (address as it was when booked), start_utc, end_utc,
   status (confirmed | cancelled | rescheduled), client_name, client_email,

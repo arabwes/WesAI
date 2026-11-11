@@ -76,24 +76,77 @@ test('a lead sets up an address, hours and a meeting type, then creates a link',
   await type.getByLabel('Address').selectOption({ index: 1 });
   await type.getByRole('button', { name: 'Add question' }).click();
   await type.getByLabel('Question').fill('Which position are you applying for?');
+
+  // "People can book up to" offers exactly 1 to 30 days, and defaults to 30.
+  const window_ = type.getByLabel('People can book up to (1 to 30 days ahead)');
+  const choices = await window_.locator('option').allTextContents();
+  expect(choices).toHaveLength(30);
+  expect(choices[0]).toBe('1 day');
+  expect(choices[1]).toBe('2 days');
+  expect(choices[29]).toBe('30 days');
+  await expect(window_).toHaveValue('30');
+  await window_.selectOption('7');
+
   await type.getByRole('button', { name: 'Create meeting type' }).click();
   await expect(page.locator('#types-list')).toContainText('Barista interview');
   await expect(page.locator('#types-list')).toContainText('30 minutes · Alpharetta shop');
+  expect(db.raw.prepare('SELECT max_days_ahead FROM event_types').get().max_days_ahead).toBe(7);
 
-  // Create a reusable link and see the URL once.
+  // Editing shows the saved window and lets it change, including down to 1 day.
+  await page.getByRole('button', { name: 'Edit' }).first().click();
+  await expect(type.getByLabel('People can book up to (1 to 30 days ahead)')).toHaveValue('7');
+  await type.getByLabel('People can book up to (1 to 30 days ahead)').selectOption('1');
+  await type.getByRole('button', { name: 'Save meeting type' }).click();
+  await expect.poll(() => db.raw.prepare('SELECT max_days_ahead FROM event_types').get().max_days_ahead).toBe(1);
+
+  // The links list starts closed, with a button showing how many links there are.
+  await expect(page.locator('.booking-links')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'View links (0)' })).toBeVisible();
+  await page.getByRole('button', { name: 'View links (0)' }).click();
+  await expect(page.locator('.booking-links')).toContainText('No links yet');
+  await page.getByRole('button', { name: 'Hide links' }).click();
+  await expect(page.locator('.booking-links')).toBeHidden();
+
+  // Create a reusable link. The list opens by itself and shows the address.
   await page.getByRole('button', { name: 'Create link' }).click();
   await page.getByLabel('Label (just for you)').fill('Spring hiring');
   await page.locator('.booking-form').getByRole('button', { name: 'Create link' }).click();
-  const url = await page.locator('.booking-link-reveal input').inputValue();
-  expect(url).toMatch(/\/book\/[A-Za-z0-9_-]{43}$/);
+  await expect(page.locator('.booking-links')).toBeVisible();
   await expect(page.locator('.booking-links')).toContainText('Spring hiring');
   await expect(page.locator('.booking-links')).toContainText('0 booked');
+  const url = await page.locator('.booking-link-url').inputValue();
+  expect(url).toMatch(/\/book\/[A-Za-z0-9_-]{43}$/);
   expect(db.raw.prepare('SELECT max_uses FROM booking_links').get().max_uses).toBeNull();
 
-  // Revoke it.
+  // Close it, reload the whole page, and view the very same link again.
+  await page.reload();
+  await expect(page.locator('.booking-links')).toBeHidden();
+  await page.getByRole('button', { name: 'View links (1)' }).click();
+  await expect(page.locator('.booking-link-url')).toHaveValue(url);
+  await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible();
+
+  // Copy puts the full link on the clipboard.
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Copy link' }).click();
+  await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+
+  // A link made before addresses were kept explains itself instead of showing one.
+  db.raw.prepare('UPDATE booking_links SET token = NULL').run();
+  await page.reload();
+  await page.getByRole('button', { name: 'View links (1)' }).click();
+  await expect(page.locator('.booking-links')).toContainText("made before links could be viewed");
+  await expect(page.getByRole('button', { name: 'Copy link' })).toHaveCount(0);
+  await expect(page.locator('.booking-link-url')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Revoke' })).toBeVisible(); // it can still be revoked
+
+  // Revoke it: the address disappears and the stored token is erased.
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Revoke' }).click();
   await expect(page.locator('.booking-links')).toContainText('revoked');
+  await expect(page.locator('.booking-link-url')).toHaveCount(0);
+  await expect(page.locator('.booking-links')).toBeVisible(); // the list stays open after revoking
+  expect(db.raw.prepare('SELECT token FROM booking_links').get().token).toBeNull();
 
   // No horizontal scrolling on a phone.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

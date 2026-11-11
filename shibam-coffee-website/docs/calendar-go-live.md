@@ -149,12 +149,19 @@ Sign in as a Lead or Management and open **Booking Links** from the dashboard.
 2. **My booking hours**: pick your time zone, click **Add hours** next to each
    day you are available, set the times, and click **Save hours**.
 3. **Meeting types and links**: click **New meeting type**. Name it (for example
-   "Barista interview"), pick the address, length, and add any questions (for
-   example "Which position are you applying for?"). Save.
+   "Barista interview"), pick the address and length, choose how far ahead people
+   can book (**1 to 30 days**), and add any questions (for example "Which position
+   are you applying for?"). Save.
 4. On the meeting card click **Create link**, add a label (for example "Spring
-   hiring"), and click **Create link**. **Copy the link right away.** It is shown
-   once. You can make another link at any time.
-5. The same link can be sent to many candidates. Each person can hold only one
+   hiring"), and click **Create link**. The card's link list opens and shows the
+   new link with a **Copy link** button.
+5. To see your links again later, click **View links** on the meeting card. Each
+   link shows its address, how many people booked, and its status, with **Copy
+   link** and **Revoke** buttons. Only you and Management can see these
+   addresses. Links created before this update
+   can't be shown again: they still work, but make a new link if you need one to
+   copy.
+6. The same link can be sent to many candidates. Each person can hold only one
    upcoming booking at a time.
 
 ## Step 6: Try it as a candidate (required)

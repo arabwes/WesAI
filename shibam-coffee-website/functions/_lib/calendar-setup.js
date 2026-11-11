@@ -150,7 +150,7 @@ export async function saveEventType(request, payload, env) {
     before: range(payload.bufferBeforeMinutes ?? 0, 0, 240, 'buffer'),
     after: range(payload.bufferAfterMinutes ?? 0, 0, 240, 'buffer'),
     notice: range(payload.minNoticeMinutes ?? 240, 0, 60 * 24 * 60, 'min_notice'),
-    ahead: range(payload.maxDaysAhead ?? 60, 1, 365, 'max_days_ahead'),
+    ahead: range(payload.maxDaysAhead ?? 30, 1, 30, 'max_days_ahead'), // book up to 1-30 days ahead
     interval: range(payload.slotIntervalMinutes ?? 30, 5, 60, 'slot_interval'),
     questions: cleanQuestions(payload.questions)
   };
@@ -317,8 +317,9 @@ function linkStatus(row, now) {
   return 'active';
 }
 
-// The full URL is returned once. Only a hash is kept, so a lost link cannot be
-// recovered; create another instead (links are cheap and reusable).
+// The URL is returned here and can be viewed again later with listBookingLinks
+// (owner and Management only). Links made before the token was stored cannot be
+// shown again; create another instead.
 export async function createBookingLink(request, payload, env) {
   const actor = await requireRole(request, payload, env, 'lead');
   const eventType = await ownedEventType(env.TEAM_DB, actor, payload.eventTypeId);
@@ -344,14 +345,16 @@ export async function createBookingLink(request, payload, env) {
 export async function listBookingLinks(request, payload, env) {
   const actor = await requireRole(request, payload, env, 'lead');
   const eventType = await ownedEventType(env.TEAM_DB, actor, payload.eventTypeId);
-  const { results } = await env.TEAM_DB.prepare(`SELECT id, label, expires_at, max_uses, use_count, revoked_at, created_at
+  const { results } = await env.TEAM_DB.prepare(`SELECT id, label, token, expires_at, max_uses, use_count, revoked_at, created_at
     FROM booking_links WHERE event_type_id = ? ORDER BY created_at DESC LIMIT 200`).bind(eventType.id).all();
   const now = Date.now();
   return {
     ok: true,
     links: results.map((row) => ({
       id: row.id, label: row.label, createdAt: row.created_at, expiresAt: row.expires_at, maxUses: row.max_uses,
-      useCount: row.use_count, status: linkStatus(row, now)
+      useCount: row.use_count, status: linkStatus(row, now),
+      // Only for the owner/Management (checked above), never for a revoked link or one made before tokens were kept.
+      url: row.token && !row.revoked_at ? linkUrl(request, env, row.token) : null
     }))
   };
 }
@@ -361,7 +364,8 @@ export async function revokeBookingLink(request, payload, env) {
   const row = await env.TEAM_DB.prepare(`SELECT l.id, e.owner_id FROM booking_links l JOIN event_types e ON e.id = l.event_type_id
     WHERE l.id = ?`).bind(String(payload.linkId || '')).first();
   if (!row || !canManage(actor, row.owner_id)) throw new ApiError('link_not_found', 404);
-  await env.TEAM_DB.prepare('UPDATE booking_links SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?').bind(nowIso(), row.id).run();
+  // Revoking also erases the stored token: a dead link has no reason to be recoverable.
+  await env.TEAM_DB.prepare('UPDATE booking_links SET revoked_at = COALESCE(revoked_at, ?), token = NULL WHERE id = ?').bind(nowIso(), row.id).run();
   await audit(env.TEAM_DB, actor.id, 'booking_link.revoke', 'booking_link', row.id, {});
   return { ok: true };
 }

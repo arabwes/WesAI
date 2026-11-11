@@ -9,7 +9,7 @@
     { weekday: 4, name: 'Thursday' }, { weekday: 5, name: 'Friday' }, { weekday: 6, name: 'Saturday' },
     { weekday: 0, name: 'Sunday' }
   ];
-  var state = { locations: [], types: [], weekly: [], timezone: '', avoidShifts: false, overrides: [] };
+  var state = { locations: [], types: [], weekly: [], timezone: '', avoidShifts: false, overrides: [], openLinks: {} };
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('footer-year').textContent = new Date().getFullYear();
@@ -228,6 +228,19 @@
     if (type.description) card.appendChild(node('p', 'document-card__description', type.description));
     var actions = node('div', 'booking-card-actions');
     if (type.active) actions.appendChild(button('Create link', 'btn-inline-action', function () { openLinkForm(card, type); }));
+    var links = node('div', 'booking-links');
+    var list = node('div');
+    var open = !!state.openLinks[type.id];
+    var viewButton = button(viewLabel(type, open), 'btn-inline-action', function () {
+      open = !open;
+      state.openLinks[type.id] = open;
+      viewButton.textContent = viewLabel(type, open);
+      viewButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+      links.hidden = !open;
+      if (open) loadLinks(type, list);
+    });
+    viewButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+    actions.appendChild(viewButton);
     actions.appendChild(button('Edit', null, function () { openTypeForm(type); }));
     actions.appendChild(button(type.active ? 'Archive' : 'Restore', 'btn-inline-action' + (type.active ? ' btn-inline-action--danger' : ''), function () {
       Auth.apiCall('archiveEventType', { id: type.id, archived: type.active }).then(function (result) {
@@ -237,13 +250,15 @@
       });
     }));
     card.appendChild(actions);
-    var links = node('div', 'booking-links');
-    links.appendChild(node('h5', null, 'Links (' + type.activeLinks + ' active)'));
-    var list = node('div');
     links.appendChild(list);
+    links.hidden = !open;
     card.appendChild(links);
-    loadLinks(type, list);
+    if (open) loadLinks(type, list);
     return card;
+  }
+
+  function viewLabel(type, open) {
+    return open ? 'Hide links' : 'View links (' + type.activeLinks + ')';
   }
 
   function statusText(link) {
@@ -253,16 +268,39 @@
     return parts.join(' · ');
   }
 
+  function copyText(text, field_, copyButton) {
+    if (field_) field_.select();
+    var done = function () { copyButton.textContent = 'Copied'; window.setTimeout(function () { copyButton.textContent = 'Copy link'; }, 2500); };
+    var fallback = function () { try { document.execCommand('copy'); done(); } catch (error) { copyButton.textContent = 'Press Ctrl+C'; } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+
   function loadLinks(type, mount) {
     mount.textContent = 'Loading links…';
     Auth.apiCall('listBookingLinks', { eventTypeId: type.id }).then(function (result) {
       if (!result.ok) throw new Error('load');
       mount.replaceChildren();
-      if (!result.links.length) { mount.textContent = 'No links yet.'; return; }
+      if (!result.links.length) { mount.textContent = 'No links yet. Use Create link to make one.'; return; }
       result.links.forEach(function (link) {
+        var item = node('div', 'booking-link-item');
         var row = node('div', 'booking-link-row');
         row.appendChild(node('span', 'booking-link-row__label', link.label || 'Untitled link'));
         row.appendChild(node('span', null, statusText(link)));
+        if (link.url) {
+          var urlField = input('text', link.url, { readonly: 'readonly', 'aria-label': 'Booking link for ' + (link.label || 'this link') });
+          urlField.className = 'booking-link-url';
+          urlField.addEventListener('focus', function () { urlField.select(); });
+          var copy = button('Copy link', 'btn-inline-action', function () { copyText(link.url, urlField, copy); });
+          row.appendChild(copy);
+          item.appendChild(row);
+          item.appendChild(urlField);
+        } else {
+          item.appendChild(row);
+          if (link.status !== 'revoked') {
+            item.appendChild(node('p', 'booking-hint', 'This link was made before links could be viewed, so its address can\'t be shown. It still works for anyone who has it. Create a new link if you need one to copy.'));
+          }
+        }
         if (link.status !== 'revoked') {
           row.appendChild(button('Revoke', 'btn-inline-action btn-inline-action--danger', function () {
             if (!window.confirm('Revoke this link? People who have it will no longer be able to book. Existing bookings stay.')) return;
@@ -273,7 +311,7 @@
             });
           }));
         }
-        mount.appendChild(row);
+        mount.appendChild(item);
       });
     }).catch(function () { mount.textContent = 'Could not load links.'; });
   }
@@ -302,31 +340,13 @@
       }).then(function (result) {
         if (!result.ok) return fail(result);
         form.remove();
-        showNewLink(card, result.url);
-        say('Link created. Copy it now: it is not shown again.');
-        loadLinks(type, card.querySelector('.booking-links div'));
+        say('Link created. Copy it now, or find it later under View links.');
+        state.openLinks[type.id] = true;
+        loadTypes();
       }).finally(function () { create.disabled = false; });
     });
     card.appendChild(form);
     label.focus();
-  }
-
-  function showNewLink(card, url) {
-    var previous = card.querySelector('.booking-link-reveal');
-    if (previous) previous.remove();
-    var box = node('div', 'booking-link-reveal');
-    box.appendChild(node('strong', null, 'Your new link'));
-    var field_ = input('text', url, { readonly: 'readonly', 'aria-label': 'New booking link' });
-    box.appendChild(field_);
-    var copy = button('Copy link', 'btn btn-small', function () {
-      field_.select();
-      var done = function () { copy.textContent = 'Copied'; };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { document.execCommand('copy'); done(); });
-      else { document.execCommand('copy'); done(); }
-    });
-    box.appendChild(copy);
-    box.appendChild(node('p', 'booking-hint', 'Anyone with this link can book. It will not be shown again, but you can make another link any time.'));
-    card.insertBefore(box, card.querySelector('.booking-links'));
   }
 
   function openTypeForm(type) {
@@ -337,7 +357,7 @@
       return;
     }
     form.hidden = false;
-    var data = type || { durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0, minNoticeMinutes: 240, maxDaysAhead: 60, slotIntervalMinutes: 30, questions: [] };
+    var data = type || { durationMinutes: 30, bufferBeforeMinutes: 0, bufferAfterMinutes: 0, minNoticeMinutes: 240, maxDaysAhead: 30, slotIntervalMinutes: 30, questions: [] };
     var name = input('text', data.name, { maxlength: 80, required: 'required', placeholder: 'Interview' });
     var description = input('text', data.description, { maxlength: 500, placeholder: 'What the visitor should know' });
     var locations = state.locations.filter(function (l) { return l.active || l.id === data.locationId; });
@@ -351,7 +371,9 @@
     var notice = select([
       { value: 60, label: '1 hour' }, { value: 240, label: '4 hours' }, { value: 1440, label: '1 day' }, { value: 2880, label: '2 days' }
     ], data.minNoticeMinutes);
-    var ahead = select([14, 30, 60, 90].map(function (n) { return { value: n, label: n + ' days' }; }), data.maxDaysAhead);
+    var days = [];
+    for (var d = 1; d <= 30; d += 1) days.push({ value: d, label: d + (d === 1 ? ' day' : ' days') });
+    var ahead = select(days, data.maxDaysAhead >= 1 && data.maxDaysAhead <= 30 ? data.maxDaysAhead : 30);
     var interval = select([15, 30, 60].map(function (n) { return { value: n, label: 'Every ' + n + ' minutes' }; }), data.slotIntervalMinutes);
     var questions = node('div');
     var questionRows = [];
@@ -382,7 +404,7 @@
     form.appendChild(field('Buffer before (minutes)', before));
     form.appendChild(field('Buffer after (minutes)', after));
     form.appendChild(field('Minimum notice', notice));
-    form.appendChild(field('Book up to', ahead));
+    form.appendChild(field('People can book up to (1 to 30 days ahead)', ahead));
     var qGroup = node('div', 'form-group form-group--wide');
     qGroup.appendChild(node('label', null, 'Questions for the visitor (name and email are always asked)'));
     qGroup.appendChild(questions);

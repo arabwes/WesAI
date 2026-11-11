@@ -87,6 +87,7 @@ test('event types require an in-person address and valid settings', async () => 
   await assert.rejects(saveEventType(ctx.req.leadA, { ...base, durationMinutes: 2 }, ctx.env), /invalid_duration/);
   await assert.rejects(saveEventType(ctx.req.leadA, { ...base, slotIntervalMinutes: 25 }, ctx.env), /invalid_slot_interval/);
   await assert.rejects(saveEventType(ctx.req.leadA, { ...base, maxDaysAhead: 9999 }, ctx.env), /invalid_max_days_ahead/);
+  await assert.rejects(saveEventType(ctx.req.leadA, { ...base, maxDaysAhead: 31 }, ctx.env), /invalid_max_days_ahead/);
   await assert.rejects(saveEventType(ctx.req.leadA, { ...base, name: '  ' }, ctx.env), /name_required/);
   await assert.rejects(saveEventType(ctx.req.leadA, { ...base, questions: Array.from({ length: 6 }, (_, i) => ({ label: `Q${i}` })) }, ctx.env), /too_many_questions/);
   await assert.rejects(saveEventType(ctx.req.leadA, { ...base, questions: [{ label: 'A', id: 'dup' }, { label: 'B', id: 'dup' }] }, ctx.env), /invalid_question_id/);
@@ -212,24 +213,90 @@ test('optional avoid-shifts hides slots that overlap the owner\'s published shif
   assert.ok((await slotsOn('2026-11-12')).includes('2026-11-12T14:00:00.000Z'), 'cancelled shifts do not block');
 });
 
-test('links: created once, never listed with their token, revocable by owner or Management only', async () => {
+test('links: the owner and Management can view a link again; nobody else can; revoking erases it', async () => {
   const ctx = setup();
   const { eventTypeId } = await seed(ctx);
   const created = await createBookingLink(ctx.req.leadA, { eventTypeId, label: 'Spring hiring', maxUses: '' }, ctx.env);
   assert.match(created.url, /^https:\/\/portal\.test\/book\/[A-Za-z0-9_-]{43}$/);
   const token = created.url.split('/').pop();
   await resolveLink(ctx.env, token, NOW);
-  const listed = await listBookingLinks(ctx.req.leadA, { eventTypeId }, ctx.env);
-  assert.equal(listed.links[0].status, 'active');
-  assert.equal(listed.links[0].label, 'Spring hiring');
-  assert.equal(listed.links[0].maxUses, null, 'reusable by default');
-  assert.ok(!JSON.stringify(listed).includes(token));
-  assert.ok(!JSON.stringify(listed).includes('token_hash'));
+
+  // The owner sees the same address again, any number of times.
+  for (let i = 0; i < 2; i += 1) {
+    const listed = await listBookingLinks(ctx.req.leadA, { eventTypeId }, ctx.env);
+    assert.equal(listed.links[0].url, created.url);
+    assert.equal(listed.links[0].status, 'active');
+    assert.equal(listed.links[0].label, 'Spring hiring');
+    assert.equal(listed.links[0].maxUses, null, 'reusable by default');
+    assert.ok(!JSON.stringify(listed).includes('token_hash'));
+  }
+  assert.equal((await listBookingLinks(ctx.req.admin, { eventTypeId }, ctx.env)).links[0].url, created.url, 'Management can view it too');
+
+  // Everyone else is refused, so the address never reaches them.
+  await assert.rejects(listBookingLinks(ctx.req.leadB, { eventTypeId }, ctx.env), code(404, 'event_type_not_found'));
+  await assert.rejects(listBookingLinks(ctx.req.barista, { eventTypeId }, ctx.env), code(403, 'forbidden'));
+  await assert.rejects(listBookingLinks(new Request('https://portal.test/'), { eventTypeId }, ctx.env), code(401, 'session_expired'));
+  const others = JSON.stringify([
+    await listEventTypes(ctx.req.leadA, {}, ctx.env), await listEventTypes(ctx.req.admin, { all: true }, ctx.env),
+    await getBookingAvailability(ctx.req.leadA, {}, ctx.env)
+  ]);
+  assert.ok(!others.includes(token), 'no other response carries the link address');
+
   await assert.rejects(revokeBookingLink(ctx.req.leadB, { linkId: created.id }, ctx.env), code(404, 'link_not_found'));
   await assert.rejects(revokeBookingLink(ctx.req.barista, { linkId: created.id }, ctx.env), code(403, 'forbidden'));
   await revokeBookingLink(ctx.req.admin, { linkId: created.id }, ctx.env);
   await assert.rejects(resolveLink(ctx.env, token, NOW), /link_not_found/);
-  assert.equal((await listBookingLinks(ctx.req.leadA, { eventTypeId }, ctx.env)).links[0].status, 'revoked');
+  const afterRevoke = await listBookingLinks(ctx.req.leadA, { eventTypeId }, ctx.env);
+  assert.equal(afterRevoke.links[0].status, 'revoked');
+  assert.equal(afterRevoke.links[0].url, null, 'a revoked link is no longer shown');
+  assert.equal(ctx.db.raw.prepare('SELECT token FROM booking_links').get().token, null, 'the stored token is erased on revoke');
+});
+
+test('links made before addresses were kept have no address to show', async () => {
+  const ctx = setup();
+  const { eventTypeId } = await seed(ctx);
+  const created = await createBookingLink(ctx.req.leadA, { eventTypeId }, ctx.env);
+  ctx.db.raw.prepare('UPDATE booking_links SET token = NULL WHERE id = ?').run(created.id); // as links were before migration 0016
+  const [link] = (await listBookingLinks(ctx.req.leadA, { eventTypeId }, ctx.env)).links;
+  assert.equal(link.url, null);
+  assert.equal(link.status, 'active', 'it still works for people who have it');
+  await resolveLink(ctx.env, created.url.split('/').pop(), NOW);
+});
+
+test('"book up to" accepts 1 to 30 days and nothing else', async () => {
+  const ctx = setup();
+  const { locationId } = await seed(ctx);
+  const base = { name: 'Window', durationMinutes: 30, locationId };
+  for (const days of [1, 7, 30]) {
+    const saved = await saveEventType(ctx.req.leadA, { ...base, maxDaysAhead: days }, ctx.env);
+    assert.equal(ctx.db.raw.prepare('SELECT max_days_ahead FROM event_types WHERE id = ?').get(saved.id).max_days_ahead, days);
+  }
+  for (const bad of [0, 31, 60, 90, -1, 2.5, 'soon']) {
+    await assert.rejects(saveEventType(ctx.req.leadA, { ...base, maxDaysAhead: bad }, ctx.env), /invalid_max_days_ahead/, String(bad));
+  }
+  const defaulted = await saveEventType(ctx.req.leadA, base, ctx.env);
+  assert.equal(ctx.db.raw.prepare('SELECT max_days_ahead FROM event_types WHERE id = ?').get(defaulted.id).max_days_ahead, 30, 'defaults to 30');
+  const [listed] = (await listEventTypes(ctx.req.leadA, {}, ctx.env)).eventTypes.filter((t) => t.id === defaulted.id);
+  assert.equal(listed.maxDaysAhead, 30);
+});
+
+test('a 1-day window only offers times within the next 24 hours', async () => {
+  const ctx = setup();
+  const { locationId } = await seed(ctx);
+  await saveBookingAvailability(ctx.req.leadA, {
+    timezone: 'America/New_York', weekly: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, startTime: '09:00', endTime: '17:00' }))
+  }, ctx.env);
+  const type = await saveEventType(ctx.req.leadA, { name: 'Tomorrow only', durationMinutes: 30, locationId, maxDaysAhead: 1, minNoticeMinutes: 60 }, ctx.env);
+  const token = (await createBookingLink(ctx.req.leadA, { eventTypeId: type.id }, ctx.env)).url.split('/').pop();
+  const now = Date.now();
+  const slots = (await getAvailableSlots(ctx.env, token, now)).slots.map((s) => Date.parse(s));
+  assert.ok(slots.length > 0, 'there are some times');
+  assert.ok(slots.every((s) => s <= now + 86_400_000 && s >= now + 3_600_000), 'all within the 1-day window and after the notice period');
+  const wide = await saveEventType(ctx.req.leadA, { name: 'A month', durationMinutes: 30, locationId, maxDaysAhead: 30 }, ctx.env);
+  const wideToken = (await createBookingLink(ctx.req.leadA, { eventTypeId: wide.id }, ctx.env)).url.split('/').pop();
+  const wideSlots = (await getAvailableSlots(ctx.env, wideToken, now)).slots.map((s) => Date.parse(s));
+  assert.ok(wideSlots.length > slots.length * 10, '30 days offers far more times than 1 day');
+  assert.ok(wideSlots.every((s) => s <= now + 30 * 86_400_000));
 });
 
 test('link options: expiry and use caps are validated and reported', async () => {

@@ -26,14 +26,15 @@ function nowMs(now) {
   return now instanceof Date ? now.getTime() : (typeof now === 'number' ? now : Date.now());
 }
 
-// Creates a link and returns the raw token once. Used by owner setup (phase 2)
-// and by tests.
+// Creates a link and returns the raw token. Lookups use the hash; the token itself is
+// kept so the owner can view and copy the link again (it is erased on revoke, and
+// only the owner and Management are ever sent it).
 export async function createLinkRecord(db, { eventTypeId, label = '', expiresAt = null, maxUses = null }) {
   const token = randomToken();
   const id = newId('blink');
-  await db.prepare(`INSERT INTO booking_links (id, event_type_id, token_hash, label, expires_at, max_uses, use_count, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 0, ?)`)
-    .bind(id, eventTypeId, await sha256Hex(token), String(label).slice(0, 120), expiresAt, maxUses, nowIso()).run();
+  await db.prepare(`INSERT INTO booking_links (id, event_type_id, token_hash, token, label, expires_at, max_uses, use_count, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+    .bind(id, eventTypeId, await sha256Hex(token), token, String(label).slice(0, 120), expiresAt, maxUses, nowIso()).run();
   return { id, token };
 }
 
