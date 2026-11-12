@@ -7,6 +7,24 @@
 // Against the live site, use BASE=https://shibamatlanta.com and a real Lead account; the script
 // disconnects the test app at the end when PORTAL_COOKIE is given.
 import { createHash, randomBytes } from 'node:crypto';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+
+// Node's fetch replaces Sec-Fetch-* headers (it always sends "cors"), so a browser page load is
+// imitated with a raw request that sends the headers exactly as given.
+function rawGet(url, headers) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const send = target.protocol === 'https:' ? httpsRequest : httpRequest;
+    const req = send(target, { method: 'GET', headers }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 const BASE = (process.env.BASE || 'http://localhost:8790').replace(/\/$/, '');
 const PATH = '/portal-mcp';
@@ -56,6 +74,10 @@ const meta = await fetch(`${BASE}/.well-known/oauth-authorization-server${PATH}`
 check(meta?.authorization_endpoint === `${BASE}${PATH}/authorize`, 'discovery: authorization server metadata', JSON.stringify(meta));
 const resourceMeta = await fetch(`${BASE}/.well-known/oauth-protected-resource${PATH}/mcp`).then((r) => r.json()).catch(() => null);
 check(resourceMeta?.resource === `${BASE}${PATH}/mcp`, 'discovery: protected resource metadata', JSON.stringify(resourceMeta));
+const browser = await rawGet(`${BASE}${PATH}/mcp`, { Accept: 'text/html,application/xhtml+xml', 'Sec-Fetch-Mode': 'navigate' });
+check(browser.status === 200 && browser.body.includes('This address is for AI apps'), 'opening the address in a browser explains what it is for', String(browser.status));
+const appGet = await fetch(`${BASE}${PATH}/mcp`, { headers: { Accept: 'text/event-stream' } });
+check(appGet.status === 401 && (appGet.headers.get('www-authenticate') || '').includes('resource_metadata'), 'an AI app without a token still gets the sign-in pointer', String(appGet.status));
 const unauth = await fetch(`${BASE}${PATH}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
 check(unauth.status === 401, 'MCP refuses calls without a token', String(unauth.status));
 

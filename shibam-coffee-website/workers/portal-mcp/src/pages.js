@@ -224,7 +224,10 @@ export async function handleConnections(env, request) {
   const user = await getSession(request, {}, env);
   if (!user) {
     return page('AI connections', `<p class="eyebrow">Shibam Coffee team portal</p><h1>Sign in to the portal first</h1>
-      <p>Open the <a href="/team/">team portal</a>, sign in, then go to Profile and choose "AI connections".</p>`, { status: 401 });
+      <div class="card"><p>This page lists the AI apps connected to your account, so it needs you signed in to the team portal in this browser.</p>
+      <p><a href="/team/">Sign in to the team portal</a>, then come back here, or open Profile and choose "AI connections".</p>
+      <p class="fine">Already signed in? <a href="${env.BASE_PATH}/connections">Try again</a>. (Opening this page from another app or email can hide your sign-in; opening it from the portal works.)</p></div>
+      <p class="fine">Looking to connect Claude instead? <a href="${env.BASE_PATH}">See how</a>.</p>`, { status: 401 });
   }
   if (request.method === 'POST') {
     if (!sameOrigin(request, env) || request.headers.get('Sec-Fetch-Site') === 'cross-site') {
@@ -246,4 +249,22 @@ export async function handleConnections(env, request) {
     <div class="card">${grants.length ? `<table>${rows}</table>` : '<p>No AI apps are connected to your account.</p>'}</div>
     <p class="fine">Connected apps can read the portal as ${escapeHtml(user.name)} and nothing more. Disconnecting stops access immediately.${hasRole(user, MIN_ROLE) ? '' : ' Your role cannot connect AI apps.'}</p>
     <p><a href="/team/profile">Back to the portal</a></p>`);
+}
+
+// What a person sees if they open the connector's addresses in a browser. AI apps never get this.
+export function infoPage(env) {
+  const url = `${env.PUBLIC_ORIGIN}${env.BASE_PATH}/mcp`;
+  return page('Shibam Coffee portal connector', `<p class="eyebrow">Shibam Coffee team portal</p>
+    <h1>Portal connector for AI apps</h1>
+    <div class="card">
+      <p>This address is for AI apps such as Claude, not for opening in a browser.</p>
+      <p><strong>To connect Claude:</strong></p>
+      <ol>
+        <li>In Claude, open <strong>Settings</strong>, then <strong>Connectors</strong>, then <strong>Add custom connector</strong>.</li>
+        <li>Paste this address: <strong>${escapeHtml(url)}</strong></li>
+        <li>Click <strong>Connect</strong>, sign in with your portal username and password, and click <strong>Allow</strong>.</li>
+      </ol>
+      <p class="fine">Leads and Management only. Read-only, and without customer contact details.</p>
+    </div>
+    <p><a href="${env.BASE_PATH}/connections">See or disconnect your connected AI apps</a> (needs a portal sign-in in this browser).</p>`);
 }

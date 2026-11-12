@@ -8,7 +8,7 @@ import { OAuthProvider } from '@cloudflare/workers-oauth-provider';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import { createMcpHandler } from 'agents/mcp/server';
 import { createPortalMcpServer } from './mcp.js';
-import { handleAuthorize, handleConnections, SCOPE } from './pages.js';
+import { handleAuthorize, handleConnections, infoPage, SCOPE } from './pages.js';
 
 const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
@@ -71,10 +71,8 @@ const defaultHandler = {
   async fetch(request, env) {
     const pathname = new URL(request.url).pathname.replace(/\/$/, '');
     if (pathname === `${env.BASE_PATH}/authorize`) return handleAuthorize(env, request);
-    if (pathname === `${env.BASE_PATH}/connections` || pathname === env.BASE_PATH) {
-      if (pathname === env.BASE_PATH) return Response.redirect(`${env.PUBLIC_ORIGIN}${env.BASE_PATH}/connections`, 302);
-      return handleConnections(env, request);
-    }
+    if (pathname === `${env.BASE_PATH}/connections`) return handleConnections(env, request);
+    if (pathname === env.BASE_PATH) return infoPage(env);
     if (pathname === `${env.BASE_PATH}/healthz`) return Response.json({ ok: true });
     return new Response('Not found', { status: 404 });
   }
@@ -142,6 +140,13 @@ export default {
       const pathname = url.pathname.replace(/\/$/, '');
       if (pathname === `/.well-known/oauth-authorization-server${env.BASE_PATH}`) {
         return withSecurityHeaders(request.method === 'GET' ? authorizationMetadata(env) : new Response(null, { status: 405, headers: { Allow: 'GET' } }));
+      }
+      // Someone opening the connector address in a browser gets an explanation instead of a bare
+      // "401". Only a browser page load matches (no token, asks for HTML, a navigation); AI apps
+      // never send that, so what they see is unchanged.
+      if (pathname === `${env.BASE_PATH}/mcp` && request.method === 'GET' && !request.headers.has('Authorization')
+        && (request.headers.get('Accept') || '').includes('text/html') && request.headers.get('Sec-Fetch-Mode') === 'navigate') {
+        return withSecurityHeaders(infoPage(env));
       }
       return withSecurityHeaders(await createProvider(env).fetch(request, env, ctx));
     } catch (error) {
