@@ -6,7 +6,10 @@
   "name": "shibam-portal-mcp",
   "main": "src/index.js",
   "compatibility_date": "2026-09-03",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public is required for apps that identify themselves by a web address
+  // (Client ID Metadata Documents), which is how Claude connects. Without it every Claude
+  // connection is refused with "This connection request is not valid".
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
   "routes": [
     { "pattern": "shibamatlanta.com/portal-mcp*", "zone_name": "shibamatlanta.com" },

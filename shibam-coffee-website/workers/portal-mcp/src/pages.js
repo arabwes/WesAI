@@ -133,13 +133,21 @@ export async function handleAuthorize(env, request) {
     try {
       oauthRequest = await env.OAUTH_PROVIDER.parseAuthRequest(request);
     } catch (error) {
+      // Logged so a refused connection can be diagnosed from the Worker logs (no secrets in these fields).
+      console.warn(JSON.stringify({
+        event: 'authorize_request_invalid',
+        code: error?.code || error?.name || 'error',
+        description: String(error?.description || error?.message || '').slice(0, 300),
+        clientIdIsUrl: /^https:\/\//.test(new URL(request.url).searchParams.get('client_id') || '')
+      }));
       if (error instanceof AuthorizationError && error.redirectUri) {
         const url = new URL(error.redirectUri);
         url.searchParams.set('error', error.code);
         if (error.state) url.searchParams.set('state', error.state);
         return Response.redirect(url.toString(), 302);
       }
-      return page('Connection failed', '<h1>This connection request is not valid</h1><p>Start again from your AI app.</p>', { status: 400 });
+      const reason = escapeHtml(String(error?.code || error?.name || 'error').slice(0, 60));
+      return page('Connection failed', `<h1>This connection request is not valid</h1><p>Start again from your AI app.</p><p class="fine">Reason code: ${reason}</p>`, { status: 400 });
     }
     const client = await env.OAUTH_PROVIDER.lookupClient(oauthRequest.clientId);
     const clientName = String(client?.clientName || 'this AI app').slice(0, 100);

@@ -65,6 +65,15 @@ const registration = await fetch(`${BASE}${PATH}/register`, {
 }).then((r) => r.json());
 check(!!registration.client_id, 'client registration', JSON.stringify(registration));
 
+// Apps such as Claude identify themselves by a web address (a Client ID Metadata Document)
+// instead of registering first. Needs the global_fetch_strictly_public compatibility flag.
+if (process.env.CIMD_CLIENT_ID) {
+  const cimd = new URL(`${BASE}${PATH}/authorize`);
+  for (const [k, v] of Object.entries({ response_type: 'code', client_id: process.env.CIMD_CLIENT_ID, redirect_uri: process.env.CIMD_REDIRECT || 'https://claude.ai/api/mcp/auth_callback', state: 'x', code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', code_challenge_method: 'S256' })) cimd.searchParams.set(k, v);
+  const html = await fetch(cimd, { redirect: 'manual' }).then((r) => r.text());
+  check(html.includes('Sign in to connect'), 'an app identified by a web address (like Claude) reaches the sign-in page', html.slice(0, 200));
+}
+
 const verifier = randomBytes(32).toString('base64url');
 const challenge = createHash('sha256').update(verifier).digest('base64url');
 

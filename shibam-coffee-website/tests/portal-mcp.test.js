@@ -237,3 +237,11 @@ test('nothing private leaves through any tool, for any role', async () => {
     }
   }
 });
+
+test('the connector Worker keeps the compatibility flag Claude needs to connect', async () => {
+  const { readFileSync } = await import('node:fs');
+  const config = readFileSync(new URL('../workers/portal-mcp/wrangler.jsonc', import.meta.url), 'utf8');
+  // Without it, apps that identify themselves by a web address (Claude does) are refused.
+  assert.match(config, /"compatibility_flags":\s*\[[^\]]*"global_fetch_strictly_public"/);
+  assert.match(config, /"compatibility_flags":\s*\[[^\]]*"nodejs_compat"/);
+});
